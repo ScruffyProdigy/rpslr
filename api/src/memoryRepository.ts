@@ -8,6 +8,7 @@ import {
   type CreateMatchInput,
   type GameRepository,
 } from './repository.js';
+import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer } from './types.js';
 
 interface SeatRow {
@@ -54,6 +55,7 @@ export class MemoryGameRepository implements GameRepository {
       lobbyReturnUrl: input.lobbyReturnUrl ?? null,
       lobbyGraphqlUrl: input.lobbyGraphqlUrl ?? null,
       lobbyServiceToken: input.lobbyServiceToken ?? null,
+      lobbyPlayerProfiles: { ...(input.lobbyPlayerProfiles ?? {}) },
       name: input.name,
       gameMode: input.gameMode,
       status: 'waiting',
@@ -77,6 +79,14 @@ export class MemoryGameRepository implements GameRepository {
     return match;
   }
 
+  async setLobbyPlayerProfiles(
+    matchId: string,
+    profiles: Record<string, LobbyPlayerProfile>,
+  ): Promise<void> {
+    const m = this.matches.get(matchId);
+    if (m) m.lobbyPlayerProfiles = { ...m.lobbyPlayerProfiles, ...profiles };
+  }
+
   async getMatch(idOrCodeOrExternal: string): Promise<Match | null> {
     return (
       [...this.matches.values()].find(
@@ -96,7 +106,12 @@ export class MemoryGameRepository implements GameRepository {
   }
 
   private toSeat(s: SeatRow): Seat {
+    const match = this.matches.get(s.matchId);
     const player = this.players.find((p) => p.seatId === s.id) ?? null;
+    const lobbyProfile =
+      s.reservedForLobbyUser && match
+        ? (match.lobbyPlayerProfiles[s.reservedForLobbyUser] ?? null)
+        : null;
     return {
       id: s.id,
       matchId: s.matchId,
@@ -105,13 +120,23 @@ export class MemoryGameRepository implements GameRepository {
       role: s.role,
       position: s.position,
       reservedForLobbyUser: s.reservedForLobbyUser,
-      player: player ? this.toSeatPlayer(player) : null,
+      lobbyProfile,
+      player: player ? this.toSeatPlayer(player, lobbyProfile) : null,
       delays: {}, // filled in by the service (derived from round history)
     };
   }
 
-  private toSeatPlayer(p: PlayerRow): SeatPlayer {
-    return { id: p.id, name: p.name, lobbyUserId: p.lobbyUserId, score: p.score };
+  private toSeatPlayer(
+    p: PlayerRow,
+    lobbyProfile: LobbyPlayerProfile | null,
+  ): SeatPlayer {
+    return {
+      id: p.id,
+      name: p.name,
+      lobbyUserId: p.lobbyUserId,
+      score: p.score,
+      profile: lobbyProfile,
+    };
   }
 
   async claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }> {
@@ -122,7 +147,8 @@ export class MemoryGameRepository implements GameRepository {
       );
       if (existing) {
         const seatRow = this.seats.find((s) => s.id === existing.seatId)!;
-        return { seat: this.toSeat(seatRow), player: this.toSeatPlayer(existing) };
+        const seat = this.toSeat(seatRow);
+        return { seat, player: this.toSeatPlayer(existing, seat.lobbyProfile) };
       }
     }
 
@@ -147,7 +173,8 @@ export class MemoryGameRepository implements GameRepository {
       score: 0,
     };
     this.players.push(player);
-    return { seat: this.toSeat(seat), player: this.toSeatPlayer(player) };
+    const claimedSeat = this.toSeat(seat);
+    return { seat: claimedSeat, player: this.toSeatPlayer(player, claimedSeat.lobbyProfile) };
   }
 
   async setMatchStatus(matchId: string, status: MatchStatus): Promise<void> {

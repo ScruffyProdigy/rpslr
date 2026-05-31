@@ -8,6 +8,7 @@ import {
   type CreateMatchInput,
   type GameRepository,
 } from './repository.js';
+import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer } from './types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,6 +28,10 @@ function mapMatch(row: any): Match {
     lobbyGraphqlUrl: typeof config.lobbyGraphqlUrl === 'string' ? config.lobbyGraphqlUrl : null,
     lobbyServiceToken:
       typeof config.lobbyServiceToken === 'string' ? config.lobbyServiceToken : null,
+    lobbyPlayerProfiles:
+      config.lobbyPlayerProfiles && typeof config.lobbyPlayerProfiles === 'object'
+        ? (config.lobbyPlayerProfiles as Record<string, LobbyPlayerProfile>)
+        : {},
     name: row.name,
     gameMode: row.game_mode,
     status: row.status as MatchStatus,
@@ -63,12 +68,15 @@ export class PgGameRepository implements GameRepository {
 
   async createMatch(input: CreateMatchInput): Promise<Match> {
     return this.tx(async (client) => {
-      const configJson: Record<string, string> = {};
-      if (input.lobbyId) configJson.lobbyId = input.lobbyId;
-      if (input.lobbyReturnUrl) configJson.lobbyReturnUrl = input.lobbyReturnUrl;
-      if (input.lobbyGraphqlUrl) configJson.lobbyGraphqlUrl = input.lobbyGraphqlUrl;
-      if (input.lobbyServiceToken) configJson.lobbyServiceToken = input.lobbyServiceToken;
-      const config = Object.keys(configJson).length > 0 ? JSON.stringify(configJson) : '{}';
+      const configObj: Record<string, unknown> = {};
+      if (input.lobbyId) configObj.lobbyId = input.lobbyId;
+      if (input.lobbyReturnUrl) configObj.lobbyReturnUrl = input.lobbyReturnUrl;
+      if (input.lobbyGraphqlUrl) configObj.lobbyGraphqlUrl = input.lobbyGraphqlUrl;
+      if (input.lobbyServiceToken) configObj.lobbyServiceToken = input.lobbyServiceToken;
+      if (input.lobbyPlayerProfiles && Object.keys(input.lobbyPlayerProfiles).length > 0) {
+        configObj.lobbyPlayerProfiles = input.lobbyPlayerProfiles;
+      }
+      const config = Object.keys(configObj).length > 0 ? JSON.stringify(configObj) : '{}';
       const matchRes = await client.query(
         `INSERT INTO matches (code, external_match_id, name, game_mode, status, best_of, current_round, config)
          VALUES ($1, $2, $3, $4, 'waiting', $5, 1, $6::jsonb) RETURNING *`,
@@ -86,6 +94,18 @@ export class PgGameRepository implements GameRepository {
     });
   }
 
+  async setLobbyPlayerProfiles(
+    matchId: string,
+    profiles: Record<string, LobbyPlayerProfile>,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE matches SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object(
+         'lobbyPlayerProfiles', COALESCE(config->'lobbyPlayerProfiles', '{}'::jsonb) || $2::jsonb
+       ) WHERE id = $1`,
+      [matchId, JSON.stringify(profiles)],
+    );
+  }
+
   async getMatch(idOrCodeOrExternal: string): Promise<Match | null> {
     const res = await this.pool.query(
       `SELECT * FROM matches WHERE code = $1 OR external_match_id = $1
@@ -96,6 +116,8 @@ export class PgGameRepository implements GameRepository {
   }
 
   async listSeats(matchId: string): Promise<Seat[]> {
+    const match = await this.getMatch(matchId);
+    const profiles = match?.lobbyPlayerProfiles ?? {};
     const res = await this.pool.query(
       `SELECT s.*, p.id AS player_id, p.name AS player_name,
               p.lobby_user_id AS player_lobby_user_id, p.score AS player_score
@@ -106,24 +128,31 @@ export class PgGameRepository implements GameRepository {
       [matchId],
     );
     /* eslint-disable @typescript-eslint/no-explicit-any */
-    return res.rows.map((row: any): Seat => ({
-      id: row.id,
-      matchId: row.match_id,
-      seatKey: row.seat_key,
-      teamKey: row.team_key,
-      role: row.role,
-      position: row.position,
-      reservedForLobbyUser: row.reserved_for_lobby_user,
-      player: row.player_id
-        ? {
-            id: row.player_id,
-            name: row.player_name,
-            lobbyUserId: row.player_lobby_user_id,
-            score: row.player_score,
-          }
-        : null,
-      delays: {}, // filled in by the service (derived from round history)
-    }));
+    return res.rows.map((row: any): Seat => {
+      const lobbyProfile = row.reserved_for_lobby_user
+        ? (profiles[row.reserved_for_lobby_user] ?? null)
+        : null;
+      return {
+        id: row.id,
+        matchId: row.match_id,
+        seatKey: row.seat_key,
+        teamKey: row.team_key,
+        role: row.role,
+        position: row.position,
+        reservedForLobbyUser: row.reserved_for_lobby_user,
+        lobbyProfile,
+        player: row.player_id
+          ? {
+              id: row.player_id,
+              name: row.player_name,
+              lobbyUserId: row.player_lobby_user_id,
+              score: row.player_score,
+              profile: lobbyProfile,
+            }
+          : null,
+        delays: {}, // filled in by the service (derived from round history)
+      };
+    });
     /* eslint-enable @typescript-eslint/no-explicit-any */
   }
 
@@ -141,7 +170,13 @@ export class PgGameRepository implements GameRepository {
           const seat = await this.seatById(client, pr.seat_id);
           return {
             seat,
-            player: { id: pr.id, name: pr.name, lobbyUserId: pr.lobby_user_id, score: pr.score },
+            player: {
+              id: pr.id,
+              name: pr.name,
+              lobbyUserId: pr.lobby_user_id,
+              score: pr.score,
+              profile: seat.lobbyProfile,
+            },
           };
         }
       }
@@ -168,7 +203,13 @@ export class PgGameRepository implements GameRepository {
       const seat = await this.seatById(client, seatRow.id);
       return {
         seat,
-        player: { id: pr.id, name: pr.name, lobbyUserId: pr.lobby_user_id, score: pr.score },
+        player: {
+          id: pr.id,
+          name: pr.name,
+          lobbyUserId: pr.lobby_user_id,
+          score: pr.score,
+          profile: seat.lobbyProfile,
+        },
       };
     });
   }
@@ -182,6 +223,10 @@ export class PgGameRepository implements GameRepository {
       [seatId],
     );
     const row: any = res.rows[0];
+    const match = await this.getMatch(row.match_id);
+    const lobbyProfile = row.reserved_for_lobby_user
+      ? (match?.lobbyPlayerProfiles[row.reserved_for_lobby_user] ?? null)
+      : null;
     return {
       id: row.id,
       matchId: row.match_id,
@@ -190,12 +235,14 @@ export class PgGameRepository implements GameRepository {
       role: row.role,
       position: row.position,
       reservedForLobbyUser: row.reserved_for_lobby_user,
+      lobbyProfile,
       player: row.player_id
         ? {
             id: row.player_id,
             name: row.player_name,
             lobbyUserId: row.player_lobby_user_id,
             score: row.player_score,
+            profile: lobbyProfile,
           }
         : null,
       delays: {}, // filled in by the service (derived from round history)

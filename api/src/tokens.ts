@@ -72,6 +72,8 @@ export function claimsFromPayload(payload: JWTPayload): AssignmentClaims {
  * No per-environment Lobby URL is configured on the game server.
  */
 export class IssuerJwksTokenVerifier implements TokenVerifier {
+  private readonly jwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
   constructor(private readonly audiences: string[] = []) {}
 
   private jwksFor(issuer: string) {

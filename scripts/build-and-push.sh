@@ -44,9 +44,21 @@ ghcr_auth_configured() {
   grep -q 'ghcr.io' "$config" 2>/dev/null
 }
 
-if [ "$PUSH" = true ] && ! ghcr_auth_configured; then
-  echo "GHCR login not found in $(docker_config_json). Run: docker login ghcr.io" >&2
-  exit 1
+if [ "$PUSH" = true ]; then
+  case "$REGISTRY" in
+    ghcr.io)
+      if ! ghcr_auth_configured; then
+        echo "GHCR login not found in $(docker_config_json). Run: docker login ghcr.io" >&2
+        exit 1
+      fi
+      ;;
+    docker.io)
+      if ! grep -q 'index.docker.io' "$(docker_config_json)" 2>/dev/null; then
+        echo "Docker Hub login not found in $(docker_config_json). Run: docker login" >&2
+        exit 1
+      fi
+      ;;
+  esac
 fi
 
 echo "Building API image..."

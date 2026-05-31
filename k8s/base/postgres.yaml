@@ -52,6 +52,9 @@ spec:
                 secretKeyRef:
                   name: rps-game-pg-dsn
                   key: POSTGRES_DB
+            # GKE PVC mount includes lost+found; use a subdirectory for PGDATA.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "rps", "-d", "rps_game"]

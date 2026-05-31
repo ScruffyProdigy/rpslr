@@ -44,7 +44,7 @@ export async function fetchLobbyPlayerProfile(
 
   let body: { data?: { player?: unknown }; errors?: unknown[] };
   try {
-    body = await res.json();
+    body = (await res.json()) as { data?: { player?: unknown }; errors?: unknown[] };
   } catch {
     return null;
   }
