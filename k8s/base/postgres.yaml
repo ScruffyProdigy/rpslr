@@ -1,0 +1,70 @@
+# OPTIONAL: in-cluster Postgres for a game-only deploy.
+# For staging/production you may instead point DATABASE_URL at an external,
+# managed database via the pg-dsn secret and delete this manifest.
+# This game NEVER uses Lobby's database.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rps-game-postgres
+  labels:
+    app: rps-game-postgres
+spec:
+  selector:
+    app: rps-game-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rps-game-postgres
+spec:
+  serviceName: rps-game-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rps-game-postgres
+  template:
+    metadata:
+      labels:
+        app: rps-game-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rps-game-pg-dsn
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rps-game-pg-dsn
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: rps-game-pg-dsn
+                  key: POSTGRES_DB
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "rps", "-d", "rps_game"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

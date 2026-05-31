@@ -1,0 +1,70 @@
+import type { Move } from './game.js';
+import type { LobbyPlayerProfile } from './lobbyProfile.js';
+import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer, SeatReservation } from './types.js';
+
+export interface CreateMatchInput {
+  code: string;
+  externalMatchId?: string | null;
+  lobbyId?: string | null;
+  lobbyReturnUrl?: string | null;
+  lobbyGraphqlUrl?: string | null;
+  lobbyServiceToken?: string | null;
+  lobbyPlayerProfiles?: Record<string, LobbyPlayerProfile>;
+  name: string;
+  gameMode: string;
+  bestOf: number;
+  seats: SeatReservation[];
+}
+
+export interface ClaimSeatInput {
+  matchId: string;
+  seatKey: string;
+  name: string;
+  lobbyUserId?: string | null;
+}
+
+/**
+ * Storage abstraction for the generalized match/seat model. A Postgres
+ * implementation backs production and `dev.sh`; an in-memory implementation
+ * backs unit tests and a standalone fallback.
+ */
+export interface GameRepository {
+  createMatch(input: CreateMatchInput): Promise<Match>;
+  getMatch(idOrCodeOrExternal: string): Promise<Match | null>;
+  setLobbyPlayerProfiles(
+    matchId: string,
+    profiles: Record<string, LobbyPlayerProfile>,
+  ): Promise<void>;
+  listSeats(matchId: string): Promise<Seat[]>;
+  /** Idempotent per (matchId, lobbyUserId): re-claiming returns the existing seat. */
+  claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }>;
+  setMatchStatus(matchId: string, status: MatchStatus): Promise<void>;
+  setMatchProgress(matchId: string, currentRound: number, status: MatchStatus): Promise<void>;
+  recordMove(input: {
+    matchId: string;
+    round: number;
+    playerId: string;
+    move: Move;
+  }): Promise<void>;
+  getMovesForRound(matchId: string, round: number): Promise<Record<string, Move>>;
+  saveRoundResult(input: {
+    matchId: string;
+    result: RoundResult;
+    scores: Record<string, number>;
+  }): Promise<void>;
+  listResults(matchId: string): Promise<RoundResult[]>;
+  close(): Promise<void>;
+}
+
+export class NotFoundError extends Error {}
+export class ConflictError extends Error {}
+/** Seat is reserved for a different Lobby user. */
+export class ReservationError extends Error {}
+
+/** Shared short join-code generator. */
+export function makeCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return `RPS-${s}`;
+}

@@ -1,0 +1,106 @@
+import { parseLobbyPlayerProfile } from './lobbyProfile.js';
+import type { AssignmentSeat } from './tokens.js';
+
+/** Lobby deployment endpoints supplied at provision time (not hardcoded on the game). */
+export interface LobbyEndpoints {
+  returnUrl: string;
+  graphqlUrl: string;
+  /** Bearer for Lobby GraphQL when Lobby configures LOBBY_GAME_SERVICE_TOKEN; omit in dev. */
+  serviceToken?: string;
+}
+
+/** Lobby → game push body for POST /api/v1/matches (option 2). */
+export interface LobbyProvisionInput {
+  lobbyId: string;
+  lobby: LobbyEndpoints;
+  assignment: {
+    externalMatchId: string;
+    gameMode: string;
+    bestOf?: number;
+    seats: AssignmentSeat[];
+  };
+}
+
+function parseLobbyEndpoints(raw: unknown): LobbyEndpoints | string {
+  if (!raw || typeof raw !== 'object') return 'lobby is required';
+  const o = raw as Record<string, unknown>;
+  const returnUrl = typeof o.returnUrl === 'string' ? o.returnUrl.trim() : '';
+  const graphqlUrl = typeof o.graphqlUrl === 'string' ? o.graphqlUrl.trim() : '';
+  const serviceToken =
+    typeof o.serviceToken === 'string' && o.serviceToken.trim()
+      ? o.serviceToken.trim()
+      : undefined;
+  if (!returnUrl) return 'lobby.returnUrl is required';
+  if (!graphqlUrl) return 'lobby.graphqlUrl is required';
+  return { returnUrl, graphqlUrl, serviceToken };
+}
+
+export function parseLobbyProvision(body: unknown): LobbyProvisionInput | string {
+  if (!body || typeof body !== 'object') return 'request body is required';
+  const raw = body as Record<string, unknown>;
+
+  const lobbyId = typeof raw.lobbyId === 'string' ? raw.lobbyId.trim() : '';
+  if (!lobbyId) return 'lobbyId is required';
+
+  const lobby = parseLobbyEndpoints(raw.lobby);
+  if (typeof lobby === 'string') return lobby;
+
+  const assignment = raw.assignment;
+  if (!assignment || typeof assignment !== 'object') return 'assignment is required';
+
+  const a = assignment as Record<string, unknown>;
+  const externalMatchId =
+    typeof a.externalMatchId === 'string' ? a.externalMatchId.trim() : '';
+  const gameMode = typeof a.gameMode === 'string' ? a.gameMode.trim() : '';
+  if (!externalMatchId) return 'assignment.externalMatchId is required';
+  if (!gameMode) return 'assignment.gameMode is required';
+
+  if (!Array.isArray(a.seats) || a.seats.length === 0) {
+    return 'assignment.seats must be a non-empty array';
+  }
+
+  const seats: AssignmentSeat[] = [];
+  for (const row of a.seats) {
+    if (!row || typeof row !== 'object') return 'each assignment.seats entry must be an object';
+    const s = row as Record<string, unknown>;
+    const seatKey = typeof s.seatKey === 'string' ? s.seatKey.trim() : '';
+    const lobbyUserId = typeof s.lobbyUserId === 'string' ? s.lobbyUserId.trim() : '';
+    if (!seatKey) return 'each seat requires seatKey';
+    if (!lobbyUserId) return 'each seat requires lobbyUserId';
+    const player = parseLobbyPlayerProfile(s.player);
+    seats.push({
+      seatKey,
+      lobbyUserId,
+      team: typeof s.team === 'string' ? s.team : undefined,
+      role: typeof s.role === 'string' ? s.role : undefined,
+      player,
+    });
+  }
+
+  let bestOf: number | undefined;
+  if (a.bestOf !== undefined && a.bestOf !== null) {
+    const n = Number(a.bestOf);
+    if (!Number.isFinite(n)) return 'assignment.bestOf must be a number';
+    bestOf = n;
+  }
+
+  return { lobbyId, lobby, assignment: { externalMatchId, gameMode, bestOf, seats } };
+}
+
+/**
+ * When provision includes lobby.serviceToken, require Authorization: Bearer with the same value.
+ * No auth required when the token is omitted (typical local dev).
+ */
+export function verifyLobbyProvisionAuth(
+  authorization: string | undefined,
+  serviceToken: string | undefined,
+): string | null {
+  const expected = serviceToken?.trim();
+  if (!expected) return null;
+  const match = (authorization ?? '').match(/^Bearer\s+(.+)$/i);
+  const got = match?.[1]?.trim() ?? '';
+  if (!got || got !== expected) {
+    return 'provision requires Authorization: Bearer matching lobby.serviceToken';
+  }
+  return null;
+}

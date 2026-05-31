@@ -1,0 +1,23 @@
+# PRODUCTION ConfigMap overlay — GKE at https://rpsls-duel.win
+# Ingress host/TLS: k8s/env/production-ingress.yaml (applied after base).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rps-game-api-config
+data:
+  GAME_APP_ENV: "production"
+  API_PORT: "3001"
+  REQUIRE_LOBBY_AUTH: "true"
+  # Lobby browser origin(s) allowed to call the game API (comma-separated).
+  CORS_ALLOWED_ORIGINS: "https://joinquest.cc"
+  # Seat JWT `aud` must match (same origin the client uses for /api).
+  GAME_API_AUDIENCE: "https://rpsls-duel.win/api"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rps-game-client-config
+data:
+  GAME_APP_ENV: "production"
+  GAME_API_BASE_URL: "https://rpsls-duel.win/api"
+  GAME_WS_BASE_URL: ""

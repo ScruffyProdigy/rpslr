@@ -1,0 +1,113 @@
+name: environment-config-test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - "scripts/**"
+      - "client/Dockerfile"
+      - "client/nginx.conf"
+      - "client/docker-entrypoint.d/**"
+      - ".github/workflows/environment-config-test.yml"
+  pull_request:
+    paths:
+      - "k8s/**"
+      - "scripts/**"
+      - "client/Dockerfile"
+      - "client/nginx.conf"
+      - "client/docker-entrypoint.d/**"
+      - ".github/workflows/environment-config-test.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Deploy scripts must be syntactically valid bash.
+      - name: bash -n on all scripts
+        run: |
+          set -e
+          for f in scripts/*.sh; do
+            echo "checking $f"
+            bash -n "$f"
+          done
+
+      # 2. Every k8s manifest must be valid YAML.
+      - name: Validate YAML manifests
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+          ok = True
+          for path in glob.glob("k8s/**/*.yaml", recursive=True):
+              try:
+                  list(yaml.safe_load_all(open(path)))
+                  print(f"valid: {path}")
+              except Exception as e:
+                  print(f"INVALID: {path}: {e}")
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
+
+      # 3. Each env overlay must define both ConfigMaps the deployments expect.
+      - name: ConfigMap names present in every env overlay
+        run: |
+          set -e
+          for env in local staging production; do
+            file="k8s/env/${env}.yaml"
+            grep -q "name: rps-game-api-config" "$file" \
+              || { echo "::error::missing rps-game-api-config in $file"; exit 1; }
+            grep -q "name: rps-game-client-config" "$file" \
+              || { echo "::error::missing rps-game-client-config in $file"; exit 1; }
+            echo "ok: $file"
+          done
+
+      # 4. Base client uses the ConfigMap + envFrom pattern (no hardcoded env).
+      - name: Base client uses ConfigMap envFrom
+        run: |
+          set -e
+          grep -q "configMapRef" k8s/base/client.yaml \
+            || { echo "::error::client.yaml missing configMapRef"; exit 1; }
+          grep -q "envFrom" k8s/base/client.yaml \
+            || { echo "::error::client.yaml missing envFrom"; exit 1; }
+          echo "ok: base client uses envFrom + configMapRef"
+
+      # 5. Real secrets must never be committed (only *.example.yaml).
+      - name: No committed secrets
+        run: |
+          set -e
+          shopt -s nullglob
+          leaked=()
+          for f in k8s/secrets/*.yaml; do
+            case "$f" in
+              *.example.yaml) ;;
+              *) leaked+=("$f") ;;
+            esac
+          done
+          if [ ${#leaked[@]} -gt 0 ]; then
+            echo "::error::non-example secret files committed: ${leaked[*]}"
+            exit 1
+          fi
+          echo "ok: only example secrets present"
+
+      # 6. Docker runtime env injection: build the client image and confirm the
+      #    entrypoint writes env.js from container env vars (Lobby pattern).
+      - name: Docker env.js injection test
+        run: |
+          set -e
+          docker build -t rps-client-envtest ./client
+          cid=$(docker run -d \
+            -e GAME_APP_ENV=staging \
+            -e GAME_API_BASE_URL=https://rps.staging.example/api \
+            rps-client-envtest)
+          # Give nginx entrypoint a moment to write env.js.
+          sleep 4
+          out=$(docker exec "$cid" cat /usr/share/nginx/html/env.js)
+          echo "$out"
+          docker rm -f "$cid" >/dev/null
+          echo "$out" | grep -q 'GAME_APP_ENV: "staging"' \
+            || { echo "::error::env.js missing injected GAME_APP_ENV"; exit 1; }
+          echo "$out" | grep -q 'https://rps.staging.example/api' \
+            || { echo "::error::env.js missing injected GAME_API_BASE_URL"; exit 1; }
+          echo "ok: runtime env injection works"

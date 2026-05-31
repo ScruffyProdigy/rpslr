@@ -1,0 +1,13 @@
+# TLS cert for rpsls-duel.win (cert-manager). Secret is referenced by production-ingress.yaml.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rpsls-duel-win
+  namespace: rps-game
+spec:
+  secretName: rpsls-duel-win-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - rpsls-duel.win

@@ -1,0 +1,24 @@
+# Game-only Postgres. Runs on host port 5433 so it never collides with the
+# Lobby platform's Postgres (5432). This game does NOT share Lobby's database.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rps-game-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rps}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rps_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-rps_game}
+    ports:
+      # host:container — host 5433 avoids Lobby's 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - rps_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rps} -d ${POSTGRES_DB:-rps_game}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rps_pgdata:

@@ -1,0 +1,19 @@
+# STAGING ConfigMap overlay.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rps-game-api-config
+data:
+  GAME_APP_ENV: "staging"
+  API_PORT: "3001"
+  REQUIRE_LOBBY_AUTH: "true"
+  CORS_ALLOWED_ORIGINS: "https://lobby.staging.playhub.example"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rps-game-client-config
+data:
+  GAME_APP_ENV: "staging"
+  GAME_API_BASE_URL: "https://rps.staging.playhub.example/api"
+  GAME_WS_BASE_URL: ""

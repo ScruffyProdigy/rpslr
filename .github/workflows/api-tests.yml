@@ -1,0 +1,62 @@
+name: api-tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - ".github/workflows/api-tests.yml"
+  pull_request:
+    paths:
+      - "api/**"
+      - ".github/workflows/api-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+
+    # Optional Postgres on 5433 (matches the game's port plan, not Lobby's 5432).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rps
+          POSTGRES_PASSWORD: rps_dev_password
+          POSTGRES_DB: rps_game
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U rps -d rps_game"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://rps:rps_dev_password@localhost:5433/rps_game
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run migrations
+        run: npm run migrate
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Type-check build
+        run: npm run build

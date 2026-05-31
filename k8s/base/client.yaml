@@ -1,0 +1,54 @@
+# Client Deployment uses the ConfigMap + envFrom pattern (no hardcoded env here).
+# The ConfigMap `rps-game-client-config` is provided by the env overlay in
+# k8s/env/<env>.yaml, and the nginx entrypoint turns those vars into /env.js.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rps-game-client
+  labels:
+    app: rps-game-client
+spec:
+  selector:
+    app: rps-game-client
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rps-game-client
+  labels:
+    app: rps-game-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rps-game-client
+  template:
+    metadata:
+      labels:
+        app: rps-game-client
+    spec:
+      containers:
+        - name: client
+          image: ghcr.io/playhub/rps-game-client:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: rps-game-client-config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi

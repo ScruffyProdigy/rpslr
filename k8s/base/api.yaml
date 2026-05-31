@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rps-game-api
+  labels:
+    app: rps-game-api
+spec:
+  selector:
+    app: rps-game-api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rps-game-api
+  labels:
+    app: rps-game-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rps-game-api
+  template:
+    metadata:
+      labels:
+        app: rps-game-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      # Run DB migrations before the API starts.
+      initContainers:
+        - name: migrate
+          image: ghcr.io/playhub/rps-game-api:latest
+          command: ["node", "dist/migrate.js"]
+          envFrom:
+            - configMapRef:
+                name: rps-game-api-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rps-game-pg-dsn
+                  key: DATABASE_URL
+      containers:
+        - name: api
+          image: ghcr.io/playhub/rps-game-api:latest
+          ports:
+            - containerPort: 3001
+          # No hardcoded env in base — everything comes from the ConfigMap overlay.
+          envFrom:
+            - configMapRef:
+                name: rps-game-api-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: rps-game-pg-dsn
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi

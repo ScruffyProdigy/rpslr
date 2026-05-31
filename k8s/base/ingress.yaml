@@ -1,0 +1,39 @@
+# Routes /api -> game API, everything else -> game client.
+# The WebSocket endpoint (/api/v1/ws) rides the /api prefix; the nginx ingress
+# upgrades WS automatically. Longer timeouts keep idle game sockets alive.
+# Host is overridden per-environment; this base uses a placeholder.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rps-game
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: rps-game.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-api
+                port:
+                  number: 3001
+          - path: /healthz
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-api
+                port:
+                  number: 3001
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-client
+                port:
+                  number: 80

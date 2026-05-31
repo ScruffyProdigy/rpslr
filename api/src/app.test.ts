@@ -1,0 +1,247 @@
+import { describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { createApp } from './app.js';
+import { loadConfig } from './config.js';
+import { MemoryGameRepository } from './memoryRepository.js';
+import { GameService } from './service.js';
+import { TokenError, type AssignmentClaims, type TokenVerifier } from './tokens.js';
+
+const LOBBY_ENDPOINTS = {
+  returnUrl: 'https://joinquest.cc',
+  graphqlUrl: 'https://joinquest.cc/graphql',
+  serviceToken: 'lobby-svc-secret',
+};
+
+function lobbyProvisionAuth(token: string | undefined = LOBBY_ENDPOINTS.serviceToken) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function buildApp(env: Partial<NodeJS.ProcessEnv> = {}, verifier?: TokenVerifier) {
+  const config = loadConfig({ GAME_APP_ENV: 'local', REQUIRE_LOBBY_AUTH: 'false', ...env } as NodeJS.ProcessEnv);
+  const service = new GameService(new MemoryGameRepository(), {
+    bannedLobbyUsers: config.bannedLobbyUsers,
+  });
+  return createApp(service, config, verifier);
+}
+
+/** Fake verifier: maps a token string to canned claims (no JWKS needed). */
+function fakeVerifier(map: Record<string, AssignmentClaims>): TokenVerifier {
+  return {
+    async verify(token: string) {
+      const claims = map[token];
+      if (!claims) throw new TokenError('invalid lobby token');
+      return claims;
+    },
+  };
+}
+
+describe('platform routes', () => {
+  it('GET /healthz returns ok', async () => {
+    const res = await request(buildApp()).get('/healthz');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('ok');
+  });
+
+  it('GET /api/v1/status returns metadata', async () => {
+    const res = await request(buildApp()).get('/api/v1/status');
+    expect(res.body.game).toBe('rock-paper-scissors-lizard-spock');
+    expect(res.body.version).toBe('0.2.0');
+    expect(res.body.standalone).toBe(true);
+  });
+
+  it('GET /api/v1/game-modes publishes a Lobby-compatible manifest', async () => {
+    const res = await request(buildApp()).get('/api/v1/game-modes');
+    expect(res.status).toBe(200);
+    expect(res.body.game).toBe('rock-paper-scissors-lizard-spock');
+    const duel = res.body.modes.find((m: { key: string }) => m.key === 'duel');
+    expect(duel).toMatchObject({
+      displayName: '1v1 Duel',
+      minPlayers: 2,
+      maxPlayers: 2,
+    });
+    expect(duel).not.toHaveProperty('bestOf');
+    expect(duel.seats).toEqual([{ key: 'a' }, { key: 'b' }]);
+  });
+});
+
+describe('standalone create → claim → move', () => {
+  it('plays a full match over HTTP', async () => {
+    const app = buildApp();
+    const created = await request(app)
+      .post('/api/v1/matches')
+      .send({ name: 'API Match', hostName: 'Alice', bestOf: 1 });
+    expect(created.status).toBe(201);
+    const code = created.body.state.match.code;
+    const hostId = created.body.you.playerId;
+
+    const joined = await request(app).post(`/api/v1/matches/${code}/claim`).send({ playerName: 'Bob' });
+    expect(joined.status).toBe(201);
+    expect(joined.body.you.seatKey).toBe('b'); // auto-picked the open seat
+    const challengerId = joined.body.you.playerId;
+
+    await request(app).post(`/api/v1/matches/${code}/move`).send({ playerId: hostId, move: 'rock' });
+    const final = await request(app)
+      .post(`/api/v1/matches/${code}/move`)
+      .send({ playerId: challengerId, move: 'scissors' });
+
+    expect(final.status).toBe(200);
+    expect(final.body.match.status).toBe('finished');
+    expect(final.body.matchWinnerSeatKey).toBe('a');
+  });
+
+  it('returns 404 for an unknown match', async () => {
+    const res = await request(buildApp()).get('/api/v1/matches/RPS-NOPE');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 when a move is missing playerId', async () => {
+    const app = buildApp();
+    const created = await request(app).post('/api/v1/matches').send({ hostName: 'Alice' });
+    const code = created.body.state.match.code;
+    const res = await request(app).post(`/api/v1/matches/${code}/move`).send({ move: 'rock' });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('Lobby push + signed-token claim (option 2)', () => {
+  const push = {
+    lobbyId: 'https://joinquest.cc',
+    lobby: LOBBY_ENDPOINTS,
+    assignment: {
+      externalMatchId: 'lobby-xyz',
+      gameMode: 'duel',
+      seats: [
+        { seatKey: 'a', lobbyUserId: 'u_alice', displayName: 'Alice' },
+        { seatKey: 'b', lobbyUserId: 'u_bob', displayName: 'Bob' },
+      ],
+    },
+  };
+
+  it('rejects provision with serviceToken but no matching Authorization', async () => {
+    const app = buildApp();
+    const res = await request(app).post('/api/v1/matches').send({
+      lobbyId: 'https://joinquest.cc',
+      lobby: LOBBY_ENDPOINTS,
+      assignment: {
+        externalMatchId: 'auth-test',
+        gameMode: 'duel',
+        seats: [{ seatKey: 'a', lobbyUserId: 'u1' }],
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('accepts Lobby provision envelope without bestOf or seat displayName', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v1/matches')
+      .set(lobbyProvisionAuth())
+      .send({
+        lobbyId: 'https://joinquest.cc',
+        lobby: LOBBY_ENDPOINTS,
+        assignment: {
+          externalMatchId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+          gameMode: 'duel',
+          seats: [
+            { seatKey: 'a', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
+            { seatKey: 'b', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
+          ],
+        },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.match.externalMatchId).toBe('f47ac10b-58cc-4372-a567-0e02b2c3d479');
+    expect(res.body.match.bestOf).toBe(5);
+    expect(res.body.match.lobbyId).toBe('https://joinquest.cc');
+    expect(res.body.match.lobbyReturnUrl).toBe('https://joinquest.cc');
+    expect(res.body.match.lobbyGraphqlUrl).toBe('https://joinquest.cc/graphql');
+    expect(res.body.match.lobbyServiceToken).toBe('lobby-svc-secret');
+  });
+
+  it('provisions via push, then seats each user from their token', async () => {
+    const verifier = fakeVerifier({
+      'tok-alice': {
+        lobbyIssuer: 'https://joinquest.cc',
+        lobbyUserId: 'u_alice',
+        externalMatchId: 'lobby-xyz',
+        seatKey: 'a',
+        displayName: 'Alice',
+      },
+      'tok-bob': {
+        lobbyIssuer: 'https://joinquest.cc',
+        lobbyUserId: 'u_bob',
+        externalMatchId: 'lobby-xyz',
+        seatKey: 'b',
+        displayName: 'Bob',
+      },
+    });
+    const app = buildApp({}, verifier);
+
+    const pushed = await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+    expect(pushed.status).toBe(201);
+    expect(pushed.body.match.externalMatchId).toBe('lobby-xyz');
+
+    const alice = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer tok-alice')
+      .send({});
+    expect(alice.status).toBe(201);
+    expect(alice.body.you.seatKey).toBe('a');
+    expect(alice.body.you.name).toBe('Alice');
+
+    const bob = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer tok-bob')
+      .send({});
+    expect(bob.body.you.seatKey).toBe('b');
+    expect(bob.body.state.match.status).toBe('playing');
+  });
+
+  it('rejects a push with a banned player (403 + ids) so Lobby can correct', async () => {
+    const app = buildApp({ BANNED_LOBBY_USERS: 'u_bob' });
+    const res = await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+    expect(res.status).toBe(403);
+    expect(res.body.bannedLobbyUserIds).toContain('u_bob');
+  });
+
+  it('rejects claim when token iss does not match lobbyId on the match', async () => {
+    const verifier = fakeVerifier({
+      'tok-bad': {
+        lobbyIssuer: 'https://wrong.example',
+        lobbyUserId: 'u_alice',
+        externalMatchId: 'lobby-xyz',
+        seatKey: 'a',
+      },
+    });
+    const app = buildApp({}, verifier);
+    await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+    const res = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer tok-bad')
+      .send({});
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/iss/);
+  });
+
+  it('refuses a token claim when the match was never pushed', async () => {
+    const verifier = fakeVerifier({
+      'tok-alice': {
+        lobbyIssuer: 'https://joinquest.cc',
+        lobbyUserId: 'u_alice',
+        externalMatchId: 'ghost',
+        seatKey: 'a',
+      },
+    });
+    const app = buildApp({}, verifier);
+    const res = await request(app)
+      .post('/api/v1/matches/ghost/claim')
+      .set('Authorization', 'Bearer tok-alice')
+      .send({});
+    expect(res.status).toBe(404);
+  });
+
+  it('requires a token when REQUIRE_LOBBY_AUTH=true', async () => {
+    const app = buildApp({ REQUIRE_LOBBY_AUTH: 'true' });
+    const res = await request(app).post('/api/v1/matches/whatever/claim').send({ playerName: 'X' });
+    expect(res.status).toBe(401);
+  });
+});

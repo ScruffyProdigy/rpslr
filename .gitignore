@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+**/dist/
+**/build/
+
+# Env files (never commit real secrets)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+.dev-pids
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test / coverage
+coverage/
+**/coverage/
+test-results/
+playwright-report/
+.playwright/
+
+# K8s real secrets (commit only *.example.yaml)
+k8s/secrets/*.yaml
+!k8s/secrets/*.example.yaml
