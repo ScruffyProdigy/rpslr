@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: client
-          image: ghcr.io/playhub/rps-game-client:latest
+          image: docker.io/scruffyprodigy/rps-game-client:latest
           ports:
             - containerPort: 80
           envFrom:

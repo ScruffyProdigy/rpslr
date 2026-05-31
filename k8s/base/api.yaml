@@ -34,7 +34,7 @@ spec:
       # Run DB migrations before the API starts.
       initContainers:
         - name: migrate
-          image: ghcr.io/playhub/rps-game-api:latest
+          image: docker.io/scruffyprodigy/rps-game-api:latest
           command: ["node", "dist/migrate.js"]
           envFrom:
             - configMapRef:
@@ -47,7 +47,7 @@ spec:
                   key: DATABASE_URL
       containers:
         - name: api
-          image: ghcr.io/playhub/rps-game-api:latest
+          image: docker.io/scruffyprodigy/rps-game-api:latest
           ports:
             - containerPort: 3001
           # No hardcoded env in base — everything comes from the ConfigMap overlay.
