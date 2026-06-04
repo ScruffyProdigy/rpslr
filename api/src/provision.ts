@@ -5,7 +5,7 @@ import type { AssignmentSeat } from './tokens.js';
 export interface LobbyEndpoints {
   returnUrl: string;
   graphqlUrl: string;
-  /** Bearer for Lobby GraphQL when Lobby configures LOBBY_GAME_SERVICE_TOKEN; omit in dev. */
+  /** Per-match Bearer from Lobby provision (`v1.{gameId}.{sig}` or legacy global token); omit in dev. */
   serviceToken?: string;
 }
 

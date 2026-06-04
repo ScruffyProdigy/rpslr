@@ -35,7 +35,8 @@ export function createApp(
         if (!origin || config.corsAllowedOrigins.includes(origin)) {
           return callback(null, true);
         }
-        return callback(new Error(`origin not allowed by CORS: ${origin}`));
+        // false = deny without throwing (avoids 500 on preflight)
+        return callback(null, false);
       },
       credentials: true,
     }),

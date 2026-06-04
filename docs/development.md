@@ -121,4 +121,4 @@ workloads → optional env ingress overlay → waits for rollout.
 `k8s/env/production.yaml`, ingress host/TLS in `k8s/env/production-ingress.yaml`.
 Point DNS at the cluster ingress, then `./scripts/deploy-production.sh`. Lobby
 catalog: `playUrl` = `https://rpsls-duel.win`, `apiBaseUrl` =
-`https://rpsls-duel.win/api`.
+`https://rpsls-duel.win`.

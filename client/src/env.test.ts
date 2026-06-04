@@ -42,8 +42,8 @@ describe('getWebSocketUrl', () => {
 
   it('derives wss:// from an https API base', () => {
     expect(
-      getWebSocketUrl({ GAME_APP_ENV: 'production', GAME_API_BASE_URL: 'https://rps.example/api' }),
-    ).toBe('wss://rps.example/api/api/v1/ws');
+      getWebSocketUrl({ GAME_APP_ENV: 'production', GAME_API_BASE_URL: 'https://rps.example' }),
+    ).toBe('wss://rps.example/api/v1/ws');
   });
 
   it('honors an explicit GAME_WS_BASE_URL override', () => {

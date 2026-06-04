@@ -12,6 +12,12 @@ const PLAYER_QUERY = `
   }
 `;
 
+const REPORT_MATCH_RESULT = `
+  mutation ReportMatchResult($matchId: ID!, $status: MatchResultStatus!, $winnerLobbyUserIds: [ID!]) {
+    reportMatchResult(matchId: $matchId, status: $status, winnerLobbyUserIds: $winnerLobbyUserIds)
+  }
+`;
+
 function authHeader(serviceToken: string): Record<string, string> {
   const token = serviceToken.trim();
   if (!token) return {};
@@ -71,4 +77,55 @@ export async function resolveClaimDisplayName(
   if (fromBody) return fromBody;
 
   return 'Player';
+}
+
+/** Notify Lobby that the match is over (clears matched queue rows). Best-effort. */
+export async function reportMatchResult(
+  graphqlUrl: string,
+  serviceToken: string,
+  matchId: string,
+  status: 'COMPLETED' | 'CANCELLED' | 'ABANDONED',
+  winnerLobbyUserIds: string[] = [],
+): Promise<boolean> {
+  const base = graphqlUrl.replace(/\/$/, '');
+  let res: Response;
+  try {
+    res = await fetch(base, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...authHeader(serviceToken) },
+      body: JSON.stringify({
+        query: REPORT_MATCH_RESULT,
+        variables: { matchId, status, winnerLobbyUserIds },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    console.warn('[lobby] reportMatchResult request failed:', { matchId, err });
+    return false;
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    console.warn('[lobby] reportMatchResult HTTP error:', {
+      matchId,
+      status: res.status,
+      detail: detail.slice(0, 500),
+    });
+    return false;
+  }
+  let body: { data?: { reportMatchResult?: boolean }; errors?: unknown[] };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch (err) {
+    console.warn('[lobby] reportMatchResult invalid JSON:', { matchId, err });
+    return false;
+  }
+  if (body.errors?.length) {
+    console.warn('[lobby] reportMatchResult GraphQL errors:', { matchId, errors: body.errors });
+    return false;
+  }
+  if (body.data?.reportMatchResult !== true) {
+    console.warn('[lobby] reportMatchResult returned false:', { matchId });
+    return false;
+  }
+  return true;
 }

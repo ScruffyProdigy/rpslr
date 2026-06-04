@@ -8,10 +8,11 @@ data:
   GAME_APP_ENV: "production"
   API_PORT: "3001"
   REQUIRE_LOBBY_AUTH: "true"
-  # Lobby browser origin(s) allowed to call the game API (comma-separated).
-  CORS_ALLOWED_ORIGINS: "https://joinquest.cc"
-  # Seat JWT `aud` must match (same origin the client uses for /api).
-  GAME_API_AUDIENCE: "https://rpsls-duel.win/api"
+  # Extra browser origins only (optional). GAME_API_AUDIENCE is always allowed for CORS/WS.
+  # Normal play does not need joinquest.cc — the UI runs on this host. Keep only for tooling.
+  CORS_ALLOWED_ORIGINS: ""
+  # Seat JWT `aud` — API origin (scheme + host), not the /api ingress path.
+  GAME_API_AUDIENCE: "https://rpsls-duel.win"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -19,5 +20,5 @@ metadata:
   name: rps-game-client-config
 data:
   GAME_APP_ENV: "production"
-  GAME_API_BASE_URL: "https://rpsls-duel.win/api"
+  GAME_API_BASE_URL: "https://rpsls-duel.win"
   GAME_WS_BASE_URL: ""

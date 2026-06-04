@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_MOVES, MOVE_META, describeOutcome } from './moves';
+import { ALL_MOVES, MOVE_META, describeOutcome, winsNeeded } from './moves';
 
 describe('moves metadata', () => {
   it('has emoji + label for every move', () => {
@@ -18,5 +18,14 @@ describe('describeOutcome', () => {
     expect(describeOutcome('a', 'b')).toBe('loss');
     expect(describeOutcome('b', 'b')).toBe('win');
     expect(describeOutcome('draw', 'a')).toBe('draw');
+  });
+});
+
+describe('winsNeeded', () => {
+  it('is first-to majority of bestOf', () => {
+    expect(winsNeeded(1)).toBe(1);
+    expect(winsNeeded(3)).toBe(2);
+    expect(winsNeeded(5)).toBe(3);
+    expect(winsNeeded(7)).toBe(4);
   });
 });

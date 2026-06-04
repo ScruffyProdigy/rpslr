@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Build (and optionally push) RPS game Docker images to GHCR.
+# Build (and optionally push) RPS game Docker images.
+#
+# Defaults match k8s/base manifests (Docker Hub). Override for GHCR:
+#   REGISTRY=ghcr.io IMAGE_OWNER=playhub ./scripts/build-and-push.sh --push
 #
 #   ./scripts/build-and-push.sh           # build only
-#   ./scripts/build-and-push.sh --push    # build + push (requires ghcr login)
+#   ./scripts/build-and-push.sh --push    # build + push (requires registry login)
 
 set -euo pipefail
 
@@ -24,8 +27,8 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-REGISTRY="${REGISTRY:-ghcr.io}"
-IMAGE_OWNER="${IMAGE_OWNER:-playhub}"
+REGISTRY="${REGISTRY:-docker.io}"
+IMAGE_OWNER="${IMAGE_OWNER:-scruffyprodigy}"
 API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-api"
 CLIENT_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-client"
 TAG="${TAG:-latest}"

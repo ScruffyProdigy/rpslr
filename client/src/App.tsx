@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Move, type MatchState, type Seat, type StatusResponse } from './api';
-import { getEnv, getLobbyLink } from './env';
-import { MOVE_META, describeOutcome } from './moves';
+import { getEnv, getLobbyLink, buildLobbyReturnLink } from './env';
+import { MOVE_META, describeOutcome, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -10,8 +10,13 @@ const lobbyLink = getLobbyLink();
 export default function App() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [lobbyReturnUrl, setLobbyReturnUrl] = useState<string | null>(null);
+  const [lobbyReturnBase, setLobbyReturnBase] = useState<string | null>(null);
+  const [externalMatchId, setExternalMatchId] = useState<string | null>(null);
   const lobbyLinked = Boolean(lobbyLink.matchId && lobbyLink.token);
+  const lobbyReturnUrl =
+    lobbyReturnBase != null
+      ? buildLobbyReturnLink(lobbyReturnBase, externalMatchId ?? lobbyLink.matchId)
+      : null;
 
   useEffect(() => {
     api.status().then(setStatus).catch((err) => setStatusError(err.message));
@@ -23,7 +28,8 @@ export default function App() {
     api
       .getState(lobbyLink.matchId)
       .then((s) => {
-        if (s.match.lobbyReturnUrl) setLobbyReturnUrl(s.match.lobbyReturnUrl);
+        if (s.match.lobbyReturnUrl) setLobbyReturnBase(s.match.lobbyReturnUrl);
+        if (s.match.externalMatchId) setExternalMatchId(s.match.externalMatchId);
       })
       .catch(() => {});
   }, [lobbyLink.matchId]);
@@ -64,7 +70,12 @@ export default function App() {
         )}
       </div>
 
-      <Game onLobbyReturnUrl={setLobbyReturnUrl} />
+      <Game
+        onLobbyReturn={(base, matchId) => {
+          if (base) setLobbyReturnBase(base);
+          if (matchId) setExternalMatchId(matchId);
+        }}
+      />
 
       <footer className="footer">
         Frontend :5174 · API {env.GAME_API_BASE_URL}
@@ -76,7 +87,11 @@ export default function App() {
 
 type Phase = 'lobby' | 'playing';
 
-function Game({ onLobbyReturnUrl }: { onLobbyReturnUrl?: (url: string | null) => void }) {
+function Game({
+  onLobbyReturn,
+}: {
+  onLobbyReturn?: (returnUrl: string | null, externalMatchId: string | null) => void;
+}) {
   const [phase, setPhase] = useState<Phase>('lobby');
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   const [mySeatKey, setMySeatKey] = useState<string | null>(null);
@@ -97,9 +112,9 @@ function Game({ onLobbyReturnUrl }: { onLobbyReturnUrl?: (url: string | null) =>
       setMySeatKey(result.you.seatKey);
       setRef(result.state.match.code);
       setPhase('playing');
-      onLobbyReturnUrl?.(result.state.match.lobbyReturnUrl);
+      onLobbyReturn?.(result.state.match.lobbyReturnUrl, result.state.match.externalMatchId);
     },
-    [onLobbyReturnUrl],
+    [onLobbyReturn],
   );
 
   // Lobby-linked entry: auto-claim the reserved seat using the signed token.
@@ -148,8 +163,10 @@ function Game({ onLobbyReturnUrl }: { onLobbyReturnUrl?: (url: string | null) =>
   }, [state, myPlayerId, pendingMove]);
 
   useEffect(() => {
-    if (state?.match.lobbyReturnUrl) onLobbyReturnUrl?.(state.match.lobbyReturnUrl);
-  }, [state?.match.lobbyReturnUrl, onLobbyReturnUrl]);
+    if (state?.match.lobbyReturnUrl || state?.match.externalMatchId) {
+      onLobbyReturn?.(state.match.lobbyReturnUrl, state.match.externalMatchId);
+    }
+  }, [state?.match.lobbyReturnUrl, state?.match.externalMatchId, onLobbyReturn]);
 
   const currentRound = state?.match.currentRound;
   useEffect(() => {
@@ -274,7 +291,7 @@ function Lobby({
           Match name
           <input value={matchName} onChange={(e) => setMatchName(e.target.value)} />
         </label>
-        <p className="rule-note">Best 3 of 5 · Lizard &amp; Spock start on cooldown</p>
+        <p className="rule-note">First to 3 round wins · Lizard &amp; Spock start on cooldown</p>
         <button disabled={busy} onClick={() => onCreate(matchName, hostName)}>
           Create match
         </button>
@@ -336,7 +353,8 @@ function Board({
         <div>
           <h2>{match.name}</h2>
           <p>
-            Room code: <code className="room-code">{match.code}</code> · {match.gameMode} · Best of {match.bestOf}
+            Room code: <code className="room-code">{match.code}</code> · {match.gameMode} · First to{' '}
+            {winsNeeded(match.bestOf)} wins
           </p>
         </div>
         <span className={`live ${connected ? 'on' : 'off'}`} title="WebSocket connection">
@@ -344,7 +362,7 @@ function Board({
         </span>
       </div>
 
-      <Scoreboard seats={seats} mySeatKey={mySeatKey} />
+      <Scoreboard seats={seats} mySeatKey={mySeatKey} bestOf={match.bestOf} />
 
       {!allSeated && !finished && <p className="hint">Waiting for all seats to be filled…</p>}
 
@@ -367,7 +385,8 @@ function Board({
             onPlay={onPlay}
           />
           <p className="dot-legend">
-            <span className="dot opp">●</span> opponent can't use ·{' '}
+            <span className="legend-ring opp" aria-hidden="true" />
+            opponent can pick · <span className="dot opp">●</span> opponent can't use ·{' '}
             <span className="dot mine">●</span> you can't use
           </p>
           {youMovedThisRound && myChosenMove && (
@@ -481,10 +500,11 @@ function MoveCircle({
         const onCooldown = myDelay > 0;
         const selected = myChosenMove === m;
         const dimmed = lockedIn && !selected;
+        const oppAllowed = !lockedIn && oppDelay === 0;
         return (
           <button
             key={m}
-            className={`move-btn circle ${onCooldown ? 'cooldown' : ''} ${selected ? 'selected' : ''} ${dimmed ? 'dimmed' : ''}`}
+            className={`move-btn circle ${onCooldown ? 'cooldown' : ''} ${selected ? 'selected' : ''} ${dimmed ? 'dimmed' : ''} ${oppAllowed ? 'opp-allowed' : ''}`}
             style={{ left: pos.x, top: pos.y }}
             disabled={disabled || onCooldown}
             onClick={() => onPlay(m)}
@@ -516,26 +536,63 @@ function MoveCircle({
   );
 }
 
-function Scoreboard({ seats, mySeatKey }: { seats: Seat[]; mySeatKey: string }) {
+function Scoreboard({ seats, mySeatKey, bestOf }: { seats: Seat[]; mySeatKey: string; bestOf: number }) {
+  const needed = winsNeeded(bestOf);
   return (
     <div className="scoreboard">
       {seats.map((seat, i) => (
-        <SeatCard key={seat.id} seat={seat} mine={seat.seatKey === mySeatKey} showVs={i < seats.length - 1} />
+        <SeatCard
+          key={seat.id}
+          seat={seat}
+          mine={seat.seatKey === mySeatKey}
+          winsNeeded={needed}
+          showVs={i < seats.length - 1}
+        />
       ))}
     </div>
   );
 }
 
-function SeatCard({ seat, mine, showVs }: { seat: Seat; mine: boolean; showVs: boolean }) {
+function WinProgress({ wins, needed }: { wins: number; needed: number }) {
+  const capped = Math.min(wins, needed);
+  return (
+    <div
+      className="win-pips"
+      role="img"
+      aria-label={`${capped} of ${needed} round wins${capped >= needed ? ', match point' : ''}`}
+    >
+      {Array.from({ length: needed }, (_, i) => (
+        <span key={i} className={`win-pip ${i < capped ? 'filled' : 'empty'}`} aria-hidden="true" />
+      ))}
+    </div>
+  );
+}
+
+function SeatCard({
+  seat,
+  mine,
+  winsNeeded: needed,
+  showVs,
+}: {
+  seat: Seat;
+  mine: boolean;
+  winsNeeded: number;
+  showVs: boolean;
+}) {
+  const wins = seat.player?.score ?? 0;
   return (
     <>
-      <div className={`player ${seat.player ? '' : 'waiting'}`}>
+      <div className={`player ${mine ? 'you' : ''} ${seat.player ? '' : 'waiting'}`}>
         <span className="player-label">
           {mine ? 'You' : seat.role ?? seat.seatKey}
           {seat.teamKey ? ` · ${seat.teamKey}` : ''}
         </span>
         <span className="player-name">{seat.player ? seat.player.name : 'Open seat'}</span>
-        <span className="player-score">{seat.player?.score ?? 0}</span>
+        {seat.player ? (
+          <WinProgress wins={wins} needed={needed} />
+        ) : (
+          <WinProgress wins={0} needed={needed} />
+        )}
       </div>
       {showVs && <span className="vs">vs</span>}
     </>

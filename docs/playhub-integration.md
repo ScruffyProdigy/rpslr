@@ -76,8 +76,8 @@ GET /api/v1/game-modes
 
 **Production (GKE):** single origin `https://rpsls-duel.win` — UI at `/`, API at
 `/api` (see `k8s/env/production.yaml`). Lobby catalog `playUrl` =
-`https://rpsls-duel.win`; push target `apiBaseUrl` = `https://rpsls-duel.win/api`.
-Seat JWT `aud` must be `https://rpsls-duel.win/api`.
+`https://rpsls-duel.win` for both `playUrl` and `apiBaseUrl` (API origin; JWT `aud` matches).
+Seat JWT `aud` must be `https://rpsls-duel.win` (not `.../api` — routes live under `/api/v1/...` on that host).
 
 ---
 
@@ -101,7 +101,7 @@ Production catalog row (same slug):
 
 ```sql
 -- play_url = player browser; api_base_url = server-to-server push + JWT aud
-UPDATE games SET play_url = 'https://rpsls-duel.win', api_base_url = 'https://rpsls-duel.win/api'
+UPDATE games SET play_url = 'https://rpsls-duel.win', api_base_url = 'https://rpsls-duel.win'
 WHERE slug = 'rock-paper-scissors-lizard-spock';
 ```
 
@@ -110,7 +110,7 @@ If your Lobby schema uses separate columns, set:
 | Field | Production value |
 |-------|------------------|
 | `playUrl` | `https://rpsls-duel.win` |
-| `apiBaseUrl` | `https://rpsls-duel.win/api` |
+| `apiBaseUrl` | `https://rpsls-duel.win` |
 
 ---
 
@@ -121,14 +121,14 @@ When Lobby's matchmaker forms a match, it **pushes the roster to the game first*
 ```
 POST http://localhost:3001/api/v1/matches
 Content-Type: application/json
-Authorization: Bearer <lobby-service-token>     # required when lobby.serviceToken is present
+Authorization: Bearer <lobby.serviceToken>     # required when lobby.serviceToken is present
 
 {
   "lobbyId": "https://joinquest.cc",
   "lobby": {
     "returnUrl": "https://joinquest.cc",
     "graphqlUrl": "https://joinquest.cc/graphql",
-    "serviceToken": "<lobby-service-token>"
+    "serviceToken": "v1.<game-uuid>.<hmac-hex>"
   },
   "assignment": {
     "externalMatchId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
@@ -141,12 +141,12 @@ Authorization: Bearer <lobby-service-token>     # required when lobby.serviceTok
 }
 ```
 
-Omit `lobby.serviceToken` when Lobby has no `LOBBY_GAME_SERVICE_TOKEN` (typical local dev); player names then come from seat JWT `name` or the claim body.
+Omit `lobby.serviceToken` when Lobby has no `LOBBY_GAME_TOKEN_PEPPER` (typical local dev); player names then come from seat JWT `name` or the claim body.
 
 - **`lobbyId`** — Lobby issuer; must match seat JWT `iss`.
 - **`lobby.returnUrl`** — player-facing Lobby URL (game client "Back to Lobby").
 - **`lobby.graphqlUrl`** — where the game POSTs `player(id)` at claim time.
-- **`lobby.serviceToken`** — Optional. Bearer for that Lobby instance when configured (stored on the match). Omit in dev when Lobby has no `LOBBY_GAME_SERVICE_TOKEN`.
+- **`lobby.serviceToken`** — Optional. Per-game Bearer (`v1.{gameId}.{sig}` from Lobby’s `LOBBY_GAME_TOKEN_PEPPER`); stored on the match for GraphQL `player` lookup. Omit in dev when Lobby has no pepper configured.
 
 - **Idempotent** on `externalMatchId` (safe to retry).
 - The game reserves each seat for the assigned `lobbyUserId`.
@@ -184,7 +184,7 @@ for "Back to Lobby" — no extra query param on the launch URL.
 The JWT is verified using JWKS at `{iss}/.well-known/jwks.json` where `iss` equals
 provision `lobbyId`. The game checks `aud` against its API origin (`GAME_API_BASE_URL`
 or `GAME_API_AUDIENCE` — `http://localhost:3001` locally,
-`https://rpsls-duel.win/api` on GKE). The game does **not** hardcode
+`https://rpsls-duel.win` on GKE). The game does **not** hardcode
 Lobby hosts in env.
 
 Example seat JWT payload:
@@ -214,8 +214,8 @@ Example seat JWT payload:
 | `name`    | display name (optional)                  |
 | `jti`, `nbf`, `iat`, `exp` | standard JWT claims           |
 
-In production, Lobby must set `aud` to `https://rpsls-duel.win/api` (the game's
-public API base, same value as `GAME_API_AUDIENCE` on the API pod).
+In production, Lobby must set `aud` to `https://rpsls-duel.win` (API origin,
+same value as `GAME_API_AUDIENCE` on the API pod and catalog `api_base_url`).
 
 The game rejects tokens whose `iss` does not match the `lobbyId` stored at provision time.
 
@@ -264,7 +264,7 @@ Lobby connectivity is **per match**, not per deployment:
 | Provision `lobby.returnUrl` | Client "Back to Lobby" |
 | Provision `lobby.graphqlUrl` | `player(id)` lookup at claim |
 | JWT `aud` | Must match game API origin (`GAME_API_BASE_URL` / `GAME_API_AUDIENCE`) |
-| Provision `lobby.serviceToken` | Bearer for GraphQL `player(id)` (per lobby instance) |
+| Provision `lobby.serviceToken` | Bearer for GraphQL `player(id)` (per game + Lobby instance; format `v1.{gameId}.{sig}`) |
 
 ---
 
@@ -280,7 +280,7 @@ the same seat model — just with unreserved seats and no token required.
 ## What the Lobby maintainer must add to complete the demo loop
 
 1. **Seed a catalog row** for `rock-paper-scissors-lizard-spock` with `playUrl` =
-   `https://rpsls-duel.win` and `apiBaseUrl` = `https://rpsls-duel.win/api` (Step 1).
+   `https://rpsls-duel.win` for both `playUrl` and `apiBaseUrl` (Step 1).
 2. **At match start, push the roster** to `POST /api/v1/matches` and handle a
    `403` (banned player) by correcting the match (Step 2).
 3. **Link each user** with `?match=<externalMatchId>&token=<signed-jwt>` whose

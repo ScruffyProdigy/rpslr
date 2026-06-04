@@ -19,3 +19,8 @@ export function describeOutcome(outcome: string, mySeatKey: string): 'win' | 'lo
   if (outcome === 'draw') return 'draw';
   return outcome === mySeatKey ? 'win' : 'loss';
 }
+
+/** Round wins required to take the match (e.g. best of 5 → first to 3). */
+export function winsNeeded(bestOf: number): number {
+  return Math.floor(bestOf / 2) + 1;
+}

@@ -1,5 +1,6 @@
 import { DEFAULT_GAME_MODE, defaultBestOfForMode, getGameMode, type GameModeManifest } from './gameModes.js';
 import { lobbyIssuersMatch } from './lobbyIssuer.js';
+import { reportMatchResult } from './lobbyClient.js';
 import type { LobbyProvisionInput } from './provision.js';
 import { TokenError } from './tokens.js';
 import { computeDelays, decideRound, isMove, matchWinner, winsNeeded, type Move } from './game.js';
@@ -280,7 +281,36 @@ export class GameService {
 
     const decided = matchWinner(scores[playerA.id], scores[playerB.id], winsNeeded(bestOf));
     await this.repo.setMatchProgress(matchId, round + 1, decided ? 'finished' : 'playing');
+    if (decided) {
+      const winningSeatKey = rel === 'draw' ? null : rel === 'a' ? seatA.seatKey : seatB.seatKey;
+      void this.notifyLobbyMatchComplete(matchId, winningSeatKey, seats);
+    }
     return this.publishState(matchId);
+  }
+
+  /** Best-effort callback so Lobby can clear matched queue rows. */
+  private async notifyLobbyMatchComplete(
+    matchId: string,
+    winningSeatKey: string | null,
+    seats: Seat[],
+  ): Promise<void> {
+    const match = await this.repo.getMatch(matchId);
+    if (!match?.externalMatchId || !match.lobbyGraphqlUrl || !match.lobbyServiceToken) return;
+
+    const winnerIds: string[] = [];
+    if (winningSeatKey) {
+      const winner = seats.find((s) => s.seatKey === winningSeatKey);
+      const uid = winner?.player?.lobbyUserId;
+      if (uid) winnerIds.push(uid);
+    }
+
+    await reportMatchResult(
+      match.lobbyGraphqlUrl,
+      match.lobbyServiceToken,
+      match.externalMatchId,
+      'COMPLETED',
+      winnerIds,
+    );
   }
 
   // --- Helpers --------------------------------------------------------------

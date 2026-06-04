@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchLobbyPlayerProfile, resolveClaimDisplayName } from './lobbyClient.js';
+import { fetchLobbyPlayerProfile, reportMatchResult, resolveClaimDisplayName } from './lobbyClient.js';
 
 describe('lobbyClient', () => {
   afterEach(() => {
@@ -68,5 +68,55 @@ describe('lobbyClient', () => {
     );
     expect(name).toBe('JWT Name');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reportMatchResult POSTs lifecycle mutation with service token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ data: { reportMatchResult: true } }),
+      })),
+    );
+
+    const ok = await reportMatchResult(
+      'https://joinquest.cc/graphql',
+      'svc-secret',
+      'match-uuid',
+      'COMPLETED',
+      ['user-a'],
+    );
+    expect(ok).toBe(true);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://joinquest.cc/graphql');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer svc-secret');
+    const body = JSON.parse(init.body as string) as { variables: Record<string, unknown> };
+    expect(body.variables.matchId).toBe('match-uuid');
+    expect(body.variables.status).toBe('COMPLETED');
+  });
+
+  it('reportMatchResult logs and returns false on GraphQL errors', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ errors: [{ message: 'session not found' }] }),
+      })),
+    );
+
+    const ok = await reportMatchResult(
+      'https://joinquest.cc/graphql',
+      'svc-secret',
+      'match-uuid',
+      'COMPLETED',
+    );
+    expect(ok).toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      '[lobby] reportMatchResult GraphQL errors:',
+      expect.objectContaining({ matchId: 'match-uuid' }),
+    );
+    warn.mockRestore();
   });
 });

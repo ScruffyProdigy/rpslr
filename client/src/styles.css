@@ -6,6 +6,7 @@
   --text: #e6e8ee;
   --muted: #9aa1b1;
   --danger: #f87171;
+  --opp-accent: #4ea1ff;
   color-scheme: dark;
 }
 
@@ -197,10 +198,30 @@ button.ghost {
 .player-name {
   font-weight: 600;
 }
-.player-score {
-  font-size: 2rem;
-  font-weight: 800;
-  color: var(--accent-2);
+.win-pips {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.win-pip {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+}
+.win-pip.filled {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
+}
+.win-pip.empty {
+  background: transparent;
+  border-color: #3d4458;
+}
+.player.you .win-pip.filled {
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.45);
 }
 .vs {
   color: var(--muted);
@@ -251,7 +272,7 @@ button.ghost {
   color: var(--danger);
 }
 .delay-badge.opp {
-  color: #4ea1ff;
+  color: var(--opp-accent);
 }
 
 /* Pentagon "which beats which" layout */
@@ -301,6 +322,15 @@ button.ghost {
   opacity: 0.28;
   border-style: dashed;
 }
+/* While you are choosing, outline moves the opponent is allowed to play this round */
+.move-btn.circle.opp-allowed:not(.selected):not(.dimmed) {
+  border-color: var(--opp-accent);
+  box-shadow: 0 0 0 2px rgba(78, 161, 255, 0.4);
+}
+.move-btn.circle.opp-allowed:not(.selected):not(.dimmed):hover:not(:disabled) {
+  border-color: var(--opp-accent);
+  box-shadow: 0 0 0 3px rgba(78, 161, 255, 0.5);
+}
 .move-circle--locked .move-arrows {
   opacity: 0.35;
 }
@@ -338,11 +368,24 @@ button.ghost {
 .dot-legend .dot {
   font-size: 0.8rem;
 }
+.dot-legend .legend-ring {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 2px solid var(--opp-accent);
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 2px;
+  box-shadow: 0 0 0 1px rgba(78, 161, 255, 0.35);
+}
+.dot-legend .legend-ring.opp {
+  margin-left: 0;
+}
 .dot-legend .dot.mine {
   color: var(--danger);
 }
 .dot-legend .dot.opp {
-  color: #4ea1ff;
+  color: var(--opp-accent);
 }
 .rule-note {
   margin: 0;
@@ -357,7 +400,7 @@ button.ghost {
   font-size: 0.85rem;
 }
 .hint.opponent-ready {
-  color: #4ea1ff;
+  color: var(--opp-accent);
   font-weight: 600;
 }
 

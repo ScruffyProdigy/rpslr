@@ -44,7 +44,8 @@ export function getWebSocketUrl(env: RuntimeEnv = getEnv()): string {
  * origins). Launch URL from Lobby:
  *   {playUrl}?match=<externalMatchId>&token=<jwt>
  *
- * "Back to Lobby" uses `lobby.returnUrl` from provision (GET match before claim).
+ * "Back to Lobby" uses `{lobby.returnUrl}?match={externalMatchId}` from provision.
+ * See lobbyReturn.ts for the canonical link builder.
  */
 export interface LobbyLink {
   matchId: string | null;
@@ -52,6 +53,8 @@ export interface LobbyLink {
   seat: string | null;
   lobbyUser: string | null;
 }
+
+export { buildLobbyReturnLink } from './lobbyReturn';
 
 export function getLobbyLink(search = window.location.search): LobbyLink {
   const params = new URLSearchParams(search);
