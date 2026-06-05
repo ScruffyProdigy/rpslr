@@ -60,7 +60,7 @@ describe('platform routes', () => {
       maxPlayers: 2,
     });
     expect(duel).not.toHaveProperty('bestOf');
-    expect(duel.seats).toEqual([{ key: 'a' }, { key: 'b' }]);
+    expect(duel.seatTemplate).toEqual({ count: 2 });
   });
 });
 
@@ -76,7 +76,7 @@ describe('standalone create → claim → move', () => {
 
     const joined = await request(app).post(`/api/v1/matches/${code}/claim`).send({ playerName: 'Bob' });
     expect(joined.status).toBe(201);
-    expect(joined.body.you.seatKey).toBe('b'); // auto-picked the open seat
+    expect(joined.body.you.seatKey).toBe('2'); // auto-picked the open seat
     const challengerId = joined.body.you.playerId;
 
     await request(app).post(`/api/v1/matches/${code}/move`).send({ playerId: hostId, move: 'rock' });
@@ -86,7 +86,7 @@ describe('standalone create → claim → move', () => {
 
     expect(final.status).toBe(200);
     expect(final.body.match.status).toBe('finished');
-    expect(final.body.matchWinnerSeatKey).toBe('a');
+    expect(final.body.matchWinnerSeatKey).toBe('1');
   });
 
   it('returns 404 for an unknown match', async () => {
@@ -111,8 +111,8 @@ describe('Lobby push + signed-token claim (option 2)', () => {
       externalMatchId: 'lobby-xyz',
       gameMode: 'duel',
       seats: [
-        { seatKey: 'a', lobbyUserId: 'u_alice', displayName: 'Alice' },
-        { seatKey: 'b', lobbyUserId: 'u_bob', displayName: 'Bob' },
+        { seatKey: '1', lobbyUserId: 'u_alice', displayName: 'Alice' },
+        { seatKey: '2', lobbyUserId: 'u_bob', displayName: 'Bob' },
       ],
     },
   };
@@ -125,7 +125,7 @@ describe('Lobby push + signed-token claim (option 2)', () => {
       assignment: {
         externalMatchId: 'auth-test',
         gameMode: 'duel',
-        seats: [{ seatKey: 'a', lobbyUserId: 'u1' }],
+        seats: [{ seatKey: '1', lobbyUserId: 'u1' }],
       },
     });
     expect(res.status).toBe(401);
@@ -143,8 +143,8 @@ describe('Lobby push + signed-token claim (option 2)', () => {
           externalMatchId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
           gameMode: 'duel',
           seats: [
-            { seatKey: 'a', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
-            { seatKey: 'b', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
+            { seatKey: '1', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
+            { seatKey: '2', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
           ],
         },
       });
@@ -163,14 +163,14 @@ describe('Lobby push + signed-token claim (option 2)', () => {
         lobbyIssuer: 'https://joinquest.cc',
         lobbyUserId: 'u_alice',
         externalMatchId: 'lobby-xyz',
-        seatKey: 'a',
+        seatKey: '1',
         displayName: 'Alice',
       },
       'tok-bob': {
         lobbyIssuer: 'https://joinquest.cc',
         lobbyUserId: 'u_bob',
         externalMatchId: 'lobby-xyz',
-        seatKey: 'b',
+        seatKey: '2',
         displayName: 'Bob',
       },
     });
@@ -185,14 +185,14 @@ describe('Lobby push + signed-token claim (option 2)', () => {
       .set('Authorization', 'Bearer tok-alice')
       .send({});
     expect(alice.status).toBe(201);
-    expect(alice.body.you.seatKey).toBe('a');
+    expect(alice.body.you.seatKey).toBe('1');
     expect(alice.body.you.name).toBe('Alice');
 
     const bob = await request(app)
       .post('/api/v1/matches/lobby-xyz/claim')
       .set('Authorization', 'Bearer tok-bob')
       .send({});
-    expect(bob.body.you.seatKey).toBe('b');
+    expect(bob.body.you.seatKey).toBe('2');
     expect(bob.body.state.match.status).toBe('playing');
   });
 
@@ -209,7 +209,7 @@ describe('Lobby push + signed-token claim (option 2)', () => {
         lobbyIssuer: 'https://wrong.example',
         lobbyUserId: 'u_alice',
         externalMatchId: 'lobby-xyz',
-        seatKey: 'a',
+        seatKey: '1',
       },
     });
     const app = buildApp({}, verifier);
@@ -228,7 +228,7 @@ describe('Lobby push + signed-token claim (option 2)', () => {
         lobbyIssuer: 'https://joinquest.cc',
         lobbyUserId: 'u_alice',
         externalMatchId: 'ghost',
-        seatKey: 'a',
+        seatKey: '1',
       },
     });
     const app = buildApp({}, verifier);

@@ -6,7 +6,7 @@ describe('game-modes manifest', () => {
     const duel = getGameMode('duel');
     expect(duel?.key).toBe('duel');
     expect(duel?.displayName).toBeTruthy();
-    expect(duel?.seats).toHaveLength(2);
+    expect(duel?.seatTemplate).toEqual({ count: 2 });
     expect(duel).not.toHaveProperty('bestOf');
   });
 

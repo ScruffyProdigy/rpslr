@@ -1,4 +1,10 @@
-import { DEFAULT_GAME_MODE, defaultBestOfForMode, getGameMode, type GameModeManifest } from './gameModes.js';
+import {
+  DEFAULT_GAME_MODE,
+  defaultBestOfForMode,
+  getGameMode,
+  seatKeysForMode,
+  type GameModeManifest,
+} from './gameModes.js';
 import { lobbyIssuersMatch } from './lobbyIssuer.js';
 import { reportMatchResult } from './lobbyClient.js';
 import type { LobbyProvisionInput } from './provision.js';
@@ -72,9 +78,10 @@ export class GameService {
       bestOf,
       seats: seatsFromMode(mode),
     });
-    const firstSeat = mode.seats[0];
+    const seatKeys = seatKeysForMode(mode);
+    const firstSeatKey = seatKeys[0];
     return this.claimSeat(match.code, {
-      seatKey: firstSeat.key,
+      seatKey: firstSeatKey,
       name: opts.hostName?.trim() || 'Host',
       lobbyUserId: opts.hostLobbyUserId ?? null,
     });
@@ -339,10 +346,10 @@ function playerMoveSequence(results: RoundResult[], playerId: string): Move[] {
 }
 
 function seatsFromMode(mode: GameModeManifest): SeatReservation[] {
-  return mode.seats.map((s, i) => ({
-    seatKey: s.key,
-    teamKey: s.team ?? null,
-    role: s.role ?? null,
+  return seatKeysForMode(mode).map((seatKey, i) => ({
+    seatKey,
+    teamKey: null,
+    role: null,
     position: i,
     reservedForLobbyUser: null,
   }));
@@ -350,9 +357,9 @@ function seatsFromMode(mode: GameModeManifest): SeatReservation[] {
 
 function assertAssignmentCoversMode(mode: GameModeManifest, assigned: AssignmentSeat[]): void {
   const byKey = new Set(assigned.map((a) => a.seatKey));
-  for (const seat of mode.seats) {
-    if (!byKey.has(seat.key)) {
-      throw new ValidationError(`assignment missing seat '${seat.key}' for mode '${mode.key}'`);
+  for (const seatKey of seatKeysForMode(mode)) {
+    if (!byKey.has(seatKey)) {
+      throw new ValidationError(`assignment missing seat '${seatKey}' for mode '${mode.key}'`);
     }
   }
   const seenUsers = new Set<string>();
@@ -366,17 +373,18 @@ function assertAssignmentCoversMode(mode: GameModeManifest, assigned: Assignment
 
 function reservationsFromAssignment(mode: GameModeManifest, assigned: AssignmentSeat[]): SeatReservation[] {
   const byKey = new Map(assigned.map((a) => [a.seatKey, a]));
+  const keys = seatKeysForMode(mode);
   for (const a of assigned) {
-    if (!mode.seats.some((s) => s.key === a.seatKey)) {
+    if (!keys.includes(a.seatKey)) {
       throw new ValidationError(`assignment references unknown seat '${a.seatKey}' for mode '${mode.key}'`);
     }
   }
-  return mode.seats.map((s, i) => ({
-    seatKey: s.key,
-    teamKey: s.team ?? null,
-    role: s.role ?? null,
+  return keys.map((seatKey, i) => ({
+    seatKey,
+    teamKey: null,
+    role: null,
     position: i,
-    reservedForLobbyUser: byKey.get(s.key)?.lobbyUserId ?? null,
+    reservedForLobbyUser: byKey.get(seatKey)?.lobbyUserId ?? null,
   }));
 }
 

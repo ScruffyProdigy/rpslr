@@ -24,15 +24,15 @@ describe('claimsFromPayload', () => {
       iss: 'http://localhost:8080',
       sub: 'u_bob',
       match_id: 'lobby-2',
-      seat_key: 'b',
+      seat_key: '2',
     });
     expect(claims.externalMatchId).toBe('lobby-2');
-    expect(claims.seatKey).toBe('b');
+    expect(claims.seatKey).toBe('2');
   });
 
   it('throws when iss is missing', () => {
     expect(() =>
-      claimsFromPayload({ sub: 'u_alice', matchId: 'm', seatKey: 'a' }),
+      claimsFromPayload({ sub: 'u_alice', matchId: 'm', seatKey: '1' }),
     ).toThrow(/iss/);
   });
 

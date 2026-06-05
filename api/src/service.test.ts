@@ -18,13 +18,13 @@ describe('GameService — standalone duel loop', () => {
     });
     const code = created.state.match.code;
     const hostId = created.you.playerId;
-    const joined = await service.claimSeat(code, { seatKey: 'b', name: 'Bob' });
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
     return { code, hostId, challengerId: joined.you.playerId };
   }
 
   it('seats the host in seat "a" and starts as waiting', async () => {
     const created = await service.createStandaloneMatch({ hostName: 'Alice' });
-    expect(created.you.seatKey).toBe('a');
+    expect(created.you.seatKey).toBe('1');
     expect(created.state.match.status).toBe('waiting');
     expect(created.state.match.code).toMatch(/^RPS-/);
   });
@@ -41,13 +41,13 @@ describe('GameService — standalone duel loop', () => {
     // r1: rock beats scissors -> host wins. (host rock now on cooldown)
     await service.submitMove(code, hostId, 'rock');
     let state = await service.submitMove(code, challengerId, 'scissors');
-    expect(state.results[0].outcome).toBe('a');
+    expect(state.results[0].outcome).toBe('1');
 
     // r2: host can't rock; paper beats rock -> host wins to 2.
     await service.submitMove(code, hostId, 'paper');
     state = await service.submitMove(code, challengerId, 'rock');
     expect(state.match.status).toBe('finished');
-    expect(state.matchWinnerSeatKey).toBe('a');
+    expect(state.matchWinnerSeatKey).toBe('1');
   });
 
   it('does not score draws', async () => {
@@ -81,7 +81,7 @@ describe('GameService — standalone duel loop', () => {
     const { code, hostId, challengerId } = await setupMatch(5);
     await service.submitMove(code, hostId, 'rock');
     const state = await service.submitMove(code, challengerId, 'paper');
-    const seatA = state.seats.find((s) => s.seatKey === 'a');
+    const seatA = state.seats.find((s) => s.seatKey === '1');
     // After choosing rock: rock=2, spock=1 (2->1), lizard=0 (1->1... decrement then nothing)
     expect(seatA?.delays.rock).toBe(2);
     expect(seatA?.delays.lizard).toBe(0);
@@ -128,8 +128,8 @@ describe('GameService — Lobby push (option 2)', () => {
       externalMatchId: 'lobby-match-1',
       gameMode: 'duel',
       seats: [
-        { seatKey: 'a', lobbyUserId: 'u_alice' },
-        { seatKey: 'b', lobbyUserId: 'u_bob' },
+        { seatKey: '1', lobbyUserId: 'u_alice' },
+        { seatKey: '2', lobbyUserId: 'u_bob' },
       ],
     },
   };
@@ -152,7 +152,7 @@ describe('GameService — Lobby push (option 2)', () => {
     expect(state.match.lobbyReturnUrl).toBe('https://joinquest.cc');
     expect(state.match.lobbyGraphqlUrl).toBe('https://joinquest.cc/graphql');
     expect(state.match.lobbyServiceToken).toBe('lobby-svc-secret');
-    const seatA = state.seats.find((s) => s.seatKey === 'a');
+    const seatA = state.seats.find((s) => s.seatKey === '1');
     expect(seatA?.reservedForLobbyUser).toBe('u_alice');
     expect(state.seats.every((s) => !s.player)).toBe(true);
   });
@@ -177,11 +177,11 @@ describe('GameService — Lobby push (option 2)', () => {
     const state = await svc.ensureMatchFromAssignment(provision);
     const code = state.match.code;
 
-    const claimed = await svc.claimSeat(code, { seatKey: 'a', name: 'Alice', lobbyUserId: 'u_alice' });
-    expect(claimed.you.seatKey).toBe('a');
+    const claimed = await svc.claimSeat(code, { seatKey: '1', name: 'Alice', lobbyUserId: 'u_alice' });
+    expect(claimed.you.seatKey).toBe('1');
 
     await expect(
-      svc.claimSeat(code, { seatKey: 'b', name: 'Mallory', lobbyUserId: 'u_mallory' }),
+      svc.claimSeat(code, { seatKey: '2', name: 'Mallory', lobbyUserId: 'u_mallory' }),
     ).rejects.toBeInstanceOf(ReservationError);
   });
 
@@ -189,8 +189,8 @@ describe('GameService — Lobby push (option 2)', () => {
     const svc = service();
     const state = await svc.ensureMatchFromAssignment(provision);
     const code = state.match.code;
-    const first = await svc.claimSeat(code, { seatKey: 'a', name: 'Alice', lobbyUserId: 'u_alice' });
-    const again = await svc.claimSeat(code, { seatKey: 'a', name: 'Alice', lobbyUserId: 'u_alice' });
+    const first = await svc.claimSeat(code, { seatKey: '1', name: 'Alice', lobbyUserId: 'u_alice' });
+    const again = await svc.claimSeat(code, { seatKey: '1', name: 'Alice', lobbyUserId: 'u_alice' });
     expect(again.you.playerId).toBe(first.you.playerId);
   });
 
@@ -201,7 +201,7 @@ describe('GameService — Lobby push (option 2)', () => {
         lobbyIssuer: 'https://joinquest.cc',
         lobbyUserId: 'u_alice',
         externalMatchId: 'never-pushed',
-        seatKey: 'a',
+        seatKey: '1',
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -214,7 +214,7 @@ describe('GameService — Lobby push (option 2)', () => {
         lobbyIssuer: 'https://evil.example',
         lobbyUserId: 'u_alice',
         externalMatchId: 'lobby-match-1',
-        seatKey: 'a',
+        seatKey: '1',
       }),
     ).rejects.toMatchObject({ message: /iss/ });
   });

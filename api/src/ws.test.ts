@@ -77,7 +77,7 @@ describe('WebSocket gameplay transport', () => {
     const created = await service.createStandaloneMatch({ hostName: 'Alice', bestOf: 1 });
     const code = created.state.match.code;
     const hostId = created.you.playerId;
-    const joined = await service.claimSeat(code, { seatKey: 'b', name: 'Bob' });
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
     const challengerId = joined.you.playerId;
 
     const host = await open();
@@ -96,7 +96,7 @@ describe('WebSocket gameplay transport', () => {
       host,
       (m) => m.type === 'state' && (m.state as { match: { status: string } }).match.status === 'finished',
     );
-    expect((finished.state as { matchWinnerSeatKey: string }).matchWinnerSeatKey).toBe('a');
+    expect((finished.state as { matchWinnerSeatKey: string }).matchWinnerSeatKey).toBe('1');
 
     host.close();
     challenger.close();
@@ -106,7 +106,7 @@ describe('WebSocket gameplay transport', () => {
     const created = await service.createStandaloneMatch({ hostName: 'Alice', bestOf: 5 });
     const code = created.state.match.code;
     const hostId = created.you.playerId;
-    const joined = await service.claimSeat(code, { seatKey: 'b', name: 'Bob' });
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
     const challengerId = joined.you.playerId;
 
     const host = await open();

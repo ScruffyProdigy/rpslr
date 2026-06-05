@@ -15,8 +15,8 @@ describe('parseLobbyProvision', () => {
       externalMatchId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
       gameMode: 'duel',
       seats: [
-        { seatKey: 'a', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
-        { seatKey: 'b', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
+        { seatKey: '1', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
+        { seatKey: '2', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
       ],
     },
   };

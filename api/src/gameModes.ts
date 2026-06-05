@@ -7,20 +7,13 @@
  * @see lobby/docs/game-catalog-architecture.md
  */
 
-/** One seat in a mode template (provision uses `seatKey` = `key`). */
-export interface GameModeSeatManifest {
-  key: string;
-  team?: string;
-  role?: string;
-}
-
-/** One playable mode in the catalog (seats + player counts only). */
+/** One playable mode in the catalog (layout + player counts only). */
 export interface GameModeManifest {
   key: string;
   displayName: string;
   minPlayers: number;
   maxPlayers: number;
-  seats: GameModeSeatManifest[];
+  seatTemplate: { count: number };
 }
 
 export const GAME_MODES: GameModeManifest[] = [
@@ -29,9 +22,18 @@ export const GAME_MODES: GameModeManifest[] = [
     displayName: '1v1 Duel',
     minPlayers: 2,
     maxPlayers: 2,
-    seats: [{ key: 'a' }, { key: 'b' }],
+    seatTemplate: { count: 2 },
   },
 ];
+
+/** Expanded seat keys for a mode (must stay aligned with Lobby seattemplate expand). */
+export function seatKeysForMode(mode: GameModeManifest): string[] {
+  const n = mode.seatTemplate?.count ?? 0;
+  if (n < 1) {
+    return [];
+  }
+  return Array.from({ length: n }, (_, i) => String(i + 1));
+}
 
 /** Default round length when provision/standalone omit `bestOf`. */
 const BEST_OF_BY_MODE: Record<string, number> = {
