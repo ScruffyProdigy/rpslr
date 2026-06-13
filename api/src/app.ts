@@ -2,12 +2,13 @@ import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { GAME_NAME, GAME_VERSION, type AppConfig } from './config.js';
 import { buildGameModesPayload } from './gameModes.js';
+import { buildLaunchUrlsForAssignment } from './launchUrls.js';
 import {
   ConflictError,
   NotFoundError,
   ReservationError,
 } from './repository.js';
-import { resolveClaimDisplayName } from './lobbyClient.js';
+import { reportMatchResult } from './lobbyClient.js';
 import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
 import { BannedPlayerError, ValidationError, type GameService } from './service.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';
@@ -51,6 +52,7 @@ export function createApp(
       version: GAME_VERSION,
       appEnv: config.appEnv,
       standalone: !config.requireLobbyAuth,
+      launchUrlsOnProvision: true,
     });
   });
 
@@ -76,7 +78,18 @@ export function createApp(
           return res.status(401).json({ error: authErr });
         }
         const state = await service.ensureMatchFromAssignment(parsed);
-        return res.status(201).json(state);
+        const launchUrls = buildLaunchUrlsForAssignment(config.playUrl, parsed.assignment);
+        console.info(
+          JSON.stringify({
+            event: 'provision.launch_urls',
+            externalMatchId: parsed.assignment.externalMatchId,
+            gameMode: parsed.assignment.gameMode,
+            seatCount: parsed.assignment.seats.length,
+            launchUrlCount: Object.keys(launchUrls).length,
+            playUrl: config.playUrl,
+          }),
+        );
+        return res.status(201).json({ ...state, launchUrls });
       }
       const result = await service.createStandaloneMatch({
         gameMode: body.gameMode,
@@ -105,18 +118,15 @@ export function createApp(
 
       if (token) {
         const claims = await getVerifier().verify(token);
+        if (req.params.ref !== claims.externalMatchId) {
+          throw new NotFoundError('match not found');
+        }
         await service.assertMatchProvisioned(claims);
-        const provisioned = await service.getState(claims.externalMatchId);
-        const result = await service.claimSeat(claims.externalMatchId, {
-          seatKey: claims.seatKey,
-          name: await resolveClaimDisplayName(
-            claims,
-            provisioned.match.lobbyGraphqlUrl,
-            provisioned.match.lobbyServiceToken,
-            req.body?.playerName,
-          ),
-          lobbyUserId: claims.lobbyUserId,
-        });
+        const result = await service.claimSeatWithLobbyClaims(
+          claims.externalMatchId,
+          claims,
+          req.body?.playerName,
+        );
         return res.status(201).json(result);
       }
 

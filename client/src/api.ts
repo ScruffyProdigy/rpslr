@@ -1,13 +1,20 @@
 import { getEnv } from './env';
 
-export type Move = 'rock' | 'paper' | 'scissors' | 'lizard' | 'spock';
+export type Move = 'rock' | 'paper' | 'scissors' | 'lizard' | 'robot';
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
+
+export interface LobbyPlayerProfile {
+  displayName?: string;
+  avatarUrl?: string;
+  color?: string;
+}
 
 export interface SeatPlayer {
   id: string;
   name: string;
   lobbyUserId: string | null;
   score: number;
+  profile: LobbyPlayerProfile | null;
 }
 
 export interface Seat {
@@ -19,6 +26,7 @@ export interface Seat {
   position: number;
   reservedForLobbyUser: string | null;
   player: SeatPlayer | null;
+  lobbyProfile: LobbyPlayerProfile | null;
   delays: Record<string, number>;
 }
 

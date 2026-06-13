@@ -6,10 +6,10 @@ export const MOVE_META: Record<Move, { emoji: string; label: string }> = {
   paper: { emoji: '📄', label: 'Paper' },
   scissors: { emoji: '✂️', label: 'Scissors' },
   lizard: { emoji: '🦎', label: 'Lizard' },
-  spock: { emoji: '🖖', label: 'Spock' },
+  robot: { emoji: '🤖', label: 'Robot' },
 };
 
-export const ALL_MOVES: Move[] = ['rock', 'paper', 'scissors', 'lizard', 'spock'];
+export const ALL_MOVES: Move[] = ['rock', 'paper', 'scissors', 'lizard', 'robot'];
 
 /**
  * Outcome is the winning seat key (or 'draw'). Compare against the viewer's

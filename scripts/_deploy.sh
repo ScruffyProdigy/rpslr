@@ -5,7 +5,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 ENV_NAME="${1:?usage: _deploy.sh <local|staging|production>}"
-NS="rps-game"
+NS="${GAME_NAMESPACE:-rpsls-duel}"
+IMAGE_TAG="${IMAGE_TAG:-latest}"
 K8S="$REPO_ROOT/k8s"
 ENV_FILE="$K8S/env/${ENV_NAME}.yaml"
 SECRETS_FILE="$K8S/secrets/pg-dsn.yaml"
@@ -22,7 +23,9 @@ kubectl apply -f "$K8S/base/namespace.yaml"
 # 2. Secrets (real secrets are gitignored; expects pg-dsn.yaml to exist locally)
 if [ -f "$SECRETS_FILE" ]; then
   log "Applying secrets..."
-  kubectl apply -n "$NS" -f "$SECRETS_FILE"
+  sed -e 's/namespace: rps-game/namespace: '"$NS"'/g' \
+      -e 's/namespace: rpsls-duel/namespace: '"$NS"'/g' \
+      "$SECRETS_FILE" | kubectl apply -n "$NS" -f -
 else
   warn "No $SECRETS_FILE found. Copy k8s/secrets/pg-dsn.example.yaml -> pg-dsn.yaml and fill it in."
   warn "Continuing — deployment will fail to start until the secret exists."
@@ -49,7 +52,14 @@ if [ -f "$INGRESS_OVERLAY" ]; then
   kubectl apply -n "$NS" -f "$INGRESS_OVERLAY"
 fi
 
-# 5. Wait for rollout
+# 5. Pin images by digest (mutable :rpsls tag alone is not enough on GKE).
+API_TAG="${REGISTRY:-docker.io}/${IMAGE_OWNER:-scruffyprodigy}/rps-game-api:${IMAGE_TAG}"
+CLIENT_TAG="${REGISTRY:-docker.io}/${IMAGE_OWNER:-scruffyprodigy}/rps-game-client:${IMAGE_TAG}"
+API_IMAGE="$(resolve_image_digest "$API_TAG")"
+CLIENT_IMAGE="$(resolve_image_digest "$CLIENT_TAG")"
+pin_deployment_images "$NS" "$API_IMAGE" "$CLIENT_IMAGE"
+
+# 6. Wait for rollout
 log "Waiting for deployments to become available..."
 kubectl -n "$NS" rollout status deployment/rps-game-api --timeout=120s
 kubectl -n "$NS" rollout status deployment/rps-game-client --timeout=120s

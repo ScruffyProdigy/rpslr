@@ -31,7 +31,7 @@ REGISTRY="${REGISTRY:-docker.io}"
 IMAGE_OWNER="${IMAGE_OWNER:-scruffyprodigy}"
 API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-api"
 CLIENT_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-client"
-TAG="${TAG:-latest}"
+TAG="${TAG:-rpsls}"
 
 command -v docker >/dev/null 2>&1 || { echo "docker not found" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "Docker is not running" >&2; exit 1; }

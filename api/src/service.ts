@@ -7,6 +7,11 @@ import {
 } from './gameModes.js';
 import { lobbyIssuersMatch } from './lobbyIssuer.js';
 import { reportMatchResult } from './lobbyClient.js';
+import {
+  claimSeatName,
+  fetchLobbyProfilesForUserIds,
+  resolveLobbyPlayerProfile,
+} from './lobbyPlayer.js';
 import type { LobbyProvisionInput } from './provision.js';
 import { TokenError } from './tokens.js';
 import { computeDelays, decideRound, isMove, matchWinner, winsNeeded, type Move } from './game.js';
@@ -17,7 +22,7 @@ import {
   makeCode,
   type GameRepository,
 } from './repository.js';
-import type { MatchState, RoundResult, Seat, SeatReservation } from './types.js';
+import type { Match, MatchState, RoundResult, Seat, SeatReservation } from './types.js';
 import type { AssignmentClaims, AssignmentSeat } from './tokens.js';
 
 export class ValidationError extends Error {}
@@ -111,19 +116,64 @@ export class GameService {
     const mode = this.requireMode(assignment.gameMode);
     assertAssignmentCoversMode(mode, assignment.seats);
     const reservations = reservationsFromAssignment(mode, assignment.seats);
-    const match = await this.repo.createMatch({
-      code: await this.uniqueCode(),
-      externalMatchId: assignment.externalMatchId,
-      lobbyId,
-      lobbyReturnUrl: input.lobby.returnUrl,
-      lobbyGraphqlUrl: input.lobby.graphqlUrl,
-      lobbyServiceToken: input.lobby.serviceToken ?? null,
-      name: `Lobby match ${assignment.externalMatchId}`,
-      gameMode: mode.key,
-      bestOf: clampBestOf(assignment.bestOf, defaultBestOfForMode(mode.key)),
-      seats: reservations,
-    });
+    let match: Match;
+    try {
+      match = await this.repo.createMatch({
+        code: await this.uniqueCode(),
+        externalMatchId: assignment.externalMatchId,
+        lobbyId,
+        lobbyReturnUrl: input.lobby.returnUrl,
+        lobbyGraphqlUrl: input.lobby.graphqlUrl,
+        lobbyServiceToken: input.lobby.serviceToken ?? null,
+        lobbyPlayerProfiles: Object.fromEntries(
+          assignment.seats
+            .filter((s) => s.player)
+            .map((s) => [s.lobbyUserId, s.player!]),
+        ),
+        name: 'Duel',
+        gameMode: mode.key,
+        bestOf: clampBestOf(assignment.bestOf, defaultBestOfForMode(mode.key)),
+        seats: reservations,
+      });
+    } catch (err) {
+      // Concurrent Lobby provision POSTs can race on externalMatchId; treat as idempotent.
+      if (isDuplicateExternalMatchId(err)) {
+        const raced = await this.repo.getMatch(assignment.externalMatchId);
+        if (raced) return this.getStateByMatchId(raced.id);
+      }
+      throw err;
+    }
+    await this.hydrateLobbyProfiles(
+      match.id,
+      assignment.seats.map((s) => s.lobbyUserId),
+    );
     return this.getStateByMatchId(match.id);
+  }
+
+  async claimSeatWithLobbyClaims(
+    ref: string,
+    claims: AssignmentClaims,
+    bodyPlayerName?: string,
+  ): Promise<ClaimResult> {
+    const match = await this.repo.getMatch(ref);
+    if (!match) throw new NotFoundError('match not found');
+
+    const stored = match.lobbyPlayerProfiles[claims.lobbyUserId];
+    const profile = await resolveLobbyPlayerProfile({
+      stored,
+      graphqlUrl: match.lobbyGraphqlUrl,
+      serviceToken: match.lobbyServiceToken,
+      claims,
+    });
+    if (profile) {
+      await this.repo.setLobbyPlayerProfiles(match.id, { [claims.lobbyUserId]: profile });
+    }
+
+    return this.claimSeat(ref, {
+      seatKey: claims.seatKey,
+      name: claimSeatName(profile, bodyPlayerName),
+      lobbyUserId: claims.lobbyUserId,
+    });
   }
 
   /**
@@ -328,6 +378,19 @@ export class GameService {
     return mode;
   }
 
+  private async hydrateLobbyProfiles(matchId: string, lobbyUserIds: string[]): Promise<void> {
+    const match = await this.repo.getMatch(matchId);
+    if (!match?.lobbyGraphqlUrl || !match.lobbyServiceToken) return;
+    const fetched = await fetchLobbyProfilesForUserIds(
+      match.lobbyGraphqlUrl,
+      match.lobbyServiceToken,
+      lobbyUserIds,
+    );
+    if (Object.keys(fetched).length > 0) {
+      await this.repo.setLobbyPlayerProfiles(matchId, fetched);
+    }
+  }
+
   private async uniqueCode(): Promise<string> {
     for (let i = 0; i < 5; i++) {
       const code = makeCode();
@@ -393,4 +456,10 @@ function clampBestOf(bestOf: number | undefined, fallback: number): number {
   if (!Number.isFinite(n)) return fallback;
   const clamped = Math.min(9, Math.max(1, Math.round(n)));
   return clamped % 2 === 0 ? clamped + 1 : clamped;
+}
+
+/** Postgres unique violation on matches.external_match_id from concurrent provision POSTs. */
+function isDuplicateExternalMatchId(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes('matches_external_match_id_key');
 }

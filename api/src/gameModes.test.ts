@@ -11,8 +11,8 @@ describe('game-modes manifest', () => {
   });
 
   it('buildGameModesPayload matches GET /api/v1/game-modes shape', () => {
-    const body = buildGameModesPayload('rock-paper-scissors-lizard-spock');
-    expect(body.game).toBe('rock-paper-scissors-lizard-spock');
+    const body = buildGameModesPayload('rock-paper-scissors-lizard-robot');
+    expect(body.game).toBe('rock-paper-scissors-lizard-robot');
     expect(body.modes).toEqual(GAME_MODES);
     expect(body.modes[0]).not.toHaveProperty('bestOf');
   });

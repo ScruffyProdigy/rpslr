@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Move, type MatchState, type Seat, type StatusResponse } from './api';
+import { PlayerAvatar } from './components/PlayerAvatar';
 import { getEnv, getLobbyLink, buildLobbyReturnLink } from './env';
+import { seatDisplayName, seatProfile } from './lib/seatProfile';
 import { MOVE_META, describeOutcome, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
@@ -37,7 +39,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>🪨📄✂️🦎🖖 Rock Paper Scissors Lizard Spock</h1>
+        <h1>🪨📄✂️🦎🤖 Rock Paper Scissors Lizard Robot</h1>
         {lobbyReturnUrl && (
           <a className="lobby-link" href={lobbyReturnUrl}>
             ← Back to Lobby
@@ -291,7 +293,7 @@ function Lobby({
           Match name
           <input value={matchName} onChange={(e) => setMatchName(e.target.value)} />
         </label>
-        <p className="rule-note">First to 3 round wins · Lizard &amp; Spock start on cooldown</p>
+        <p className="rule-note">First to 3 round wins · Lizard &amp; Robot start on cooldown</p>
         <button disabled={busy} onClick={() => onCreate(matchName, hostName)}>
           Create match
         </button>
@@ -346,29 +348,42 @@ function Board({
   const opponentLockedIn = submitted.some((id) => id !== myPlayerId);
   const myDelays = seats.find((s) => s.seatKey === mySeatKey)?.delays ?? {};
   const oppDelays = seats.find((s) => s.seatKey !== mySeatKey)?.delays ?? {};
+  const lobbyReturnUrl =
+    match.lobbyReturnUrl != null
+      ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
+      : null;
 
   return (
     <div className="board">
-      <div className="match-head">
-        <div>
-          <h2>{match.name}</h2>
-          <p>
-            Room code: <code className="room-code">{match.code}</code> · {match.gameMode} · First to{' '}
-            {winsNeeded(match.bestOf)} wins
-          </p>
-        </div>
+      <div className={`match-head${match.externalMatchId ? ' match-head--lobby' : ''}`}>
+        {!match.externalMatchId && (
+          <div>
+            <h2>{match.name}</h2>
+            <p className="match-meta">
+              Room code: <code className="room-code">{match.code}</code>
+            </p>
+          </div>
+        )}
         <span className={`live ${connected ? 'on' : 'off'}`} title="WebSocket connection">
           {connected ? '● live' : '○ connecting'}
         </span>
       </div>
 
-      <Scoreboard seats={seats} mySeatKey={mySeatKey} bestOf={match.bestOf} />
+      <Scoreboard
+        seats={seats}
+        mySeatKey={mySeatKey}
+        submittedPlayerIds={submitted}
+        bestOf={match.bestOf}
+      />
 
       {!allSeated && !finished && <p className="hint">Waiting for all seats to be filled…</p>}
 
       {finished ? (
-        <div className={`result-banner ${iWon ? 'win' : 'loss'}`}>
-          {iWon ? '🏆 You win the match!' : 'You lost the match.'}
+        <div className="match-results">
+          <div className={`result-banner ${iWon ? 'win' : 'loss'}`}>
+            {iWon ? '🏆 You win the match!' : 'You lost the match.'}
+          </div>
+          {lobbyReturnUrl && <LobbyReturnButton href={lobbyReturnUrl} />}
         </div>
       ) : (
         <div className="moves">
@@ -376,18 +391,21 @@ function Board({
           {!youMovedThisRound && opponentLockedIn && (
             <p className="hint opponent-ready">Opponent has locked in — pick your move!</p>
           )}
-          <MoveCircle
-            myDelays={myDelays}
-            oppDelays={oppDelays}
-            myChosenMove={myChosenMove}
-            lockedIn={youMovedThisRound}
-            disabled={!connected || !allSeated || youMovedThisRound}
-            onPlay={onPlay}
-          />
+          <div className="move-circle-wrap">
+            <MoveCircle
+              myDelays={myDelays}
+              oppDelays={oppDelays}
+              myChosenMove={myChosenMove}
+              lockedIn={youMovedThisRound}
+              disabled={!connected || !allSeated || youMovedThisRound}
+              onPlay={onPlay}
+            />
+          </div>
           <p className="dot-legend">
-            <span className="legend-ring opp" aria-hidden="true" />
-            opponent can pick · <span className="dot opp">●</span> opponent can't use ·{' '}
-            <span className="dot mine">●</span> you can't use
+            <span className="legend-ring mine" aria-hidden="true" />
+            you can play · <span className="legend-ring opp" aria-hidden="true" />
+            opponent can play · <span className="dot mine">●</span> your cooldown ·{' '}
+            <span className="dot opp">●</span> opponent cooldown
           </p>
           {youMovedThisRound && myChosenMove && (
             <p className="choice-locked" role="status">
@@ -403,23 +421,39 @@ function Board({
 
       {error && <p className="error">{error}</p>}
 
-      <History results={results} mySeatKey={mySeatKey} />
+      <History
+        results={results}
+        mySeatKey={mySeatKey}
+        lobbyReturnUrl={finished ? lobbyReturnUrl : null}
+      />
     </div>
   );
 }
 
+function LobbyReturnButton({ href }: { href: string }) {
+  return (
+    <a className="lobby-return-btn" href={href}>
+      ← Back to Lobby
+    </a>
+  );
+}
+
 // Pentagon layout where each move beats the next two clockwise, so the "beats"
-// arrows form the classic RPSLS pentagon + pentagram.
-const CIRCLE_ORDER: Move[] = ['rock', 'scissors', 'lizard', 'paper', 'spock'];
-const CIRCLE_SIZE = 320;
-const CIRCLE_R = 108;
-const ARROW_INSET = 50; // pull arrow endpoints off the buttons
+// arrows form the classic RPSLR pentagon + pentagram.
+const CIRCLE_ORDER: Move[] = ['rock', 'scissors', 'lizard', 'paper', 'robot'];
+const CIRCLE_SIZE = 380;
+const CIRCLE_R = 128;
+const ARROW_INSET = 58; // pull arrow endpoints off the buttons
+// One vertex sits at the top, so the pentagon's bounding box is taller below center
+// than above; nudge the layout center down so the shape reads centered in the square.
+const CIRCLE_CENTER_Y = CIRCLE_SIZE / 2 + 12;
 
 function circleNodePos(i: number) {
   const angle = (-90 + i * 72) * (Math.PI / 180); // start at top, go clockwise
+  const cx = CIRCLE_SIZE / 2;
   return {
-    x: CIRCLE_SIZE / 2 + CIRCLE_R * Math.cos(angle),
-    y: CIRCLE_SIZE / 2 + CIRCLE_R * Math.sin(angle),
+    x: cx + CIRCLE_R * Math.cos(angle),
+    y: CIRCLE_CENTER_Y + CIRCLE_R * Math.sin(angle),
   };
 }
 
@@ -500,11 +534,22 @@ function MoveCircle({
         const onCooldown = myDelay > 0;
         const selected = myChosenMove === m;
         const dimmed = lockedIn && !selected;
+        const myAllowed = !lockedIn && myDelay === 0;
         const oppAllowed = !lockedIn && oppDelay === 0;
         return (
           <button
             key={m}
-            className={`move-btn circle ${onCooldown ? 'cooldown' : ''} ${selected ? 'selected' : ''} ${dimmed ? 'dimmed' : ''} ${oppAllowed ? 'opp-allowed' : ''}`}
+            className={[
+              'move-btn',
+              'circle',
+              onCooldown ? 'cooldown' : '',
+              myAllowed ? 'my-allowed' : '',
+              oppAllowed ? 'opp-allowed' : '',
+              selected ? 'selected' : '',
+              dimmed ? 'dimmed' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             style={{ left: pos.x, top: pos.y }}
             disabled={disabled || onCooldown}
             onClick={() => onPlay(m)}
@@ -536,7 +581,17 @@ function MoveCircle({
   );
 }
 
-function Scoreboard({ seats, mySeatKey, bestOf }: { seats: Seat[]; mySeatKey: string; bestOf: number }) {
+function Scoreboard({
+  seats,
+  mySeatKey,
+  submittedPlayerIds,
+  bestOf,
+}: {
+  seats: Seat[];
+  mySeatKey: string;
+  submittedPlayerIds: string[];
+  bestOf: number;
+}) {
   const needed = winsNeeded(bestOf);
   return (
     <div className="scoreboard">
@@ -547,6 +602,7 @@ function Scoreboard({ seats, mySeatKey, bestOf }: { seats: Seat[]; mySeatKey: st
           mine={seat.seatKey === mySeatKey}
           winsNeeded={needed}
           showVs={i < seats.length - 1}
+          lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
         />
       ))}
     </div>
@@ -573,34 +629,68 @@ function SeatCard({
   mine,
   winsNeeded: needed,
   showVs,
+  lockedIn,
 }: {
   seat: Seat;
   mine: boolean;
   winsNeeded: number;
   showVs: boolean;
+  lockedIn: boolean;
 }) {
+  const profile = seatProfile(seat);
+  const seated = Boolean(seat.player);
+  const reserved = Boolean(seat.reservedForLobbyUser);
+  const waiting = !seated && reserved;
+  const open = !seated && !reserved;
   const wins = seat.player?.score ?? 0;
+  const name = seated
+    ? seat.player!.name
+    : waiting
+      ? seatDisplayName(seat, 'Opponent')
+      : 'Open seat';
+
   return (
     <>
-      <div className={`player ${mine ? 'you' : ''} ${seat.player ? '' : 'waiting'}`}>
+      <div
+        className={[
+          'player',
+          mine ? 'you' : '',
+          open ? 'waiting' : '',
+          waiting ? 'player--reserved' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <PlayerAvatar
+          profile={profile}
+          displayName={name}
+          highlight={mine}
+          dimmed={waiting}
+          ready={lockedIn}
+        />
         <span className="player-label">
-          {mine ? 'You' : seat.role ?? seat.seatKey}
+          {mine ? 'You' : seat.role ?? 'Opponent'}
           {seat.teamKey ? ` · ${seat.teamKey}` : ''}
         </span>
-        <span className="player-name">{seat.player ? seat.player.name : 'Open seat'}</span>
-        {seat.player ? (
-          <WinProgress wins={wins} needed={needed} />
-        ) : (
-          <WinProgress wins={0} needed={needed} />
-        )}
+        <span className="player-name">{name}</span>
+        {waiting && <span className="player-status">Joining…</span>}
+        <WinProgress wins={wins} needed={needed} />
       </div>
       {showVs && <span className="vs">vs</span>}
     </>
   );
 }
 
-export function History({ results, mySeatKey }: { results: MatchState['results']; mySeatKey: string }) {
-  if (results.length === 0) return null;
+export function History({
+  results,
+  mySeatKey,
+  lobbyReturnUrl,
+}: {
+  results: MatchState['results'];
+  mySeatKey: string;
+  lobbyReturnUrl?: string | null;
+}) {
+  if (results.length === 0) return lobbyReturnUrl ? <LobbyReturnFooter href={lobbyReturnUrl} /> : null;
   return (
     <div className="history">
       <h3>Round history</h3>
@@ -617,6 +707,15 @@ export function History({ results, mySeatKey }: { results: MatchState['results']
           );
         })}
       </ul>
+      {lobbyReturnUrl && <LobbyReturnFooter href={lobbyReturnUrl} />}
+    </div>
+  );
+}
+
+function LobbyReturnFooter({ href }: { href: string }) {
+  return (
+    <div className="history-lobby-return">
+      <LobbyReturnButton href={href} />
     </div>
   );
 }

@@ -15,8 +15,7 @@ bodies, see [`playhub-integration.md`](./playhub-integration.md). This doc is th
 1. **Discovery** (REST): Lobby reads the game's seat manifest.
 2. **Provision / push** (REST, server-to-server): Lobby creates the match on the
    game *before* any player arrives. The game can reject the roster here.
-3. **Link-out** (browser): Lobby sends each player to the game URL with a signed
-   JWT proving who they are.
+3. **Link-out** (browser): Lobby sends each player to a game-minted URL with JWT attached.
 4. **Claim + play** (browser → WebSocket): the player claims their reserved seat
    with the token, then plays over a WebSocket.
 
@@ -139,10 +138,10 @@ and a `playUrl` (browser) for each game in your catalog.
 | Step | Call | Notes |
 |------|------|-------|
 | Health | `GET {apiBaseUrl}/healthz` → `ok` | gate listing on this |
-| Status | `GET {apiBaseUrl}/api/v1/status` → `{game,version,appEnv,standalone}` | version/capability gating |
+| Status | `GET {apiBaseUrl}/api/v1/status` → `{game,version,appEnv,standalone,launchUrlsOnProvision?}` | `launchUrlsOnProvision: true` when game mints URLs |
 | Modes | `GET {apiBaseUrl}/api/v1/game-modes` | seat/team/role manifest |
-| Provision | `POST {apiBaseUrl}/api/v1/matches` body `{lobbyId,assignment:{externalMatchId,gameMode,seats[]}}` | S2S; idempotent on `externalMatchId` |
-| Link | redirect to `{playUrl}?match=<externalMatchId>&token=<jwt>` | optional `&seat=`, `&lobby_user=` |
+| Provision | `POST {apiBaseUrl}/api/v1/matches` body `{lobbyId,assignment:{…}}` | S2S; idempotent. **Response:** `{ launchUrls?: { [lobbyUserId]: string }, … }` |
+| Link | game URL base from provision + Lobby attaches `token=<jwt>` | this game: query-style `/?match=&seat=` |
 | Claim | `POST {apiBaseUrl}/api/v1/matches/{externalMatchId}/claim` + `Authorization: Bearer <jwt>` | game uses the token's `seatKey` |
 | Play | WebSocket `GET /api/v1/ws` (or REST `POST /matches/:ref/move`) | game-internal transport |
 
@@ -256,7 +255,6 @@ capability negotiation later without breaking older games.
    re-matchmaking (don't surface it to the user).
 4. Expose `/.well-known/jwks.json`; mint a per-user seat JWT (`sub`, `matchId`,
    `seatKey`, `name`).
-5. Redirect each user to `{playUrl}?match=<externalMatchId>&token=<jwt>`.
-6. Add the **Play** button that performs steps 3–5.
-7. Before production: authenticate the push, and confirm the game's WS fan-out is
-   fleet-safe.
+5. Read `launchUrls` from provision response; attach JWT to each base URL (catalog fallback if omitted).
+6. Add the **Play** button / intent banner that opens the final link.
+7. Before production: authenticate the push, confirm WS fan-out is fleet-safe, set `GAME_PLAY_URL` to match catalog `playUrl`.

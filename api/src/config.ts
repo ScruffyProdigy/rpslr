@@ -14,6 +14,8 @@ export interface AppConfig {
    * GAME_API_BASE_URL. Empty skips audience checks (tests only).
    */
   tokenAudiences: string[];
+  /** Browser play URL for launch link minting (GAME_PLAY_URL). */
+  playUrl: string;
 }
 
 function splitList(raw: string | undefined): string[] {
@@ -76,6 +78,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   // Always allow this deployment's public API origin (browser UI on the same host).
   // Lobby catalog never lists CORS — each game derives self from GAME_API_AUDIENCE.
   const corsAllowedOrigins = uniqueOrigins([...explicitCors, ...tokenAudiences]);
+  const playUrl =
+    (env.GAME_PLAY_URL ?? '').trim() ||
+    (tokenAudiences[0] ?? '').trim() ||
+    'http://localhost:5174';
 
   return {
     appEnv: env.GAME_APP_ENV ?? 'local',
@@ -85,8 +91,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     requireLobbyAuth: (env.REQUIRE_LOBBY_AUTH ?? 'false') === 'true',
     bannedLobbyUsers: splitList(env.BANNED_LOBBY_USERS),
     tokenAudiences,
+    playUrl,
   };
 }
 
-export const GAME_NAME = 'rock-paper-scissors-lizard-spock';
+export const GAME_NAME = 'rock-paper-scissors-lizard-robot';
 export const GAME_VERSION = '0.2.0';

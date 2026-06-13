@@ -1,0 +1,1 @@
+-- One-way rename (robot). Down migration does not restore legacy move slugs.

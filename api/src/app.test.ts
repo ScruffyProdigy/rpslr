@@ -44,15 +44,16 @@ describe('platform routes', () => {
 
   it('GET /api/v1/status returns metadata', async () => {
     const res = await request(buildApp()).get('/api/v1/status');
-    expect(res.body.game).toBe('rock-paper-scissors-lizard-spock');
+    expect(res.body.game).toBe('rock-paper-scissors-lizard-robot');
     expect(res.body.version).toBe('0.2.0');
     expect(res.body.standalone).toBe(true);
+    expect(res.body.launchUrlsOnProvision).toBe(true);
   });
 
   it('GET /api/v1/game-modes publishes a Lobby-compatible manifest', async () => {
     const res = await request(buildApp()).get('/api/v1/game-modes');
     expect(res.status).toBe(200);
-    expect(res.body.game).toBe('rock-paper-scissors-lizard-spock');
+    expect(res.body.game).toBe('rock-paper-scissors-lizard-robot');
     const duel = res.body.modes.find((m: { key: string }) => m.key === 'duel');
     expect(duel).toMatchObject({
       displayName: '1v1 Duel',
@@ -117,18 +118,48 @@ describe('Lobby push + signed-token claim (option 2)', () => {
     },
   };
 
-  it('rejects provision with serviceToken but no matching Authorization', async () => {
+  it('rejects provision with no Authorization header when serviceToken is configured', async () => {
     const app = buildApp();
-    const res = await request(app).post('/api/v1/matches').send({
+    const body = {
       lobbyId: 'https://joinquest.cc',
       lobby: LOBBY_ENDPOINTS,
       assignment: {
-        externalMatchId: 'auth-test',
+        externalMatchId: 'missing-auth-test',
         gameMode: 'duel',
         seats: [{ seatKey: '1', lobbyUserId: 'u1' }],
       },
-    });
-    expect(res.status).toBe(401);
+    };
+    const noHeader = await request(app).post('/api/v1/matches').send(body);
+    expect(noHeader.status).toBe(401);
+
+    const wrongHeader = await request(app)
+      .post('/api/v1/matches')
+      .set('Authorization', 'Bearer wrong-token')
+      .send(body);
+    expect(wrongHeader.status).toBe(401);
+  });
+
+  it('accepts idempotent re-provision for the same externalMatchId', async () => {
+    const app = buildApp();
+    const body = {
+      lobbyId: 'https://joinquest.cc',
+      lobby: LOBBY_ENDPOINTS,
+      assignment: {
+        externalMatchId: 'idempotent-test',
+        gameMode: 'duel',
+        seats: [
+          { seatKey: '1', lobbyUserId: '11111111-1111-4111-8111-111111111111' },
+          { seatKey: '2', lobbyUserId: '22222222-2222-4222-8222-222222222222' },
+        ],
+      },
+    };
+    const first = await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(body);
+    expect(first.status).toBe(201);
+
+    const second = await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(body);
+    expect(second.status).toBe(201);
+    expect(second.body.match.externalMatchId).toBe('idempotent-test');
+    expect(second.body.launchUrls['11111111-1111-4111-8111-111111111111']).toContain('seat=1');
   });
 
   it('accepts Lobby provision envelope without bestOf or seat displayName', async () => {
@@ -150,6 +181,8 @@ describe('Lobby push + signed-token claim (option 2)', () => {
       });
     expect(res.status).toBe(201);
     expect(res.body.match.externalMatchId).toBe('f47ac10b-58cc-4372-a567-0e02b2c3d479');
+    expect(res.body.launchUrls['11111111-1111-4111-8111-111111111111']).toContain('match=f47ac10b-58cc-4372-a567-0e02b2c3d479');
+    expect(res.body.launchUrls['22222222-2222-4222-8222-222222222222']).toContain('seat=2');
     expect(res.body.match.bestOf).toBe(5);
     expect(res.body.match.lobbyId).toBe('https://joinquest.cc');
     expect(res.body.match.lobbyReturnUrl).toBe('https://joinquest.cc');
@@ -237,6 +270,70 @@ describe('Lobby push + signed-token claim (option 2)', () => {
       .set('Authorization', 'Bearer tok-alice')
       .send({});
     expect(res.status).toBe(404);
+  });
+
+  it('returns 404 when claim URL does not match the token matchId', async () => {
+    const verifier = fakeVerifier({
+      'tok-alice': {
+        lobbyIssuer: 'https://joinquest.cc',
+        lobbyUserId: 'u_alice',
+        externalMatchId: 'lobby-xyz',
+        seatKey: '1',
+        displayName: 'Alice',
+      },
+    });
+    const app = buildApp({}, verifier);
+    await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+
+    const res = await request(app)
+      .post('/api/v1/matches/lobby-check-missing-other-id/claim')
+      .set('Authorization', 'Bearer tok-alice')
+      .send({});
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects claim when token seatKey does not match the reserved seat', async () => {
+    const verifier = fakeVerifier({
+      'tok-wrong-seat': {
+        lobbyIssuer: 'https://joinquest.cc',
+        lobbyUserId: 'u_alice',
+        externalMatchId: 'lobby-xyz',
+        seatKey: '2',
+        displayName: 'Alice',
+      },
+    });
+    const app = buildApp({}, verifier);
+    await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+
+    const res = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer tok-wrong-seat')
+      .send({});
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/reserved/);
+  });
+
+  it('rejects malformed and expired lobby tokens', async () => {
+    const verifier: TokenVerifier = {
+      async verify(token: string) {
+        if (token === 'tok-expired') throw new TokenError('token expired');
+        throw new TokenError('invalid lobby token');
+      },
+    };
+    const app = buildApp({}, verifier);
+    await request(app).post('/api/v1/matches').set(lobbyProvisionAuth()).send(push);
+
+    const expired = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer tok-expired')
+      .send({});
+    expect(expired.status).toBe(401);
+
+    const invalid = await request(app)
+      .post('/api/v1/matches/lobby-xyz/claim')
+      .set('Authorization', 'Bearer not-a-jwt')
+      .send({});
+    expect(invalid.status).toBe(401);
   });
 
   it('requires a token when REQUIRE_LOBBY_AUTH=true', async () => {

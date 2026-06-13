@@ -1,22 +1,22 @@
 /**
- * Pure Rock-Paper-Scissors-Lizard-Spock logic plus the "delay mark" cooldown
+ * Pure Rock-Paper-Scissors-Lizard-Robot logic plus the "delay mark" cooldown
  * system. No I/O here so it is trivially testable.
  *
  * Cooldowns: a player may only choose a move with 0 delay marks. After each
  * choice, every move loses one mark (floored at 0) and the chosen move gains 2.
- * The match opens with lizard at 1 mark and spock at 2 (rock/paper/scissors 0).
+ * The match opens with lizard at 1 mark and robot at 2 (rock/paper/scissors 0).
  */
 
-export const MOVES = ['rock', 'paper', 'scissors', 'lizard', 'spock'] as const;
+export const MOVES = ['rock', 'paper', 'scissors', 'lizard', 'robot'] as const;
 export type Move = (typeof MOVES)[number];
 
-/** What each move beats (RPSLS — every move beats exactly two others). */
+/** What each move beats (RPSLR — every move beats exactly two others). */
 const BEATS: Record<Move, Move[]> = {
   rock: ['scissors', 'lizard'],
-  paper: ['rock', 'spock'],
+  paper: ['rock', 'robot'],
   scissors: ['paper', 'lizard'],
-  lizard: ['spock', 'paper'],
-  spock: ['scissors', 'rock'],
+  lizard: ['robot', 'paper'],
+  robot: ['scissors', 'rock'],
 };
 
 /** Delay marks each move starts the match with. */
@@ -25,7 +25,7 @@ export const INITIAL_DELAYS: Record<Move, number> = {
   paper: 0,
   scissors: 0,
   lizard: 1,
-  spock: 2,
+  robot: 2,
 };
 
 /** How many delay marks the move you choose gains. */

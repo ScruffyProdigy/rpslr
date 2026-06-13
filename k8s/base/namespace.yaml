@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: rps-game
+  name: rpsls-duel
   labels:
     app.kubernetes.io/part-of: playhub-demo-game
     playhub.io/game: rock-paper-scissors

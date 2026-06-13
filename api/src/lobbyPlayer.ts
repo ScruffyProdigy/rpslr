@@ -14,16 +14,8 @@ export {
   profileDisplayName,
 } from './lobbyProfile.js';
 
-function profileNeedsGraphqlFallback(
-  profile: LobbyPlayerProfile | undefined,
-  claims: AssignmentClaims,
-): boolean {
-  if (claims.displayName?.trim()) return !profile?.avatarUrl && !profile?.color;
-  return !profileDisplayName(profile);
-}
-
 /**
- * Resolve profile for a Lobby claim: provision → JWT name overlay → Lobby GraphQL.
+ * Resolve profile for a Lobby claim: stored provision data → JWT name overlay → Lobby GraphQL `player(id)`.
  */
 export async function resolveLobbyPlayerProfile(opts: {
   stored?: LobbyPlayerProfile;
@@ -37,11 +29,7 @@ export async function resolveLobbyPlayerProfile(opts: {
     profile = mergeLobbyPlayerProfiles(profile, { displayName: opts.claims.displayName.trim() });
   }
 
-  if (
-    opts.graphqlUrl &&
-    opts.serviceToken &&
-    profileNeedsGraphqlFallback(profile, opts.claims)
-  ) {
+  if (opts.graphqlUrl && opts.serviceToken) {
     const fetched = await fetchLobbyPlayerProfile(
       opts.graphqlUrl,
       opts.claims.lobbyUserId,
@@ -51,6 +39,22 @@ export async function resolveLobbyPlayerProfile(opts: {
   }
 
   return profile;
+}
+
+/** Hydrate lobbyUserId → profile from Lobby GraphQL for every player in the match. */
+export async function fetchLobbyProfilesForUserIds(
+  graphqlUrl: string,
+  serviceToken: string,
+  lobbyUserIds: string[],
+): Promise<Record<string, LobbyPlayerProfile>> {
+  const unique = [...new Set(lobbyUserIds.filter(Boolean))];
+  const entries = await Promise.all(
+    unique.map(async (lobbyUserId) => {
+      const profile = await fetchLobbyPlayerProfile(graphqlUrl, lobbyUserId, serviceToken);
+      return profile ? ([lobbyUserId, profile] as const) : null;
+    }),
+  );
+  return Object.fromEntries(entries.filter((entry): entry is [string, LobbyPlayerProfile] => entry != null));
 }
 
 export function claimSeatName(

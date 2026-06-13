@@ -6,7 +6,9 @@
   --text: #e6e8ee;
   --muted: #9aa1b1;
   --danger: #f87171;
-  --opp-accent: #4ea1ff;
+  --player: var(--accent);
+  --opponent: var(--danger);
+  --opp-accent: var(--danger);
   color-scheme: dark;
 }
 
@@ -147,8 +149,16 @@ button.ghost {
   justify-content: space-between;
   align-items: flex-start;
 }
+.match-head--lobby {
+  justify-content: flex-end;
+}
 .match-head h2 {
   margin: 0;
+}
+.match-meta {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 .room-code {
   color: var(--accent-2);
@@ -172,37 +182,109 @@ button.ghost {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 24px;
   margin: 20px 0;
 }
 .player {
   background: #11131b;
   border: 1px solid #262a38;
-  border-radius: 12px;
-  padding: 12px 18px;
+  border-radius: 16px;
+  padding: 18px 22px;
   text-align: center;
-  min-width: 130px;
+  min-width: 168px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+}
+.player.you {
+  border-color: color-mix(in srgb, var(--accent) 55%, #262a38);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .player.waiting {
   color: var(--muted);
-  font-size: 0.85rem;
+}
+.player--reserved {
+  opacity: 0.92;
 }
 .player-label {
   font-size: 0.7rem;
   text-transform: uppercase;
   color: var(--muted);
+  letter-spacing: 0.04em;
 }
 .player-name {
   font-weight: 600;
+  font-size: 1rem;
 }
+.player-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: -2px;
+}
+
+.player-avatar {
+  position: relative;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(145deg, #1a1d28, #0d0f14);
+  border: 3px solid #3a4054;
+  box-sizing: border-box;
+}
+.player-avatar--lg {
+  width: 96px;
+  height: 96px;
+}
+.player-avatar--md {
+  width: 64px;
+  height: 64px;
+}
+.player-avatar--you {
+  border-color: var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.player-avatar--dimmed {
+  opacity: 0.55;
+  filter: grayscale(0.25);
+}
+.player-avatar--ready {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-2) 40%, transparent);
+}
+.player-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.player-avatar__initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.player-avatar--ready .player-avatar__ready-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  border: 2px solid #11131b;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+
 .win-pips {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 .win-pip {
   width: 1.15rem;
@@ -230,10 +312,10 @@ button.ghost {
 
 .moves {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  width: 100%;
+  gap: 12px;
 }
 .round-label {
   width: 100%;
@@ -259,8 +341,7 @@ button.ghost {
   border-color: var(--accent);
 }
 .move-btn.cooldown {
-  opacity: 0.45;
-  border-style: dashed;
+  opacity: 0.55;
 }
 .delay-badge {
   font-size: 0.8rem;
@@ -269,16 +350,23 @@ button.ghost {
   line-height: 0.95rem;
 }
 .delay-badge.mine {
-  color: var(--danger);
+  color: var(--player);
 }
 .delay-badge.opp {
-  color: var(--opp-accent);
+  color: var(--opponent);
 }
 
 /* Pentagon "which beats which" layout */
+.move-circle-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow-x: clip;
+}
 .move-circle {
   position: relative;
-  margin: 14px auto 6px;
+  flex-shrink: 0;
+  margin: 14px 0 6px;
 }
 .move-arrows {
   position: absolute;
@@ -289,58 +377,74 @@ button.ghost {
 .move-btn.circle {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 88px;
-  height: 88px;
+  width: 104px;
+  height: 104px;
   min-width: 0;
-  padding: 6px;
-  gap: 1px;
+  padding: 8px;
+  gap: 2px;
   border-radius: 50%;
   background: #161922;
+  border: 2px solid #303544;
+  box-shadow: none;
   z-index: 1;
   /* anchor the ✓ badge */
   overflow: visible;
 }
 .move-btn.circle .emoji {
-  font-size: 1.55rem;
+  font-size: 2rem;
   line-height: 1;
 }
 .move-btn .move-name {
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-weight: 600;
 }
-.move-btn.circle:hover:not(:disabled) {
+.move-btn.circle:hover:not(:disabled):not(.dimmed) {
   transform: translate(-50%, -50%) scale(1.06);
-  border-color: var(--accent);
+}
+.move-btn.circle.my-allowed:not(.selected):not(.dimmed):hover:not(:disabled) {
+  border-color: var(--player);
 }
 .move-btn.circle.selected {
-  border-color: var(--danger);
-  border-width: 2px;
-  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.35);
+  border: 2px solid var(--player);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 40%, transparent);
   opacity: 1;
 }
 .move-btn.circle.dimmed {
   opacity: 0.28;
   border-style: dashed;
+  box-shadow: none;
 }
-/* While you are choosing, outline moves the opponent is allowed to play this round */
+/* Blue = you can play; red = opponent can play; nested when both can. */
+.move-btn.circle.my-allowed:not(.selected):not(.dimmed) {
+  border-color: var(--player);
+}
 .move-btn.circle.opp-allowed:not(.selected):not(.dimmed) {
-  border-color: var(--opp-accent);
-  box-shadow: 0 0 0 2px rgba(78, 161, 255, 0.4);
+  box-shadow: 0 0 0 2px var(--opponent);
 }
-.move-btn.circle.opp-allowed:not(.selected):not(.dimmed):hover:not(:disabled) {
-  border-color: var(--opp-accent);
-  box-shadow: 0 0 0 3px rgba(78, 161, 255, 0.5);
+.move-btn.circle.my-allowed.opp-allowed:not(.selected):not(.dimmed) {
+  border-color: var(--player);
+  box-shadow:
+    0 0 0 2px var(--player),
+    0 0 0 5px var(--opponent);
+}
+.move-btn.circle.cooldown.opp-allowed:not(.my-allowed):not(.selected):not(.dimmed) {
+  border: 2px solid #303544;
+  box-shadow: 0 0 0 2px var(--opponent);
+}
+.move-btn.circle.cooldown:not(.opp-allowed):not(.selected) {
+  border: 2px dashed var(--player);
+  box-shadow: none;
 }
 .move-circle--locked .move-arrows {
   opacity: 0.35;
 }
 .move-btn .choice-check {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  font-size: 0.75rem;
+  top: 4px;
+  right: 6px;
+  font-size: 0.85rem;
   font-weight: 800;
-  color: var(--danger);
+  color: var(--player);
   line-height: 1;
 }
 .choice-locked {
@@ -356,7 +460,7 @@ button.ghost {
 }
 .choice-locked__pick {
   font-weight: 700;
-  color: var(--danger);
+  color: var(--player);
 }
 .dot-legend {
   width: 100%;
@@ -372,20 +476,25 @@ button.ghost {
   display: inline-block;
   width: 0.65rem;
   height: 0.65rem;
-  border: 2px solid var(--opp-accent);
   border-radius: 50%;
   vertical-align: middle;
   margin-right: 2px;
-  box-shadow: 0 0 0 1px rgba(78, 161, 255, 0.35);
+  box-sizing: border-box;
+}
+.dot-legend .legend-ring.mine {
+  border: 2px solid var(--player);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--player) 35%, transparent);
 }
 .dot-legend .legend-ring.opp {
+  border: 2px solid var(--opponent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--opponent) 35%, transparent);
   margin-left: 0;
 }
 .dot-legend .dot.mine {
-  color: var(--danger);
+  color: var(--player);
 }
 .dot-legend .dot.opp {
-  color: var(--opp-accent);
+  color: var(--opponent);
 }
 .rule-note {
   margin: 0;
@@ -400,7 +509,7 @@ button.ghost {
   font-size: 0.85rem;
 }
 .hint.opponent-ready {
-  color: var(--opp-accent);
+  color: var(--opponent);
   font-weight: 600;
 }
 
@@ -411,6 +520,34 @@ button.ghost {
   padding: 18px;
   border-radius: 12px;
   margin: 12px 0;
+}
+.match-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0;
+}
+.match-results .result-banner {
+  width: 100%;
+  margin: 0;
+}
+.lobby-return-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 9px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  background: var(--accent);
+  color: white;
+  transition: transform 0.05s ease, opacity 0.15s ease;
+}
+.lobby-return-btn:hover {
+  transform: translateY(-1px);
+  color: white;
 }
 .result-banner.win {
   background: #0f2e22;
@@ -454,6 +591,13 @@ button.ghost {
   color: var(--muted);
 }
 
+.history-lobby-return {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
 .error {
   color: var(--danger);
   font-size: 0.9rem;
@@ -473,10 +617,28 @@ button.ghost {
   .grid {
     grid-template-columns: 1fr;
   }
-  /* The pentagon uses fixed 320px coords; scale the whole thing on narrow screens. */
-  .move-circle {
-    transform: scale(0.82);
-    transform-origin: top center;
-    margin-bottom: -42px;
+  .board {
+    padding-inline: 12px;
+    overflow-x: clip;
+  }
+  .scoreboard {
+    gap: 10px;
+  }
+  .player {
+    min-width: 0;
+    flex: 1 1 120px;
+    max-width: 148px;
+    padding: 12px 8px;
+  }
+  /* Scale down on narrow screens; wrapper flex-centers the 380px box so
+     transform-origin: center top keeps the visual horizontally centered. */
+  .move-circle-wrap {
+    height: calc(380px * 0.88);
+    margin-bottom: -28px;
+  }
+  .move-circle-wrap .move-circle {
+    transform: scale(0.88);
+    transform-origin: center top;
+    margin: 0;
   }
 }

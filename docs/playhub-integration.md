@@ -51,7 +51,7 @@ The game publishes its modes so Lobby knows what to assign:
 
 ```
 GET /api/v1/game-modes
-{ "game": "rock-paper-scissors-lizard-spock", "modes": [
+{ "game": "rock-paper-scissors-lizard-robot", "modes": [
   { "key": "duel", "displayName": "1v1 Duel",
     "minPlayers": 2, "maxPlayers": 2,
     "seats": [ { "key": "a" }, { "key": "b" } ] }
@@ -89,9 +89,9 @@ nothing to Lobby):
 ```sql
 INSERT INTO games (slug, name, description, play_url, status)
 VALUES (
-  'rock-paper-scissors-lizard-spock',
-  'Rock Paper Scissors Lizard Spock',
-  'A best-3-of-5 RPSLS match with a move-cooldown twist. Demo third-party game.',
+  'rock-paper-scissors-lizard-robot',
+  'Rock Paper Scissors Lizard Robot',
+  'A best-3-of-5 RPSLR match with a move-cooldown twist. Demo third-party game.',
   'http://localhost:5174',          -- production: https://rpsls-duel.win
   'active'
 );
@@ -102,7 +102,7 @@ Production catalog row (same slug):
 ```sql
 -- play_url = player browser; api_base_url = server-to-server push + JWT aud
 UPDATE games SET play_url = 'https://rpsls-duel.win', api_base_url = 'https://rpsls-duel.win'
-WHERE slug = 'rock-paper-scissors-lizard-spock';
+WHERE slug = 'rock-paper-scissors-lizard-robot';
 ```
 
 If your Lobby schema uses separate columns, set:
@@ -150,6 +150,21 @@ Omit `lobby.serviceToken` when Lobby has no `LOBBY_GAME_TOKEN_PEPPER` (typical l
 
 - **Idempotent** on `externalMatchId` (safe to retry).
 - The game reserves each seat for the assigned `lobbyUserId`.
+- **Response includes `launchUrls`** — map of `lobbyUserId` → browser URL base (no JWT). Lobby attaches the seat token. Example:
+
+```json
+{
+  "match": { "externalMatchId": "f47ac10b-…", "…": "…" },
+  "seats": [ "…" ],
+  "launchUrls": {
+    "11111111-1111-4111-8111-111111111111": "https://rpsls-duel.win/?match=f47ac10b-…&seat=1",
+    "22222222-2222-4222-8222-222222222222": "https://rpsls-duel.win/?match=f47ac10b-…&seat=2"
+  }
+}
+```
+
+Set **`GAME_PLAY_URL`** on the game API to the same origin as catalog `playUrl` (`http://localhost:5174` locally, `https://rpsls-duel.win` in production). When omitted, defaults to `GAME_API_AUDIENCE` / first token audience.
+
 - **Why push?** It is Lobby's chance to learn the game won't host this roster.
 
 ### The rejection handshake (why option 2)
@@ -170,13 +185,19 @@ table). Lobby owns matchmaking; the game owns *acceptance*.
 
 ## Step 3 — Send each player over with a signed seat token
 
-After a successful push, Lobby links **each** user to the game. Session cookies
-do not cross the `5173 → 5174` origin, so the assignment travels as a query
-param + a **signed JWT** that proves who the user is:
+After a successful push, the game returns **`launchUrls`** (URL bases without JWT). Lobby signs a seat JWT for each player and opens:
 
 ```
-http://localhost:5174/?match=lobby-uuid-123&token=<jwt>
+https://rpsls-duel.win/?match=<externalMatchId>&seat=<seatKey>&token=<jwt>
 ```
+
+Locally:
+
+```
+http://localhost:5174/?match=lobby-uuid-123&seat=1&token=<jwt>
+```
+
+Session cookies do not cross the `5173 → 5174` origin, so identity travels in the JWT query param.
 
 The game client loads `lobby.returnUrl` from the provisioned match (`GET /api/v1/matches/:match`)
 for "Back to Lobby" — no extra query param on the launch URL.
@@ -279,12 +300,11 @@ the same seat model — just with unreserved seats and no token required.
 
 ## What the Lobby maintainer must add to complete the demo loop
 
-1. **Seed a catalog row** for `rock-paper-scissors-lizard-spock` with `playUrl` =
+1. **Seed a catalog row** for `rock-paper-scissors-lizard-robot` with `playUrl` =
    `https://rpsls-duel.win` for both `playUrl` and `apiBaseUrl` (Step 1).
 2. **At match start, push the roster** to `POST /api/v1/matches` and handle a
    `403` (banned player) by correcting the match (Step 2).
-3. **Link each user** with `?match=<externalMatchId>&token=<signed-jwt>` whose
-   claims include their `seatKey` (Step 3).
+3. **Link each user** using game-minted `launchUrls` + Lobby-attached seat JWT (Step 3).
 4. **Render a Play button** that performs steps 2–3.
 
 With those, a Lobby user clicks **Play** and lands in their assigned seat against

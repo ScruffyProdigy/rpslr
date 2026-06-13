@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS moves (
   match_id   UUID NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
   round      INTEGER NOT NULL,
   player_id  UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-  move       TEXT NOT NULL CHECK (move IN ('rock', 'paper', 'scissors', 'lizard', 'spock')),
+  move       TEXT NOT NULL CHECK (move IN ('rock', 'paper', 'scissors', 'lizard', 'robot')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (match_id, round, player_id)
 );

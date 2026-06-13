@@ -87,7 +87,7 @@ Typical local flow:
 Open the Lobby at `http://localhost:5173`. Once the Lobby maintainer adds the
 catalog row + Play button (see `playhub-integration.md`), clicking **Play**
 pushes the match to the game and opens
-`http://localhost:5174/?match=<id>&token=<jwt>`, seating you in your assigned
+`http://localhost:5174/?match=<id>&seat=<seat>&token=<jwt>` (game-minted base + Lobby JWT), seating you in your assigned
 slot. You can also open the game directly and play standalone with room codes.
 
 If a script reports a port is in use, it prints a clear error and exits — stop

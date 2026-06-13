@@ -40,9 +40,10 @@ export function getWebSocketUrl(env: RuntimeEnv = getEnv()): string {
 }
 
 /**
- * Lobby links out to the game with query params (session cookies do not cross
- * origins). Launch URL from Lobby:
- *   {playUrl}?match=<externalMatchId>&token=<jwt>
+ * Game returns launch URL bases on provision; Lobby attaches the seat JWT:
+ *   {launchUrlBase}&token=<jwt>
+ *
+ * Query-style (RPS): {playUrl}/?match=<externalMatchId>&seat=<seatKey>
  *
  * "Back to Lobby" uses `{lobby.returnUrl}?match={externalMatchId}` from provision.
  * See lobbyReturn.ts for the canonical link builder.

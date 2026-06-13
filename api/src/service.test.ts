@@ -63,10 +63,10 @@ describe('GameService — standalone duel loop', () => {
     await expect(service.submitMove(code, hostId, 'dynamite')).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it('blocks lizard and spock on the opening round (initial cooldown)', async () => {
+  it('blocks lizard and robot on the opening round (initial cooldown)', async () => {
     const { code, hostId } = await setupMatch();
     await expect(service.submitMove(code, hostId, 'lizard')).rejects.toBeInstanceOf(ValidationError);
-    await expect(service.submitMove(code, hostId, 'spock')).rejects.toBeInstanceOf(ValidationError);
+    await expect(service.submitMove(code, hostId, 'robot')).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('blocks re-picking a move that is still on cooldown', async () => {
@@ -82,10 +82,10 @@ describe('GameService — standalone duel loop', () => {
     await service.submitMove(code, hostId, 'rock');
     const state = await service.submitMove(code, challengerId, 'paper');
     const seatA = state.seats.find((s) => s.seatKey === '1');
-    // After choosing rock: rock=2, spock=1 (2->1), lizard=0 (1->1... decrement then nothing)
+    // After choosing rock: rock=2, robot=1 (2->1), lizard=0 (1->1... decrement then nothing)
     expect(seatA?.delays.rock).toBe(2);
     expect(seatA?.delays.lizard).toBe(0);
-    expect(seatA?.delays.spock).toBe(1);
+    expect(seatA?.delays.robot).toBe(1);
   });
 
   it('tracks submissions without leaking opponent moves over the wire', async () => {

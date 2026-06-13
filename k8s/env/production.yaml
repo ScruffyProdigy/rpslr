@@ -13,6 +13,8 @@ data:
   CORS_ALLOWED_ORIGINS: ""
   # Seat JWT `aud` — API origin (scheme + host), not the /api ingress path.
   GAME_API_AUDIENCE: "https://rpsls-duel.win"
+  # Browser origin for launchUrls on provision (must match Lobby catalog playUrl).
+  GAME_PLAY_URL: "https://rpsls-duel.win"
 ---
 apiVersion: v1
 kind: ConfigMap

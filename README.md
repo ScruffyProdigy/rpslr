@@ -1,7 +1,7 @@
-# Rock Paper Scissors Lizard Spock — PlayHub Demo Game
+# Rock Paper Scissors Lizard Robot — PlayHub Demo Game
 
 A minimal but production-shaped **third-party game** for the [PlayHub Lobby](#) platform.
-It is a multi-round **Rock Paper Scissors Lizard Spock** match (with a "delay mark"
+It is a multi-round **Rock Paper Scissors Lizard Robot** match (with a "delay mark"
 cooldown twist) you can play standalone today, and that the Lobby will later link
 to via a `playUrl`.
 
@@ -61,17 +61,17 @@ second tab/incognito window, join with the code, and play. The match runs
 
 ### Game rules
 
-Standard Rock Paper Scissors Lizard Spock, with a **delay mark** (cooldown) twist:
+Standard Rock Paper Scissors Lizard Robot, with a **delay mark** (cooldown) twist:
 
-- **Win graph:** Rock crushes Scissors & Lizard · Paper covers Rock & disproves Spock ·
-  Scissors cuts Paper & decapitates Lizard · Lizard eats Paper & poisons Spock ·
-  Spock smashes Scissors & vaporizes Rock.
-- **Delay marks:** the match opens with **Lizard at 1 mark** and **Spock at 2 marks**
+- **Win graph:** Rock crushes Scissors & Lizard · Paper covers Rock & disproves Robot ·
+  Scissors cuts Paper & decapitates Lizard · Lizard eats Paper & poisons Robot ·
+  Robot smashes Scissors & vaporizes Rock.
+- **Delay marks:** the match opens with **Lizard at 1 mark** and **Robot at 2 marks**
   (Rock/Paper/Scissors at 0). You may **only choose a move with 0 marks**, so the first
   round is Rock/Paper/Scissors only.
 - **After each of your choices** (win, lose, or draw): every move loses one mark
   (floored at 0), then the move you just chose gains **2 marks**. This forces variety —
-  you can't spam the same move, and Lizard/Spock cycle in and out of play.
+  you can't spam the same move, and Lizard/Robot cycle in and out of play.
 - Marks are tracked **per player** and enforced server-side; the UI greys out and
   badges any move that's on cooldown.
 
