@@ -3,18 +3,21 @@
 # deploy-{local,staging,production}.sh. Applies, in order:
 #   namespace -> base manifests -> secrets -> env overlay -> wait for rollout.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/game-k8s.defaults.sh"
 
 ENV_NAME="${1:?usage: _deploy.sh <local|staging|production>}"
-NS="${GAME_NAMESPACE:-rpsls-duel}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
+NS="${GAME_NAMESPACE:-$DEFAULT_NAMESPACE}"
+IMAGE_TAG="${IMAGE_TAG:-$DEFAULT_IMAGE_TAG}"
 K8S="$REPO_ROOT/k8s"
 ENV_FILE="$K8S/env/${ENV_NAME}.yaml"
 SECRETS_FILE="$K8S/secrets/pg-dsn.yaml"
 
 command -v kubectl >/dev/null 2>&1 || die "kubectl not found."
 [ -f "$ENV_FILE" ] || die "Missing env overlay: $ENV_FILE"
+assert_safe_image_tag "$IMAGE_TAG"
 
-log "Deploying game to '${ENV_NAME}' (namespace ${NS})..."
+log "Deploying ${GAME_ID} to '${ENV_NAME}' (namespace ${NS}, tag ${IMAGE_TAG})..."
 
 # 1. Namespace
 log "Applying namespace..."
@@ -52,9 +55,11 @@ if [ -f "$INGRESS_OVERLAY" ]; then
   kubectl apply -n "$NS" -f "$INGRESS_OVERLAY"
 fi
 
-# 5. Pin images by digest (mutable :rpsls tag alone is not enough on GKE).
-API_TAG="${REGISTRY:-docker.io}/${IMAGE_OWNER:-scruffyprodigy}/rps-game-api:${IMAGE_TAG}"
-CLIENT_TAG="${REGISTRY:-docker.io}/${IMAGE_OWNER:-scruffyprodigy}/rps-game-client:${IMAGE_TAG}"
+# 5. Pin images by digest (mutable tags alone are not enough on GKE).
+REGISTRY="${REGISTRY:-docker.io}"
+IMAGE_OWNER="${IMAGE_OWNER:-scruffyprodigy}"
+API_TAG="${REGISTRY}/${IMAGE_OWNER}/${API_IMAGE_NAME}:${IMAGE_TAG}"
+CLIENT_TAG="${REGISTRY}/${IMAGE_OWNER}/${CLIENT_IMAGE_NAME}:${IMAGE_TAG}"
 API_IMAGE="$(resolve_image_digest "$API_TAG")"
 CLIENT_IMAGE="$(resolve_image_digest "$CLIENT_TAG")"
 pin_deployment_images "$NS" "$API_IMAGE" "$CLIENT_IMAGE"
@@ -63,6 +68,10 @@ pin_deployment_images "$NS" "$API_IMAGE" "$CLIENT_IMAGE"
 log "Waiting for deployments to become available..."
 kubectl -n "$NS" rollout status deployment/rps-game-api --timeout=120s
 kubectl -n "$NS" rollout status deployment/rps-game-client --timeout=120s
+
+if [ "$ENV_NAME" = "production" ]; then
+  verify_deployed_game_identity "$NS" "$GAME_ID" "$PRODUCTION_PUBLIC_HOST"
+fi
 
 ok "Deploy to '${ENV_NAME}' complete."
 kubectl -n "$NS" get pods

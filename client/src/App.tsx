@@ -3,7 +3,13 @@ import { api, type Move, type MatchState, type Seat, type StatusResponse } from 
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { getEnv, getLobbyLink, buildLobbyReturnLink } from './env';
 import { seatDisplayName, seatProfile } from './lib/seatProfile';
-import { MOVE_META, describeOutcome, winsNeeded } from './moves';
+import {
+  MOVE_META,
+  describeOutcome,
+  describeRoundMatchup,
+  opponentMoveFromResult,
+  winsNeeded,
+} from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -424,6 +430,7 @@ function Board({
       <History
         results={results}
         mySeatKey={mySeatKey}
+        myPlayerId={myPlayerId}
         lobbyReturnUrl={finished ? lobbyReturnUrl : null}
       />
     </div>
@@ -684,10 +691,12 @@ function SeatCard({
 export function History({
   results,
   mySeatKey,
+  myPlayerId,
   lobbyReturnUrl,
 }: {
   results: MatchState['results'];
   mySeatKey: string;
+  myPlayerId: string;
   lobbyReturnUrl?: string | null;
 }) {
   if (results.length === 0) return lobbyReturnUrl ? <LobbyReturnFooter href={lobbyReturnUrl} /> : null;
@@ -697,12 +706,29 @@ export function History({
       <ul>
         {results.map((r) => {
           const verdict = describeOutcome(r.outcome, mySeatKey);
+          const { myMove, oppMove } = opponentMoveFromResult(r.moves, myPlayerId);
+          const verdictLabel =
+            verdict === 'draw' ? 'Draw' : verdict === 'win' ? 'You won' : 'You lost';
           return (
             <li key={r.round} className={`history-row ${verdict}`}>
-              <span>Round {r.round}</span>
-              <span className="verdict">
-                {verdict === 'draw' ? 'Draw' : verdict === 'win' ? 'You won' : 'You lost'}
-              </span>
+              <div className="history-row__head">
+                <span>Round {r.round}</span>
+                <span className="verdict">{verdictLabel}</span>
+              </div>
+              {myMove && oppMove && (
+                <>
+                  <p className="history-row__picks">
+                    <span>
+                      You {MOVE_META[myMove].emoji} {MOVE_META[myMove].label}
+                    </span>
+                    <span className="history-row__sep">·</span>
+                    <span>
+                      Opponent {MOVE_META[oppMove].emoji} {MOVE_META[oppMove].label}
+                    </span>
+                  </p>
+                  <p className="history-row__matchup">{describeRoundMatchup(myMove, oppMove)}</p>
+                </>
+              )}
             </li>
           );
         })}

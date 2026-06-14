@@ -7,6 +7,7 @@ metadata:
   name: rps-game-client
   labels:
     app: rps-game-client
+    playhub.io/game-id: rock-paper-scissors-lizard-robot
 spec:
   selector:
     app: rps-game-client
@@ -21,6 +22,7 @@ metadata:
   name: rps-game-client
   labels:
     app: rps-game-client
+    playhub.io/game-id: rock-paper-scissors-lizard-robot
 spec:
   replicas: 1
   strategy:
@@ -35,10 +37,12 @@ spec:
     metadata:
       labels:
         app: rps-game-client
+        playhub.io/game-id: rock-paper-scissors-lizard-robot
     spec:
       containers:
         - name: client
-          image: docker.io/scruffyprodigy/rps-game-client:latest
+          image: docker.io/scruffyprodigy/rps-game-client:rpsls
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           envFrom:

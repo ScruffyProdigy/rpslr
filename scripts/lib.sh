@@ -109,3 +109,55 @@ pin_deployment_images() {
   kubectl -n "$ns" set image deployment/rps-game-api api="$api_ref" migrate="$api_ref"
   kubectl -n "$ns" set image deployment/rps-game-client client="$client_ref"
 }
+
+# Refuse mutable :latest — both demo games historically shared registry repos.
+assert_safe_image_tag() {
+  local tag=$1
+  if [ -z "$tag" ]; then
+    die "IMAGE_TAG is empty — set an explicit per-game tag (see scripts/game-k8s.defaults.sh)."
+  fi
+  if [ "$tag" = "latest" ] && [ "${ALLOW_LATEST_TAG:-false}" != "true" ]; then
+    die "IMAGE_TAG=:latest is forbidden (cross-game deploy risk). Use DEFAULT_IMAGE_TAG from game-k8s.defaults.sh or set ALLOW_LATEST_TAG=true to override."
+  fi
+}
+
+game_status_json_field() {
+  local json=$1 field=$2
+  if command -v python3 >/dev/null 2>&1; then
+    GAME_STATUS_JSON="$json" GAME_STATUS_FIELD="$field" python3 - <<'PY'
+import json, os
+data = json.loads(os.environ["GAME_STATUS_JSON"])
+print(data[os.environ["GAME_STATUS_FIELD"]])
+PY
+    return
+  fi
+  echo "$json" | sed -n "s/.*\"${field}\":\"\\([^\"]*\\)\".*/\\1/p" | head -1
+}
+
+# After rollout, confirm the running API identifies as the expected game.
+verify_deployed_game_identity() {
+  local ns=$1 expected_game=$2 public_host=${3:-}
+  local json actual=""
+
+  if [ -n "$public_host" ] && command -v curl >/dev/null 2>&1; then
+    json=$(curl -sfS "https://${public_host}/api/v1/status" 2>/dev/null || true)
+    if [ -n "$json" ]; then
+      actual=$(game_status_json_field "$json" game)
+    fi
+  fi
+
+  if [ -z "$actual" ]; then
+    json=$(kubectl exec -n "$ns" deploy/rps-game-api -- wget -qO- http://localhost:3001/api/v1/status 2>/dev/null || true)
+    if [ -n "$json" ]; then
+      actual=$(game_status_json_field "$json" game)
+    fi
+  fi
+
+  if [ -z "$actual" ]; then
+    die "Could not read /api/v1/status for namespace ${ns} (host=${public_host:-in-cluster})."
+  fi
+  if [ "$actual" != "$expected_game" ]; then
+    die "Wrong game running in ${ns}: status.game=${actual}, expected ${expected_game}. Check IMAGE_TAG and registry repo."
+  fi
+  ok "Verified ${ns} serves game=${actual}${public_host:+ at https://${public_host}}"
+}

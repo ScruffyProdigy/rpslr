@@ -22,7 +22,7 @@ async function run() {
        )`,
     );
     const files = (await readdir(migrationsDir))
-      .filter((f) => f.endsWith('.sql'))
+      .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
       .sort();
 
     const appliedRes = await pool.query('SELECT filename FROM schema_migrations');

@@ -33,6 +33,11 @@ API_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-api"
 CLIENT_IMAGE="${REGISTRY}/${IMAGE_OWNER}/rps-game-client"
 TAG="${TAG:-rpsls}"
 
+if [ "$TAG" = "latest" ] && [ "${ALLOW_LATEST_TAG:-false}" != "true" ]; then
+  echo "Refusing to build :latest — use TAG=rpsls (or ALLOW_LATEST_TAG=true)." >&2
+  exit 1
+fi
+
 command -v docker >/dev/null 2>&1 || { echo "docker not found" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "Docker is not running" >&2; exit 1; }
 

@@ -4,4 +4,5 @@ metadata:
   name: rpsls-duel
   labels:
     app.kubernetes.io/part-of: playhub-demo-game
-    playhub.io/game: rock-paper-scissors
+    playhub.io/game-id: rock-paper-scissors-lizard-robot
+    playhub.io/production-host: rpsls-duel.win

@@ -575,11 +575,36 @@ button.ghost {
 }
 .history-row {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 12px;
   border-radius: 8px;
   background: #11131b;
   border: 1px solid #262a38;
+}
+.history-row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.history-row__picks {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.history-row__sep {
+  color: var(--muted);
+}
+.history-row__matchup {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
 }
 .history-row.win .verdict {
   color: var(--accent-2);
