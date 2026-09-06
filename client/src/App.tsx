@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Move, type MatchState, type Seat, type StatusResponse } from './api';
 import { PlayerAvatar } from './components/PlayerAvatar';
-import { getEnv, getLobbyLink, buildLobbyReturnLink } from './env';
+import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatDisplayName, seatProfile } from './lib/seatProfile';
 import {
   MOVE_META,
+  cooldownPhrase,
   describeOutcome,
   describeRoundMatchup,
   opponentMoveFromResult,
@@ -14,6 +15,26 @@ import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
 const lobbyLink = getLobbyLink();
+// Developer chrome is opt-in; players get a clean screen.
+const debug = isDebugMode();
+
+/**
+ * Full name on wide screens, "RPSLR" once it stops fitting. Both are hidden from
+ * assistive tech so the spoken name stays the same at every width.
+ */
+export function Wordmark() {
+  return (
+    <span className="wordmark">
+      <span className="wordmark__full" aria-hidden="true">
+        Rock · Paper · Scissors · Lizard · Robot
+      </span>
+      <span className="wordmark__short" aria-hidden="true">
+        RPSLR
+      </span>
+      <span className="sr-only">Rock Paper Scissors Lizard Robot</span>
+    </span>
+  );
+}
 
 export default function App() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -21,6 +42,8 @@ export default function App() {
   const [lobbyReturnBase, setLobbyReturnBase] = useState<string | null>(null);
   const [externalMatchId, setExternalMatchId] = useState<string | null>(null);
   const lobbyLinked = Boolean(lobbyLink.matchId && lobbyLink.token);
+  // The claim screen owns the whole viewport, so the app header steps aside.
+  const [claiming, setClaiming] = useState(lobbyLinked);
   const lobbyReturnUrl =
     lobbyReturnBase != null
       ? buildLobbyReturnLink(lobbyReturnBase, externalMatchId ?? lobbyLink.matchId)
@@ -44,51 +67,62 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <h1>🪨📄✂️🦎🤖 Rock Paper Scissors Lizard Robot</h1>
-        {lobbyReturnUrl && (
-          <a className="lobby-link" href={lobbyReturnUrl}>
-            ← Back to Lobby
-          </a>
-        )}
-      </header>
-
-      {lobbyLinked ? (
-        <div className="banner banner--lobby" role="status">
-          <strong>Connected via PlayHub Lobby.</strong> You'll be seated in your assigned slot.
-        </div>
-      ) : (
-        status?.standalone && (
-          <div className="banner banner--standalone" role="status">
-            <strong>Standalone mode.</strong> Not signed in through PlayHub Lobby.
-            {lobbyLink.lobbyUser && <> Playing as <strong>{lobbyLink.lobbyUser}</strong>.</>}
-          </div>
-        )
+      {!claiming && (
+        <header className="topbar">
+          <h1>
+            <Wordmark />
+          </h1>
+          {lobbyReturnUrl && (
+            <a className="lobby-link" href={lobbyReturnUrl}>
+              ← Back to Lobby
+            </a>
+          )}
+        </header>
       )}
 
-      <div className="status-row">
-        {status ? (
-          <span>
-            API: <code>{status.game}</code> v{status.version} · env {status.appEnv}
-          </span>
-        ) : statusError ? (
-          <span className="error">API unreachable: {statusError}</span>
+      {debug &&
+        (lobbyLinked ? (
+          <div className="banner banner--lobby" role="status">
+            <strong>Connected via PlayHub Lobby.</strong> You'll be seated in your assigned slot.
+          </div>
         ) : (
-          <span>Connecting to API…</span>
-        )}
-      </div>
+          status?.standalone && (
+            <div className="banner banner--standalone" role="status">
+              <strong>Standalone mode.</strong> Not signed in through PlayHub Lobby.
+              {lobbyLink.lobbyUser && <> Playing as <strong>{lobbyLink.lobbyUser}</strong>.</>}
+            </div>
+          )
+        ))}
+
+      {debug && (
+        <div className="status-row">
+          {status ? (
+            <span>
+              API: <code>{status.game}</code> v{status.version} · env {status.appEnv}
+            </span>
+          ) : statusError ? (
+            <span className="error">API unreachable: {statusError}</span>
+          ) : (
+            <span>Connecting to API…</span>
+          )}
+        </div>
+      )}
 
       <Game
+        lobbyReturnUrl={lobbyReturnUrl}
+        onClaimingChange={setClaiming}
         onLobbyReturn={(base, matchId) => {
           if (base) setLobbyReturnBase(base);
           if (matchId) setExternalMatchId(matchId);
         }}
       />
 
-      <footer className="footer">
-        Frontend :5174 · API {env.GAME_API_BASE_URL}
-        {lobbyReturnUrl && <> · Lobby {lobbyReturnUrl}</>}
-      </footer>
+      {debug && (
+        <footer className="footer">
+          Frontend :5174 · API {env.GAME_API_BASE_URL}
+          {lobbyReturnUrl && <> · Lobby {lobbyReturnUrl}</>}
+        </footer>
+      )}
     </div>
   );
 }
@@ -96,8 +130,12 @@ export default function App() {
 type Phase = 'lobby' | 'playing';
 
 function Game({
+  lobbyReturnUrl,
+  onClaimingChange,
   onLobbyReturn,
 }: {
+  lobbyReturnUrl: string | null;
+  onClaimingChange: (claiming: boolean) => void;
   onLobbyReturn?: (returnUrl: string | null, externalMatchId: string | null) => void;
 }) {
   const [phase, setPhase] = useState<Phase>('lobby');
@@ -108,6 +146,7 @@ function Game({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [pendingMove, setPendingMove] = useState<Move | null>(null);
   const [lockedMove, setLockedMove] = useState<Move | null>(null);
   const socketRef = useRef<MatchSocket | null>(null);
@@ -150,6 +189,7 @@ function Game({
         setError(message);
       },
       onOpen: () => setConnected(true),
+      onClose: () => setConnected(false),
     });
     socketRef.current = socket;
     return () => {
@@ -199,6 +239,22 @@ function Game({
     return () => clearInterval(timer);
   }, [phase, ref, myPlayerId, submittedKey, matchStatus, lockedMove, pendingMove, state]);
 
+  // Only surface the bar once we've been down for a beat, so the normal first
+  // connect (and any quick blip) doesn't flash it.
+  useEffect(() => {
+    if (phase !== 'playing' || connected) {
+      setReconnecting(false);
+      return;
+    }
+    const timer = setTimeout(() => setReconnecting(true), 1000);
+    return () => clearTimeout(timer);
+  }, [phase, connected]);
+
+  const claiming = Boolean(lobbyLink.matchId && lobbyLink.token) && phase === 'lobby';
+  useEffect(() => {
+    onClaimingChange(claiming);
+  }, [claiming, onClaimingChange]);
+
   async function handleCreate(name: string, hostName: string) {
     setBusy(true);
     setError(null);
@@ -243,9 +299,9 @@ function Game({
     }
   }
 
-  // While the Lobby token claim is in flight, show a connecting state.
-  if (lobbyLink.matchId && lobbyLink.token && phase === 'lobby') {
-    return <p className="hint">{error ? <span className="error">{error}</span> : 'Joining your Lobby match…'}</p>;
+  // Every Lobby player's first screen: the seat claim in flight.
+  if (claiming) {
+    return <ClaimScreen error={error} lobbyReturnUrl={lobbyReturnUrl} />;
   }
 
   if (phase === 'lobby') {
@@ -258,15 +314,51 @@ function Game({
       : (lockedMove ?? pendingMove);
 
   return (
-    <Board
-      myPlayerId={myPlayerId!}
-      mySeatKey={mySeatKey!}
-      state={state}
-      connected={connected}
-      error={error}
-      myChosenMove={myChosenMove}
-      onPlay={play}
-    />
+    <>
+      {reconnecting && (
+        <div className="reconnect-bar" role="status">
+          Reconnecting…
+        </div>
+      )}
+      <Board
+        myPlayerId={myPlayerId!}
+        mySeatKey={mySeatKey!}
+        state={state}
+        connected={connected}
+        error={error}
+        myChosenMove={myChosenMove}
+        onPlay={play}
+      />
+    </>
+  );
+}
+
+export function ClaimScreen({
+  error,
+  lobbyReturnUrl,
+}: {
+  error: string | null;
+  lobbyReturnUrl: string | null;
+}) {
+  return (
+    <div className="claim-screen">
+      <p className="claim-screen__mark">
+        <Wordmark />
+      </p>
+      {error ? (
+        <>
+          <p className="error">{error}</p>
+          {lobbyReturnUrl && <LobbyReturnButton href={lobbyReturnUrl} />}
+        </>
+      ) : (
+        <>
+          <span className="spinner" aria-hidden="true" />
+          <p className="claim-screen__label" role="status">
+            Joining your match…
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -289,6 +381,7 @@ function Lobby({
 
   return (
     <div className="grid">
+      <p className="dev-caption full">Dev mode — real players arrive from the JoinQuest Lobby.</p>
       <section className="card">
         <h2>Create a match</h2>
         <label>
@@ -325,7 +418,7 @@ function Lobby({
   );
 }
 
-function Board({
+export function Board({
   myPlayerId,
   mySeatKey,
   state,
@@ -352,6 +445,9 @@ function Board({
   const submitted =
     state.submittedPlayerIds ?? Object.keys(state.currentRoundMoves ?? {});
   const opponentLockedIn = submitted.some((id) => id !== myPlayerId);
+  // Lobby players never see the create card, so round 1 is the only chance to
+  // tell them the rules.
+  const showRules = !finished && (!allSeated || match.currentRound <= 1);
   const myDelays = seats.find((s) => s.seatKey === mySeatKey)?.delays ?? {};
   const oppDelays = seats.find((s) => s.seatKey !== mySeatKey)?.delays ?? {};
   const lobbyReturnUrl =
@@ -361,19 +457,20 @@ function Board({
 
   return (
     <div className="board">
-      <div className={`match-head${match.externalMatchId ? ' match-head--lobby' : ''}`}>
-        {!match.externalMatchId && (
-          <div>
-            <h2>{match.name}</h2>
-            <p className="match-meta">
-              Room code: <code className="room-code">{match.code}</code>
-            </p>
-          </div>
-        )}
-        <span className={`live ${connected ? 'on' : 'off'}`} title="WebSocket connection">
-          {connected ? '● live' : '○ connecting'}
-        </span>
-      </div>
+      {!match.externalMatchId && (
+        <div className="match-head">
+          <h2>{match.name}</h2>
+          <p className="match-meta">
+            Room code: <code className="room-code">{match.code}</code>
+          </p>
+        </div>
+      )}
+
+      {showRules && (
+        <p className="rule-note rule-note--board">
+          First to {winsNeeded(match.bestOf)} round wins · Lizard &amp; Robot start on cooldown
+        </p>
+      )}
 
       <Scoreboard
         seats={seats}
@@ -395,7 +492,9 @@ function Board({
         <div className="moves">
           <p className="round-label">Round {match.currentRound}</p>
           {!youMovedThisRound && opponentLockedIn && (
-            <p className="hint opponent-ready">Opponent has locked in — pick your move!</p>
+            <p className="hint opponent-ready" role="status">
+              Opponent has locked in — pick your move!
+            </p>
           )}
           <div className="move-circle-wrap">
             <MoveCircle
@@ -410,8 +509,11 @@ function Board({
           <p className="dot-legend">
             <span className="legend-ring mine" aria-hidden="true" />
             you can play · <span className="legend-ring opp" aria-hidden="true" />
-            opponent can play · <span className="dot mine">●</span> your cooldown ·{' '}
-            <span className="dot opp">●</span> opponent cooldown
+            opponent can play ·{' '}
+            <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
+              ⏳ N
+            </span>{' '}
+            your cooldown
           </p>
           {youMovedThisRound && myChosenMove && (
             <p className="choice-locked" role="status">
@@ -560,7 +662,11 @@ function MoveCircle({
             style={{ left: pos.x, top: pos.y }}
             disabled={disabled || onCooldown}
             onClick={() => onPlay(m)}
-            aria-label={MOVE_META[m].label}
+            aria-label={
+              onCooldown
+                ? `${MOVE_META[m].label}, ${cooldownPhrase(myDelay)}`
+                : MOVE_META[m].label
+            }
             aria-pressed={selected}
             title={
               selected
@@ -573,14 +679,13 @@ function MoveCircle({
             }
           >
             {selected && <span className="choice-check" aria-hidden="true">✓</span>}
-            <span className="delay-badge opp" title="opponent's cooldown this round">
-              {oppDelay > 0 ? '•'.repeat(oppDelay) : ''}
-            </span>
             <span className="emoji">{MOVE_META[m].emoji}</span>
             <span className="move-name">{MOVE_META[m].label}</span>
-            <span className="delay-badge mine" title="your cooldown this round">
-              {onCooldown ? '•'.repeat(myDelay) : ''}
-            </span>
+            {onCooldown && (
+              <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
+                ⏳ {myDelay}
+              </span>
+            )}
           </button>
         );
       })}

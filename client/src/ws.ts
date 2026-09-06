@@ -17,7 +17,13 @@ export interface MatchSocket {
 
 export function connectMatchSocket(
   ref: string,
-  handlers: { onState: StateHandler; onError?: ErrorHandler; onOpen?: () => void },
+  handlers: {
+    onState: StateHandler;
+    onError?: ErrorHandler;
+    onOpen?: () => void;
+    /** Fired on an unexpected drop, before the backoff retry. */
+    onClose?: () => void;
+  },
 ): MatchSocket {
   let ws: WebSocket | null = null;
   let closedByCaller = false;
@@ -45,6 +51,7 @@ export function connectMatchSocket(
 
     ws.onclose = () => {
       if (closedByCaller) return;
+      handlers.onClose?.();
       // Exponential backoff capped at 5s.
       retry += 1;
       const delay = Math.min(5000, 250 * 2 ** retry);

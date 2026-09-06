@@ -67,6 +67,14 @@ export function getLobbyLink(search = window.location.search): LobbyLink {
   };
 }
 
+/**
+ * Developer chrome (API/env readouts, footer, mode banners) is opt-in via
+ * `?debug=1` so players never see it.
+ */
+export function isDebugMode(search = window.location.search): boolean {
+  return new URLSearchParams(search).get('debug') === '1';
+}
+
 /** Back-compat convenience used by the standalone UI. */
 export function getLobbyUserFromUrl(search = window.location.search): string | null {
   return new URLSearchParams(search).get('lobby_user');
