@@ -295,5 +295,28 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
   it('marks nothing when the round was a draw', () => {
     const { container } = renderPicker({ winningEdge: null });
     expect(container.querySelectorAll('.beat-arrow--won')).toHaveLength(0);
+    expect(container.querySelector('.move-arrows--strike')).not.toBeInTheDocument();
+  });
+
+  // The rest of the graph steps back for the beat — but only for that beat.
+  it('fades the rest of the graph only while the winning edge is lit', () => {
+    const { container, rerender } = renderPicker({
+      winningEdge: { from: 'rock', to: 'scissors', role: 'you' },
+    });
+    expect(container.querySelector('.move-arrows--strike')).toBeInTheDocument();
+    rerender(
+      <MovePicker
+        myDelays={{}}
+        oppDelays={{}}
+        myChosenMove={null}
+        lockedIn={false}
+        disabled={false}
+        round={3}
+        myLastMove={null}
+        onPlay={() => {}}
+        winningEdge={null}
+      />,
+    );
+    expect(container.querySelector('.move-arrows--strike')).not.toBeInTheDocument();
   });
 });

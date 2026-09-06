@@ -96,7 +96,7 @@ export function MovePicker({
     <div className="move-picker">
       <div className="move-board">
         <svg
-          className="move-arrows"
+          className={`move-arrows${winningEdge ? ' move-arrows--strike' : ''}`}
           viewBox={`0 0 ${BOARD} ${BOARD}`}
           preserveAspectRatio="xMidYMid meet"
           aria-hidden="true"

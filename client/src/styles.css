@@ -404,7 +404,15 @@ button.ghost {
   stroke: var(--graph);
   stroke-width: 2;
   stroke-opacity: 0.7;
-  transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease;
+  transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease,
+    opacity 0.25s ease;
+}
+/* Only while the reveal's outro lights the deciding edge. The graph is never
+   faded while a choice is live — during the outro nothing is decidable, so
+   the winning arrow gets the board to itself for a beat.
+   `opacity`, not `stroke-opacity`, so the arrowheads fade with their lines. */
+.move-arrows--strike .beat-arrow:not(.beat-arrow--won) {
+  opacity: 0.18;
 }
 /* An attack the opponent can't make this round. A node with no solid incoming
    arrow is therefore a move that cannot lose. */
