@@ -142,9 +142,19 @@ describe('<Board> cooldown pill (JQ-103)', () => {
     expect(screen.getByLabelText('on cooldown, 1 turn')).toBeInTheDocument();
   });
 
+  // Not `disabled`: a move you cannot play is still worth asking about, so it
+  // stays focusable and tappable and answers with why. It can never commit.
   it('names the cooldown on the button itself so it is announced', () => {
     renderBoard(state({ myDelays: { lizard: 2 } }));
-    expect(screen.getByRole('button', { name: /Lizard, on cooldown, 2 turns/ })).toBeDisabled();
+    const btn = screen.getByRole('button', { name: /Lizard, on cooldown, 2 turns/ });
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('says why the move is unavailable, not just that it is', () => {
+    renderBoard(state({ myDelays: { lizard: 2 } }));
+    expect(
+      screen.getByRole('button', { name: /Lizard, on cooldown, 2 turns, lizard starts the match/i }),
+    ).toBeInTheDocument();
   });
 
   // Phase 2.3 moved the opponent's state off your button's border and onto the

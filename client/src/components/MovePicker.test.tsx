@@ -14,7 +14,7 @@ function renderPicker(
     lockedIn?: boolean;
     disabled?: boolean;
     round?: number;
-    myLastMove?: Move | null;
+    myRecentMoves?: Move[];
     onPlay?: (m: Move) => void;
     winningEdge?: { from: Move; to: Move; role: 'you' | 'opp' } | null;
   } = {},
@@ -28,7 +28,7 @@ function renderPicker(
       lockedIn={over.lockedIn ?? false}
       disabled={over.disabled ?? false}
       round={over.round ?? 3}
-      myLastMove={over.myLastMove ?? null}
+      myRecentMoves={over.myRecentMoves ?? []}
       onPlay={onPlay}
       winningEdge={over.winningEdge ?? null}
     />,
@@ -59,11 +59,43 @@ describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
     }
   });
 
-  it('disables only your own cooldowns, and shows the numeric pill', () => {
+  it('marks only your own cooldowns unavailable, and shows the numeric pill', () => {
     renderPicker({ myDelays: { lizard: 2 }, oppDelays: { robot: 1 } });
-    expect(screen.getByRole('button', { name: /^Lizard, on cooldown, 2 turns/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^Robot/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Lizard, on cooldown, 2 turns/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /^Robot/ })).not.toHaveAttribute('aria-disabled');
     expect(screen.getByLabelText('on cooldown, 2 turns')).toHaveTextContent('2');
+  });
+
+  it('never commits a move you cannot play, however many times you tap it', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker({ myDelays: { lizard: 2 } });
+    const lizard = screen.getByRole('button', { name: /^Lizard/ });
+    await user.click(lizard);
+    await user.click(lizard);
+    await user.click(lizard);
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
+
+  it('answers "why can I not play this?" when you tap it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myDelays: { rock: 2 }, myRecentMoves: ['rock', 'paper'] });
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    const centre = container.querySelector('.picker-center--why') as HTMLElement;
+    expect(centre).toHaveTextContent('You played Rock last round');
+    expect(centre).toHaveTextContent('back in 2 turns');
+  });
+
+  it('reaches back two rounds when that is the reason', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myDelays: { paper: 1 }, myRecentMoves: ['rock', 'paper'] });
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(container.querySelector('.picker-center--why')).toHaveTextContent(
+      'You played Paper two rounds ago — back in 1 turn',
+    );
   });
 
   it('drops the old opponent/self availability ring classes', () => {
@@ -83,7 +115,7 @@ describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
         lockedIn
         disabled
         round={3}
-        myLastMove={null}
+        myRecentMoves={[]}
         onPlay={() => {}}
       />,
     );
@@ -226,7 +258,7 @@ describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
   });
 
   it('explains your first cooldown using the move you just played', () => {
-    renderPicker({ round: 3, myDelays: { rock: 2 }, myLastMove: 'rock' });
+    renderPicker({ round: 3, myDelays: { rock: 2 }, myRecentMoves: ['rock'] });
     expect(
       screen.getByText("You played Rock last round — it's back in 2 turns."),
     ).toBeInTheDocument();
@@ -312,7 +344,7 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
         lockedIn={false}
         disabled={false}
         round={3}
-        myLastMove={null}
+        myRecentMoves={[]}
         onPlay={() => {}}
         winningEdge={null}
       />,

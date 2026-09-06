@@ -8,6 +8,7 @@ import {
   describeRoundMatchup,
   beatsOf,
   opponentCooldownPhrase,
+  cooldownCause,
   threatsTo,
   winningEdgeOf,
   winsNeeded,
@@ -141,5 +142,22 @@ describe('winningEdgeOf', () => {
         }
       }
     }
+  });
+});
+
+
+describe('cooldownCause', () => {
+  it('blames your last round when that is where it came from', () => {
+    expect(cooldownCause('rock', ['rock', 'paper'])).toBe('You played Rock last round');
+  });
+
+  it('reaches back a second round', () => {
+    expect(cooldownCause('paper', ['rock', 'paper'])).toBe('You played Paper two rounds ago');
+  });
+
+  // Round 1: nothing has been played, so Lizard and Robot are down by the rules.
+  it('falls back to the opening when you have not played it', () => {
+    expect(cooldownCause('robot', [])).toBe('Robot starts the match on cooldown');
+    expect(cooldownCause('robot', ['rock'])).toBe('Robot starts the match on cooldown');
   });
 });

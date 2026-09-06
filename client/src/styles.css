@@ -510,7 +510,7 @@ button.ghost {
   font-size: clamp(0.66rem, 3.3cqw, 0.76rem);
   font-weight: 600;
 }
-.move-btn:hover:not(:disabled) {
+.move-btn:hover:not(:disabled):not([aria-disabled='true']) {
   transform: translate(-50%, -50%) scale(1.04);
   border-color: var(--you);
 }
@@ -539,6 +539,12 @@ button.ghost {
 .move-btn--preview {
   border-color: var(--you);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--you) 22%, transparent);
+}
+/* Inspecting an unavailable move is not the same as choosing one, so its ring
+   is muted rather than in the player's colour. */
+.move-btn--cooldown.move-btn--preview {
+  border-color: #6c7488;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 16%, transparent);
 }
 .move-btn--target {
   border-color: color-mix(in srgb, var(--you) 55%, #3d4458);
@@ -651,6 +657,12 @@ button.ghost {
   font-size: clamp(0.62rem, 3.1cqw, 0.75rem);
   font-weight: 600;
   line-height: 1.35;
+}
+.picker-center__why {
+  margin: 0;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  line-height: 1.3;
+  color: var(--text);
 }
 .picker-center__opp {
   margin: 0;

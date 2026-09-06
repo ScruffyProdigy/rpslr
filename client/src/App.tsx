@@ -464,8 +464,13 @@ export function Board({
   const showRules = !finished && (!allSeated || match.currentRound <= 1);
   const myDelays = mySeat?.delays ?? {};
   const oppDelays = oppSeat?.delays ?? {};
-  // Feeds the one-time cooldown explainer ("you played Rock last round…").
-  const myLastMove = results.length > 0 ? results[results.length - 1].moves[myPlayerId] ?? null : null;
+  // Your last two picks, most recent first: explains exactly why each of your
+  // moves is on cooldown, without inferring it from the mark count.
+  const myRecentMoves = results
+    .slice(-2)
+    .reverse()
+    .map((r) => r.moves[myPlayerId])
+    .filter((m): m is Move => Boolean(m));
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -554,7 +559,7 @@ export function Board({
             opponentLockedIn={opponentLockedIn}
             disabled={!connected || !allSeated || youMovedThisRound || revealingNow}
             round={match.currentRound}
-            myLastMove={myLastMove}
+            myRecentMoves={myRecentMoves}
             onPlay={onPlay}
             winningEdge={winningEdge}
             centerSlot={

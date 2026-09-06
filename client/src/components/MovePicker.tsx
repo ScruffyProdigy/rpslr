@@ -12,6 +12,7 @@ import { hasSeen, markSeen, type OneTimeNote } from '../lib/prefs';
 import {
   MOVE_META,
   beatsOf,
+  cooldownCause,
   cooldownPhrase,
   describeBeatsOf,
   opponentCooldownPhrase,
@@ -36,7 +37,7 @@ export function MovePicker({
   opponentLockedIn = false,
   disabled,
   round,
-  myLastMove,
+  myRecentMoves,
   onPlay,
   centerSlot,
   winningEdge = null,
@@ -48,8 +49,8 @@ export function MovePicker({
   opponentLockedIn?: boolean;
   disabled: boolean;
   round: number;
-  /** Your pick from the previous round, for the cooldown explainer. */
-  myLastMove: Move | null;
+  /** Your last two picks, most recent first — explains your cooldowns. */
+  myRecentMoves: Move[];
   onPlay: (move: Move) => void;
   /** Takes over the centre slot — the round reveal, while it holds. */
   centerSlot?: React.ReactNode;
@@ -99,11 +100,18 @@ export function MovePicker({
   );
 
   function handleClick(move: Move) {
+    // A move on cooldown can be inspected but never committed: tapping it asks
+    // "why can't I play this?", which previously got no answer at all.
+    if ((myDelays[move] ?? 0) > 0) {
+      setPicked(move);
+      return;
+    }
     if (picked === move) commit(move);
     else setPicked(move);
   }
 
   const myCooldowns = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
+  const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
@@ -235,6 +243,7 @@ export function MovePicker({
           const label = [
             MOVE_META[m].label,
             onCooldown ? cooldownPhrase(myDelay) : '',
+            onCooldown ? cooldownCause(m, myRecentMoves).toLowerCase() : '',
             oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
           ]
             .filter(Boolean)
@@ -253,7 +262,8 @@ export function MovePicker({
                 .filter(Boolean)
                 .join(' ')}
               style={{ left: boardPct(pos.x), top: boardPct(pos.y) }}
-              disabled={disabled || onCooldown}
+              disabled={disabled}
+              aria-disabled={onCooldown || undefined}
               onClick={() => handleClick(m)}
               onPointerEnter={(e) => {
                 if (e.pointerType === 'mouse') setHovered(m);
@@ -296,6 +306,8 @@ export function MovePicker({
             lockedIn={lockedIn}
             opponentLockedIn={opponentLockedIn}
             myChosenMove={myChosenMove}
+            myDelays={myDelays}
+            myRecentMoves={myRecentMoves}
             oppDelays={oppDelays}
             onCommit={commit}
           />
@@ -342,6 +354,8 @@ function PickerCenter({
   lockedIn,
   opponentLockedIn,
   myChosenMove,
+  myDelays,
+  myRecentMoves,
   oppDelays,
   onCommit,
 }: {
@@ -350,6 +364,8 @@ function PickerCenter({
   lockedIn: boolean;
   opponentLockedIn: boolean;
   myChosenMove: Move | null;
+  myDelays: Record<string, number>;
+  myRecentMoves: Move[];
   oppDelays: Record<string, number>;
   onCommit: (move: Move) => void;
 }) {
@@ -375,6 +391,20 @@ function PickerCenter({
     return (
       <div className="picker-center picker-center--idle" role="status">
         <span className="picker-center__idle">Pick a move</span>
+      </div>
+    );
+  }
+
+  // An unavailable move explains itself: why it is down, and when it is back.
+  const myDelay = myDelays[shown] ?? 0;
+  if (myDelay > 0) {
+    return (
+      <div className="picker-center picker-center--why" role="status">
+        <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
+        <p className="picker-center__why">
+          {cooldownCause(shown, myRecentMoves)} — back in {myDelay} turn
+          {myDelay === 1 ? '' : 's'}
+        </p>
       </div>
     );
   }

@@ -95,6 +95,18 @@ export function winningEdgeOf(myMove: Move, oppMove: Move): WinningEdge | null {
   return null;
 }
 
+/**
+ * Why one of your moves is unavailable. Read off your own last two picks
+ * rather than inferred from the mark count, so it stays true if helpers ever
+ * change what a move costs. `recent` is most-recent-first.
+ */
+export function cooldownCause(move: Move, recent: Move[]): string {
+  const name = MOVE_META[move].label;
+  if (recent[0] === move) return `You played ${name} last round`;
+  if (recent[1] === move) return `You played ${name} two rounds ago`;
+  return `${name} starts the match on cooldown`;
+}
+
 /** Spoken form of an opponent cooldown, for the preview caption. */
 export function opponentCooldownPhrase(move: Move, turns: number): string {
   return `Opponent can't play ${MOVE_META[move].label} for ${turns} turn${turns === 1 ? '' : 's'}`;
