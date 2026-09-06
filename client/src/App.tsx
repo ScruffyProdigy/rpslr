@@ -16,6 +16,7 @@ import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
+import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
@@ -49,9 +50,11 @@ export default function App() {
   const [lobbyReturnBase, setLobbyReturnBase] = useState<string | null>(null);
   const [externalMatchId, setExternalMatchId] = useState<string | null>(null);
   const lobbyLinked = Boolean(lobbyLink.matchId && lobbyLink.token);
-  // The rules are reachable for the whole match, not just the wait before it.
-  const [rulesOpen, setRulesOpen] = useState(false);
+  // The rules are reachable for the whole match, not just the wait before it,
+  // and open themselves once on a player's very first match.
   const [bestOf, setBestOf] = useState(5);
+  const [allSeated, setAllSeated] = useState(false);
+  const rules = useFirstMatchRules(allSeated);
   // The claim screen owns the whole viewport, so the app header steps aside.
   const [claiming, setClaiming] = useState(lobbyLinked);
   const lobbyReturnUrl =
@@ -87,7 +90,7 @@ export default function App() {
               type="button"
               className="rules-btn"
               aria-label="How to play"
-              onClick={() => setRulesOpen(true)}
+              onClick={() => rules.setOpen(true)}
             >
               ?
             </button>
@@ -100,7 +103,7 @@ export default function App() {
         </header>
       )}
 
-      <HowToPlayDialog bestOf={bestOf} open={rulesOpen} onClose={() => setRulesOpen(false)} />
+      <HowToPlayDialog bestOf={bestOf} open={rules.open} onClose={rules.dismiss} />
 
       {debug &&
         (lobbyLinked ? (
@@ -134,6 +137,7 @@ export default function App() {
         lobbyReturnUrl={lobbyReturnUrl}
         onClaimingChange={setClaiming}
         onBestOf={setBestOf}
+        onAllSeated={setAllSeated}
         onLobbyReturn={(base, matchId) => {
           if (base) setLobbyReturnBase(base);
           if (matchId) setExternalMatchId(matchId);
@@ -156,12 +160,15 @@ function Game({
   lobbyReturnUrl,
   onClaimingChange,
   onBestOf,
+  onAllSeated,
   onLobbyReturn,
 }: {
   lobbyReturnUrl: string | null;
   onClaimingChange: (claiming: boolean) => void;
   /** So the header's how-to-play panel can say "first to 3" and mean it. */
   onBestOf: (bestOf: number) => void;
+  /** Both seats filled — the cue for the first-match rules to open themselves. */
+  onAllSeated: (allSeated: boolean) => void;
   onLobbyReturn?: (returnUrl: string | null, externalMatchId: string | null) => void;
 }) {
   const [phase, setPhase] = useState<Phase>('lobby');
@@ -246,6 +253,11 @@ function Game({
   useEffect(() => {
     if (matchBestOf) onBestOf(matchBestOf);
   }, [matchBestOf, onBestOf]);
+
+  const everySeatFilled = Boolean(state?.seats.every((s) => s.player));
+  useEffect(() => {
+    onAllSeated(everySeatFilled);
+  }, [everySeatFilled, onAllSeated]);
 
   const currentRound = state?.match.currentRound;
   useEffect(() => {

@@ -6,7 +6,7 @@
  */
 const PREFIX = 'rpslr.seen.';
 
-export type OneTimeNote = 'tapHint' | 'cooldownExplainer';
+export type OneTimeNote = 'tapHint' | 'cooldownExplainer' | 'howToPlay';
 
 export function hasSeen(note: OneTimeNote): boolean {
   try {
