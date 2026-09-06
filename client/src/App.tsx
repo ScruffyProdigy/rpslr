@@ -536,11 +536,16 @@ export function Board({
               oppSeat?.player?.score ?? 0
             }`}
           </p>
-          {!youMovedThisRound && opponentLockedIn && !revealingNow && (
-            <p className="hint opponent-ready" role="status">
-              Opponent has locked in — pick your move!
-            </p>
-          )}
+          {/* The slot is always here even when empty. The pentagon is the tap
+              surface, so anything that appears above it mid-decision would
+              shift the board under the player's thumb. */}
+          <div className="board-status">
+            {!youMovedThisRound && opponentLockedIn && !revealingNow && (
+              <p className="hint opponent-ready" role="status">
+                Opponent has locked in — pick your move!
+              </p>
+            )}
+          </div>
           <MovePicker
             myDelays={myDelays}
             oppDelays={oppDelays}

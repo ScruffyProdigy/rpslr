@@ -312,6 +312,23 @@ describe('<Board> waiting for the opponent (JQ 3.3)', () => {
   });
 });
 
+describe('<Board> stable layout above the pentagon', () => {
+  // The pentagon is the tap surface. Anything appearing above it mid-decision
+  // moves the board under the player's thumb and causes mis-taps.
+  it('reserves the status slot even with nothing to say', () => {
+    const { container } = renderBoard(state());
+    expect(container.querySelector('.board-status')).toBeInTheDocument();
+    expect(container.querySelector('.opponent-ready')).not.toBeInTheDocument();
+  });
+
+  it('fills that same slot when the opponent locks in', () => {
+    const { container } = renderBoard(state({ submitted: [OPP_PLAYER] }));
+    const slot = container.querySelector('.board-status') as HTMLElement;
+    expect(within(slot).getByText(/Opponent has locked in/)).toBeInTheDocument();
+    expect(container.querySelectorAll('.board-status')).toHaveLength(1);
+  });
+});
+
 describe('<Board> match end (JQ-114)', () => {
   it('crowns the winner with their avatar above the banner', () => {
     const { container } = renderBoard(

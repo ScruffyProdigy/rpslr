@@ -72,6 +72,23 @@ export function MovePicker({
     setHovered(null);
   }, [round]);
 
+  // The preview's caption and Lock-in button sit on top of the graph, so there
+  // has to be a way to put them away and read what is underneath. Tapping the
+  // board away from a move clears it; Escape does the same for a keyboard.
+  const clearPreview = useCallback(() => {
+    setPicked(null);
+    setHovered(null);
+  }, []);
+
+  useEffect(() => {
+    if (!picked || lockedIn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearPreview();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [picked, lockedIn, clearPreview]);
+
   const commit = useCallback(
     (move: Move) => {
       // Locking in for the first time is proof the hint landed.
@@ -94,7 +111,15 @@ export function MovePicker({
 
   return (
     <div className="move-picker">
-      <div className="move-board">
+      <div
+        className="move-board"
+        onClick={(e) => {
+          // A move button or the commit button owns its own click.
+          if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
+          if (lockedIn) return;
+          clearPreview();
+        }}
+      >
         <svg
           className={`move-arrows${winningEdge ? ' move-arrows--strike' : ''}`}
           viewBox={`0 0 ${BOARD} ${BOARD}`}

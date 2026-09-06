@@ -267,8 +267,8 @@ button.ghost {
   height: 64px;
 }
 .player-avatar--sm {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   border-width: 2px;
 }
 .player-avatar--xs {
@@ -318,7 +318,7 @@ button.ghost {
   font-size: 1.5rem;
 }
 .player-avatar--sm .player-avatar__initial {
-  font-size: 1rem;
+  font-size: 1.35rem;
 }
 .player-avatar--xs .player-avatar__initial {
   font-size: 0.62rem;
@@ -713,6 +713,20 @@ button.ghost {
   color: var(--muted);
   font-size: 0.85rem;
 }
+/* Reserves one line above the board so the "opponent locked in" pill can
+   appear without moving the pentagon. Sized to the pill, not the bare text. */
+.board-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 30px;
+}
+/* Without this the paragraph's default 1em margins burst the reserved slot
+   and the board moves anyway — which is the whole bug this slot exists for. */
+.board-status > * {
+  margin: 0;
+}
 .hint.opponent-ready {
   align-self: center;
   width: auto;
@@ -1046,7 +1060,7 @@ button.ghost {
   gap: 5px;
 }
 .reveal-card__move {
-  font-size: clamp(1.6rem, 8cqw, 2.4rem);
+  font-size: clamp(2.4rem, 12cqw, 3.6rem);
   line-height: 1;
   animation: pick-pop 300ms ease-out both;
 }

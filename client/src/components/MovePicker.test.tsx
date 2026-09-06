@@ -320,3 +320,49 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
     expect(container.querySelector('.move-arrows--strike')).not.toBeInTheDocument();
   });
 });
+
+
+describe('<MovePicker> clearing a preview to see the board (JQ-95 follow-up)', () => {
+  it('clears the preview when you tap the board away from a move', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(screen.getByRole('button', { name: /^Lock in/ })).toBeInTheDocument();
+    await user.click(container.querySelector('.move-arrows') as unknown as Element);
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+    expect(container.querySelector('.picker-center--idle')).toBeInTheDocument();
+  });
+
+  it('does not clear when the tap lands on a move button', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(screen.getByRole('button', { name: /^Lock in Paper/ })).toBeInTheDocument();
+  });
+
+  it('does not swallow the Lock in button', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    await user.click(screen.getByRole('button', { name: /^Lock in Rock/ }));
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('clears the preview on Escape', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
+
+  // Once you are locked in the centre belongs to the waiting state; a stray tap
+  // on the board must not disturb it.
+  it('leaves the locked-in centre alone', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ lockedIn: true, disabled: true, myChosenMove: 'lizard' });
+    await user.click(container.querySelector('.move-arrows') as unknown as Element);
+    expect(container.querySelector('.picker-center--waiting')).toBeInTheDocument();
+  });
+});
