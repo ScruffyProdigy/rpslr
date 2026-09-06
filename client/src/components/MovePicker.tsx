@@ -15,6 +15,7 @@ import {
   cooldownPhrase,
   describeBeatsOf,
   opponentCooldownPhrase,
+  type WinningEdge,
 } from '../moves';
 
 /** Remembers a one-time note's dismissal across reloads. */
@@ -38,6 +39,7 @@ export function MovePicker({
   myLastMove,
   onPlay,
   centerSlot,
+  winningEdge = null,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -51,6 +53,8 @@ export function MovePicker({
   onPlay: (move: Move) => void;
   /** Takes over the centre slot — the round reveal, while it holds. */
   centerSlot?: React.ReactNode;
+  /** The edge the round was just won on, lit as the reveal card dissolves. */
+  winningEdge?: WinningEdge | null;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -123,6 +127,18 @@ export function MovePicker({
               <path d="M0,0 L10,5 L0,10 z" />
             </marker>
             <marker
+              id="rps-arrow-opp"
+              className="arrowhead arrowhead--opp"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0 L10,5 L0,10 z" />
+            </marker>
+            <marker
               id="rps-arrow-off"
               className="arrowhead arrowhead--off"
               viewBox="0 0 10 10"
@@ -143,9 +159,13 @@ export function MovePicker({
             const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
             const ux = (b.x - a.x) / len;
             const uy = (b.y - a.y) / len;
+            // The arrow the round was just won on. It outranks the faded
+            // state — a win off a move the opponent had on cooldown last round
+            // still reads as a win.
+            const won = winningEdge?.from === fromMove && winningEdge.to === toMove;
             // An attack the opponent can't make this round: draw it as a faded
             // threat so a node with no solid incoming arrow reads as safe.
-            const oppOff = (oppDelays[fromMove] ?? 0) > 0;
+            const oppOff = !won && (oppDelays[fromMove] ?? 0) > 0;
             const highlighted = preview === fromMove;
             return (
               <line
@@ -156,6 +176,8 @@ export function MovePicker({
                   'beat-arrow',
                   oppOff ? 'beat-arrow--opp-off' : '',
                   highlighted ? 'beat-arrow--preview' : '',
+                  won ? 'beat-arrow--won' : '',
+                  won ? `beat-arrow--won-${winningEdge.role}` : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
@@ -164,11 +186,13 @@ export function MovePicker({
                 x2={b.x - ux * ARROW_INSET}
                 y2={b.y - uy * ARROW_INSET}
                 markerEnd={
-                  highlighted
-                    ? 'url(#rps-arrow-you)'
-                    : oppOff
-                      ? 'url(#rps-arrow-off)'
-                      : 'url(#rps-arrow)'
+                  won
+                    ? `url(#rps-arrow-${winningEdge.role})`
+                    : highlighted
+                      ? 'url(#rps-arrow-you)'
+                      : oppOff
+                        ? 'url(#rps-arrow-off)'
+                        : 'url(#rps-arrow)'
                 }
               />
             );

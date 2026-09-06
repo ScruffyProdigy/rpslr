@@ -203,15 +203,61 @@ describe('<Board> round reveal (JQ 3.1)', () => {
     expect(screen.getByRole('button', { name: /^Rock/ })).toBeDisabled();
   });
 
-  it('hands the board back to the picker after the hold', () => {
+  it('hands the board back to the picker after the hold and the outro', () => {
     vi.useFakeTimers();
     const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
     rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
     act(() => {
-      vi.advanceTimersByTime(2500);
+      vi.advanceTimersByTime(2700);
+    });
+    // Still the reveal's time: the card is dissolving over the lit arrow.
+    expect(container.querySelector('.reveal-card')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Rock/ })).toBeDisabled();
+    act(() => {
+      vi.advanceTimersByTime(700);
     });
     expect(container.querySelector('.reveal-card')).not.toBeInTheDocument();
+    expect(container.querySelector('.beat-arrow--won')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Rock/ })).toBeEnabled();
+  });
+
+  it('dissolves the card onto the arrow the round was won on', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    // Paper disproves Robot: nothing lit while the card is still up.
+    expect(container.querySelector('.beat-arrow--won')).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(2700);
+    });
+    const won = container.querySelector('.beat-arrow--won') as SVGLineElement;
+    expect(won).toHaveAttribute('data-from', 'paper');
+    expect(won).toHaveAttribute('data-to', 'robot');
+    expect(container.querySelector('.reveal-card--exiting')).toBeInTheDocument();
+  });
+
+  it('lights nothing on a drawn round', () => {
+    vi.useFakeTimers();
+    const drawn: RoundResult = {
+      round: 1,
+      outcome: 'draw',
+      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'rock' },
+    };
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, results: [drawn] })));
+    act(() => {
+      vi.advanceTimersByTime(2700);
+    });
+    expect(container.querySelector('.reveal-card--exiting')).toBeInTheDocument();
+    expect(container.querySelector('.beat-arrow--won')).not.toBeInTheDocument();
+  });
+
+  it('skipping ends the outro too', () => {
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    fireEvent.click(screen.getByRole('button', { name: /skip/i }));
+    expect(container.querySelector('.reveal-card')).not.toBeInTheDocument();
+    expect(container.querySelector('.beat-arrow--won')).not.toBeInTheDocument();
   });
 
   it('can be skipped by tapping', () => {
@@ -236,8 +282,12 @@ describe('<Board> round reveal (JQ 3.1)', () => {
     );
     expect(container.querySelector('.reveal-card')).toBeInTheDocument();
     expect(screen.queryByText(/You win the match/)).not.toBeInTheDocument();
+    // Two advances: the outro timer is only scheduled once the card's expires.
     act(() => {
-      vi.advanceTimersByTime(2500);
+      vi.advanceTimersByTime(2700);
+    });
+    act(() => {
+      vi.advanceTimersByTime(700);
     });
     expect(screen.getByText(/You win the match/)).toBeInTheDocument();
   });

@@ -263,8 +263,8 @@ button.ghost {
   height: 64px;
 }
 .player-avatar--sm {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border-width: 2px;
 }
 .player-avatar--xs {
@@ -314,7 +314,7 @@ button.ghost {
   font-size: 1.5rem;
 }
 .player-avatar--sm .player-avatar__initial {
-  font-size: 0.8rem;
+  font-size: 1rem;
 }
 .player-avatar--xs .player-avatar__initial {
   font-size: 0.62rem;
@@ -413,6 +413,40 @@ button.ghost {
   stroke-opacity: 0.3;
   stroke-dasharray: 5 5;
 }
+/* The round's deciding edge, lit as the reveal card dissolves off it. */
+/* The glow does the work the hue can't: --opp amber sits right next to the
+   --graph gold every other arrow is drawn in, so weight and a lit halo are
+   what separate the winning edge from the rest of the graph. */
+.beat-arrow--won {
+  stroke: var(--you);
+  stroke-opacity: 1;
+  stroke-width: 4.5;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--you) 75%, transparent));
+  animation: arrow-strike 600ms ease-out both;
+}
+.beat-arrow--won-opp {
+  stroke: var(--opp);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--opp) 85%, transparent));
+}
+.arrowhead--opp path {
+  fill: var(--opp);
+}
+@keyframes arrow-strike {
+  0% {
+    stroke-width: 2;
+    stroke-opacity: 0.7;
+  }
+  35% {
+    stroke-width: 6;
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-width: 4.5;
+    stroke-opacity: 0.95;
+  }
+}
+
 /* Preview emphasis wins over the faded state; the caption carries the rest. */
 .beat-arrow--preview {
   stroke: var(--you);
@@ -891,7 +925,7 @@ button.ghost {
 /* The pip that just filled gets one pulse, so a win registers without
    watching the number. */
 .win-pip--pulse {
-  animation: pip-pulse 620ms ease-out 1;
+  animation: pip-pulse 620ms ease-out 1150ms 1 backwards;
 }
 @keyframes pip-pulse {
   0% {
@@ -938,13 +972,54 @@ button.ghost {
 
 /* The showdown: both picks, the verb, the verdict. Wider than the picker's
    centre slot, and it takes the taps so it can be skipped from anywhere. */
+/* Nothing else on the board is actionable while this is up, so it takes the
+   room. The arrows stay visible around it and light up underneath on the way
+   out. Beats are staggered animation-delays off one shared start. */
 .picker-center--reveal {
-  width: min(64cqw, 236px);
+  width: min(88cqw, 330px);
   /* Nearly opaque: the arrows underneath must not compete with the verdict. */
   background: color-mix(in srgb, var(--card) 96%, transparent);
-  gap: 6px;
+  gap: 7px;
   pointer-events: auto;
-  animation: reveal-in 280ms ease-out both;
+  animation: reveal-in 220ms ease-out both;
+}
+/* The dissolve. Later than reveal-in, so it wins. */
+.reveal-card--exiting {
+  animation: reveal-out 250ms ease-in both;
+}
+.reveal-card__side {
+  display: flex;
+}
+.reveal-card__side--you {
+  animation: side-in-left 250ms ease-out 150ms both;
+}
+.reveal-card__side--opp {
+  animation: side-in-right 250ms ease-out 150ms both;
+}
+/* The clash: both picks fly in from their own player's side and meet. */
+.reveal-card__move--you {
+  animation: clash-from-left 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 400ms both;
+}
+.reveal-card__move--opp {
+  animation: clash-from-right 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 400ms both;
+}
+/* A drawn round has no winner to lean in — the picks bounce apart instead. */
+.reveal-card--draw .reveal-card__move--you {
+  animation-name: clash-bounce-left;
+}
+.reveal-card--draw .reveal-card__move--opp {
+  animation-name: clash-bounce-right;
+}
+.reveal-card__impact {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--graph);
+  opacity: 0;
+  animation: impact-ring 420ms ease-out 700ms both;
+}
+.reveal-card--draw .reveal-card__impact {
+  border-color: var(--muted);
 }
 .reveal-card--win {
   border-color: color-mix(in srgb, var(--accent-2) 55%, transparent);
@@ -959,7 +1034,7 @@ button.ghost {
   gap: 5px;
 }
 .reveal-card__move {
-  font-size: clamp(1.1rem, 5.6cqw, 1.5rem);
+  font-size: clamp(1.6rem, 8cqw, 2.4rem);
   line-height: 1;
   animation: pick-pop 300ms ease-out both;
 }
@@ -968,14 +1043,16 @@ button.ghost {
   font-size: clamp(0.6rem, 3cqw, 0.75rem);
 }
 .reveal-card__verb {
+  animation: rise-in 280ms ease-out 820ms both;
   margin: 0;
-  font-size: clamp(0.62rem, 3.1cqw, 0.76rem);
+  font-size: clamp(0.72rem, 3.4cqw, 0.88rem);
   line-height: 1.3;
   color: var(--muted);
 }
 .reveal-card__verdict {
+  animation: verdict-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) 1150ms both;
   margin: 0;
-  font-size: clamp(0.76rem, 3.9cqw, 0.95rem);
+  font-size: clamp(0.95rem, 4.8cqw, 1.25rem);
   font-weight: 700;
   line-height: 1.25;
 }
@@ -1011,12 +1088,122 @@ button.ghost {
     transform: translate(-50%, -50%) scale(1);
   }
 }
-@keyframes pick-pop {
+@keyframes reveal-out {
   from {
-    opacity: 0;
-    transform: scale(0.4);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
   to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+@keyframes side-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes side-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes clash-from-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px) scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(5px) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes clash-from-right {
+  0% {
+    opacity: 0;
+    transform: translateX(34px) scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-5px) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes clash-bounce-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-4px) scale(1);
+  }
+}
+@keyframes clash-bounce-right {
+  0% {
+    opacity: 0;
+    transform: translateX(34px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(4px) scale(1);
+  }
+}
+@keyframes impact-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  40% {
+    opacity: 0.9;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes verdict-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -1101,9 +1288,18 @@ ul.history-strip {
 
 @media (prefers-reduced-motion: reduce) {
   .picker-center--reveal,
+  .reveal-card--exiting,
+  .reveal-card__side,
   .reveal-card__move,
+  .reveal-card__verb,
+  .reveal-card__verdict,
+  .beat-arrow--won,
   .picker-center__waiting,
   .win-pip--pulse {
     animation: none;
+  }
+  /* The ring is pure decoration — with no motion there is nothing to show. */
+  .reveal-card__impact {
+    display: none;
   }
 }

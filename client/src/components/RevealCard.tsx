@@ -1,4 +1,5 @@
 import type { RoundResult } from '../api';
+import type { RevealPhase } from '../lib/useRoundReveal';
 import type { Identity } from '../lib/seatProfile';
 import { MOVE_META, describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -10,6 +11,7 @@ import { PlayerAvatar } from './PlayerAvatar';
  */
 export function RevealCard({
   result,
+  phase,
   mySeatKey,
   myPlayerId,
   you,
@@ -17,6 +19,8 @@ export function RevealCard({
   onSkip,
 }: {
   result: RoundResult;
+  /** 'outro' dissolves the card onto the winning arrow underneath. */
+  phase: RevealPhase;
   mySeatKey: string;
   myPlayerId: string;
   you: Identity;
@@ -34,37 +38,47 @@ export function RevealCard({
 
   return (
     <div
-      className={`picker-center picker-center--reveal reveal-card reveal-card--${verdict}`}
+      className={[
+        'picker-center',
+        'picker-center--reveal',
+        'reveal-card',
+        `reveal-card--${verdict}`,
+        phase === 'outro' ? 'reveal-card--exiting' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       role="status"
     >
       <div className="reveal-card__picks">
-        <PlayerAvatar
-          profile={you.profile}
-          displayName={you.name}
-          placeholder={you.placeholder}
-          role="you"
-          size="sm"
-        />
+        <span className="reveal-card__side reveal-card__side--you">
+          <PlayerAvatar
+            profile={you.profile}
+            displayName={you.name}
+            placeholder={you.placeholder}
+            role="you"
+            size="sm"
+          />
+        </span>
         {myMove && (
-          <span className="reveal-card__move" aria-hidden="true">
+          <span className="reveal-card__move reveal-card__move--you" aria-hidden="true">
             {MOVE_META[myMove].emoji}
           </span>
         )}
-        <span className="reveal-card__vs" aria-hidden="true">
-          ⟷
-        </span>
+        <span className="reveal-card__impact" aria-hidden="true" />
         {oppMove && (
-          <span className="reveal-card__move" aria-hidden="true">
+          <span className="reveal-card__move reveal-card__move--opp" aria-hidden="true">
             {MOVE_META[oppMove].emoji}
           </span>
         )}
-        <PlayerAvatar
-          profile={opponent.profile}
-          displayName={opponent.name}
-          placeholder={opponent.placeholder}
-          role="opp"
-          size="sm"
-        />
+        <span className="reveal-card__side reveal-card__side--opp">
+          <PlayerAvatar
+            profile={opponent.profile}
+            displayName={opponent.name}
+            placeholder={opponent.placeholder}
+            role="opp"
+            size="sm"
+          />
+        </span>
       </div>
       {myMove && oppMove && (
         <p className="reveal-card__verb">{describeRoundMatchup(myMove, oppMove)}</p>

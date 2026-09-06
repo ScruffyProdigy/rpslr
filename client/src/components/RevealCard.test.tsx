@@ -17,11 +17,12 @@ function result(over: Partial<RoundResult> = {}): RoundResult {
   };
 }
 
-function renderCard(r: RoundResult = result()) {
+function renderCard(r: RoundResult = result(), phase: 'card' | 'outro' = 'card') {
   const onSkip = vi.fn();
   const utils = render(
     <RevealCard
       result={r}
+      phase={phase}
       mySeatKey="a"
       myPlayerId={MY_PLAYER}
       you={YOU}
@@ -59,6 +60,17 @@ describe('<RevealCard> (JQ 3.1)', () => {
     renderCard(result({ outcome: 'draw', moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'rock' } }));
     expect(screen.getByText('Draw')).toBeInTheDocument();
     expect(screen.getByText(/same pick, no winner/)).toBeInTheDocument();
+  });
+
+  // The outro dissolves the card so the lit arrow underneath can be seen.
+  it('marks itself as exiting during the outro', () => {
+    const { container } = renderCard(result(), 'outro');
+    expect(container.querySelector('.reveal-card--exiting')).toBeInTheDocument();
+  });
+
+  it('is not exiting while the card still holds', () => {
+    const { container } = renderCard();
+    expect(container.querySelector('.reveal-card--exiting')).not.toBeInTheDocument();
   });
 
   it('announces itself and offers an explicit skip', () => {

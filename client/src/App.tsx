@@ -15,7 +15,7 @@ import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
 import { useRoundReveal } from './lib/useRoundReveal';
-import { winsNeeded } from './moves';
+import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -443,7 +443,7 @@ export function Board({
   myChosenMove: Move | null;
   onPlay: (move: Move) => void;
 }) {
-  const { revealing, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
+  const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
 
   if (!state) return <p>Loading match…</p>;
 
@@ -471,8 +471,15 @@ export function Board({
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
       : null;
   // The deciding round plays out before the match-end banner takes the screen.
-  const revealingNow = revealing != null;
+  const revealingNow = reveal != null;
   const winner = state.matchWinnerSeatKey == null ? null : iWon ? you : opponent;
+  // As the card dissolves, the graph asserts the same fact: the edge the round
+  // was won on lights up underneath it. A drawn round has no edge.
+  const revealPicks = reveal ? opponentMoveFromResult(reveal.result.moves, myPlayerId) : null;
+  const winningEdge =
+    reveal?.phase === 'outro' && revealPicks?.myMove && revealPicks.oppMove
+      ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove)
+      : null;
 
   return (
     <div className="board">
@@ -496,7 +503,7 @@ export function Board({
         mySeatKey={mySeatKey}
         submittedPlayerIds={submitted}
         bestOf={match.bestOf}
-        pulseSeatKey={revealing && revealing.outcome !== 'draw' ? revealing.outcome : null}
+        pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
       />
 
       {!allSeated && !finished && !revealingNow && (
@@ -544,10 +551,12 @@ export function Board({
             round={match.currentRound}
             myLastMove={myLastMove}
             onPlay={onPlay}
+            winningEdge={winningEdge}
             centerSlot={
-              revealing ? (
+              reveal ? (
                 <RevealCard
-                  result={revealing}
+                  result={reveal.result}
+                  phase={reveal.phase}
                   mySeatKey={mySeatKey}
                   myPlayerId={myPlayerId}
                   you={you}
