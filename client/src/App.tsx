@@ -86,19 +86,27 @@ export default function App() {
             <Wordmark />
           </h1>
           <div className="topbar__actions">
+            {/* Back to Lobby comes first: its ← used to sit directly right of
+                the ? and point at it, so the arrow read as that button's
+                label. The rules button is last, and says what it does. */}
+            {lobbyReturnUrl && (
+              <a className="lobby-link" href={lobbyReturnUrl}>
+                ← Back to Lobby
+              </a>
+            )}
             <button
               type="button"
               className="rules-btn"
               aria-label="How to play"
               onClick={() => rules.setOpen(true)}
             >
-              ?
+              <span className="rules-btn__mark" aria-hidden="true">
+                ?
+              </span>
+              <span className="rules-btn__label" aria-hidden="true">
+                How to play
+              </span>
             </button>
-            {lobbyReturnUrl && (
-              <a className="lobby-link" href={lobbyReturnUrl}>
-                ← Back to Lobby
-              </a>
-            )}
           </div>
         </header>
       )}

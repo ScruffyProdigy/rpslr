@@ -1329,23 +1329,55 @@ ul.history-strip {
   gap: 10px;
 }
 
-/* Small, quiet, and always there: the rules are one tap away for the whole
-   match, not just during the wait before it. */
+/* Always there: the rules are one tap away for the whole match, not just
+   during the wait before it. It carries its own label wherever there's room —
+   a bare ? is a weak affordance, and it used to sit just left of "← Back to
+   Lobby", close enough that the arrow read as the ?'s label. */
 .rules-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  gap: 6px;
   height: 34px;
-  padding: 0;
-  border-radius: 50%;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid #3d4458;
   background: #212534;
   color: var(--muted);
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.85rem;
+  font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+}
+.rules-btn__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+/* Below this the label stops fitting beside the wordmark and the lobby link,
+   so the button falls back to the circular ? on its own. */
+@media (max-width: 359px) {
+  .rules-btn {
+    width: 34px;
+    padding: 0;
+    border-radius: 50%;
+  }
+  .rules-btn__mark {
+    width: auto;
+    height: auto;
+    border: none;
+    font-size: 1rem;
+  }
+  .rules-btn__label {
+    display: none;
+  }
 }
 .rules-btn:hover,
 .rules-btn:focus-visible {
