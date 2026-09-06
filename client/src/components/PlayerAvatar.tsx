@@ -20,6 +20,7 @@ export function PlayerAvatar({
   placeholder = false,
   dimmed = false,
   ready = false,
+  winner = false,
 }: {
   profile: LobbyPlayerProfile | null;
   displayName: string;
@@ -29,6 +30,8 @@ export function PlayerAvatar({
   placeholder?: boolean;
   dimmed?: boolean;
   ready?: boolean;
+  /** Took the match — a gold ring and a trophy, over the role colour. */
+  winner?: boolean;
 }) {
   const url = profile?.avatarUrl?.trim() || null;
   // Lobby avatars come from three sources (starter icon, spirit animal, guest
@@ -46,6 +49,7 @@ export function PlayerAvatar({
         role ? `player-avatar--${role}` : '',
         dimmed ? 'player-avatar--dimmed' : '',
         ready ? 'player-avatar--ready' : '',
+        winner ? 'player-avatar--winner' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -57,6 +61,7 @@ export function PlayerAvatar({
         <span className="player-avatar__initial">{initial}</span>
       )}
       {ready && <span className="player-avatar__ready-dot" title="Locked in" />}
+      {winner && <span className="player-avatar__trophy">🏆</span>}
     </div>
   );
 }
