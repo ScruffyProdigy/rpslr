@@ -106,3 +106,22 @@ describe('the board fits a phone (JQ-108)', () => {
     expect(boardWidth(1400)).toBe(380);
   });
 });
+
+
+describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
+  it('draws the button with a dashed border', () => {
+    // The same "this can't happen" language the faded opponent arrows use.
+    expect(declaration('.move-btn--cooldown', 'border-style')).toBe('dashed');
+  });
+
+  it('takes the colour out of the glyph rather than only dimming it', () => {
+    const filter = declaration('.move-btn--cooldown .move-btn__emoji', 'filter');
+    expect(filter).toContain('grayscale');
+  });
+
+  it('keeps the label readable rather than fading it out', () => {
+    // Phase 2 rejected the old 28% opacity for failing contrast; the cooldown
+    // state must stay legible, so its colour comes from the muted token.
+    expect(declaration('.move-btn--cooldown', 'color')).toBe('var(--muted)');
+  });
+});

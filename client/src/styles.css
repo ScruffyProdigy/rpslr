@@ -520,13 +520,20 @@ button.ghost {
   opacity: 1;
   cursor: default;
 }
+/* Unavailable, and it has to read that way at a glance. The dash is the same
+   "this can't happen" language the faded opponent arrows already use, and
+   taking the colour out of the glyph does more work than dimming it: colour is
+   the loudest channel on the button. Both are non-colour, non-opacity cues, so
+   the state survives a contrast or colour-blindness check on its own. */
 .move-btn--cooldown {
-  background: #14161e;
-  border-color: #2b3040;
+  background: #101219;
+  border-color: #333a4c;
+  border-style: dashed;
   color: var(--muted);
 }
 .move-btn--cooldown .move-btn__emoji {
-  opacity: 0.6;
+  opacity: 0.75;
+  filter: grayscale(1);
 }
 /* Preview: the move you are considering, plus the two it beats. */
 .move-btn--preview {
