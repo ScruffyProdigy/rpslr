@@ -9,6 +9,7 @@ import {
   beatsOf,
   opponentCooldownPhrase,
   threatsTo,
+  winningEdgeOf,
   winsNeeded,
 } from './moves';
 
@@ -111,5 +112,34 @@ describe('opponentCooldownPhrase', () => {
   it('names the move and the wait', () => {
     expect(opponentCooldownPhrase('robot', 2)).toBe("Opponent can't play Robot for 2 turns");
     expect(opponentCooldownPhrase('lizard', 1)).toBe("Opponent can't play Lizard for 1 turn");
+  });
+});
+
+
+describe('winningEdgeOf', () => {
+  it('points from the winning move to the losing one', () => {
+    expect(winningEdgeOf('rock', 'scissors')).toEqual({ from: 'rock', to: 'scissors', role: 'you' });
+  });
+
+  // The edge is the graph's, not the viewer's — only `role` flips.
+  it('marks the edge as the opponent’s when they win', () => {
+    expect(winningEdgeOf('scissors', 'rock')).toEqual({ from: 'rock', to: 'scissors', role: 'opp' });
+  });
+
+  it('has no edge for a mirror match', () => {
+    expect(winningEdgeOf('lizard', 'lizard')).toBeNull();
+  });
+
+  it('agrees with beatsOf for every ordered pair', () => {
+    for (const a of ALL_MOVES) {
+      for (const b of ALL_MOVES) {
+        const edge = winningEdgeOf(a, b);
+        if (a === b) {
+          expect(edge).toBeNull();
+        } else {
+          expect(beatsOf(edge!.from)).toContain(edge!.to);
+        }
+      }
+    }
   });
 });

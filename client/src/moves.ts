@@ -77,6 +77,24 @@ export function threatsTo(
   return { all, live, safe: live.length === 0 };
 }
 
+/** The pentagon edge a round was won on, and whose win it was. */
+export interface WinningEdge {
+  from: Move;
+  to: Move;
+  role: 'you' | 'opp';
+}
+
+/**
+ * The single arrow that decided a round, so the reveal can light it on the
+ * graph. The edge belongs to the graph — `from` always beats `to` — and only
+ * `role` depends on who played it. A mirror match has no edge.
+ */
+export function winningEdgeOf(myMove: Move, oppMove: Move): WinningEdge | null {
+  if (beatsOf(myMove).includes(oppMove)) return { from: myMove, to: oppMove, role: 'you' };
+  if (beatsOf(oppMove).includes(myMove)) return { from: oppMove, to: myMove, role: 'opp' };
+  return null;
+}
+
 /** Spoken form of an opponent cooldown, for the preview caption. */
 export function opponentCooldownPhrase(move: Move, turns: number): string {
   return `Opponent can't play ${MOVE_META[move].label} for ${turns} turn${turns === 1 ? '' : 's'}`;

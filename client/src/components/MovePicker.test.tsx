@@ -16,6 +16,7 @@ function renderPicker(
     round?: number;
     myLastMove?: Move | null;
     onPlay?: (m: Move) => void;
+    winningEdge?: { from: Move; to: Move; role: 'you' | 'opp' } | null;
   } = {},
 ) {
   const onPlay = over.onPlay ?? vi.fn();
@@ -29,6 +30,7 @@ function renderPicker(
       round={over.round ?? 3}
       myLastMove={over.myLastMove ?? null}
       onPlay={onPlay}
+      winningEdge={over.winningEdge ?? null}
     />,
   );
   return { ...utils, onPlay };
@@ -258,5 +260,63 @@ describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
     expect(() => renderPicker({ round: 1 })).not.toThrow();
     expect(screen.getByText(/Tap to preview/)).toBeInTheDocument();
     spy.mockRestore();
+  });
+});
+
+
+describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
+  it('lights only the arrow the round was won on', () => {
+    const { container } = renderPicker({
+      winningEdge: { from: 'rock', to: 'scissors', role: 'you' },
+    });
+    expect(arrow(container, 'rock', 'scissors')).toHaveClass('beat-arrow--won');
+    expect(container.querySelectorAll('.beat-arrow--won')).toHaveLength(1);
+  });
+
+  it('carries the winner’s role so the arrow takes their colour', () => {
+    const { container } = renderPicker({
+      winningEdge: { from: 'robot', to: 'rock', role: 'opp' },
+    });
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--won-opp');
+  });
+
+  // Phase 2 fades arrows leaving an opponent-cooldown node; the win must
+  // still read as a win when it came from one.
+  it('outranks the opponent-cooldown fade', () => {
+    const { container } = renderPicker({
+      oppDelays: { robot: 2 },
+      winningEdge: { from: 'robot', to: 'rock', role: 'opp' },
+    });
+    const won = arrow(container, 'robot', 'rock');
+    expect(won).toHaveClass('beat-arrow--won');
+    expect(won).not.toHaveClass('beat-arrow--opp-off');
+  });
+
+  it('marks nothing when the round was a draw', () => {
+    const { container } = renderPicker({ winningEdge: null });
+    expect(container.querySelectorAll('.beat-arrow--won')).toHaveLength(0);
+    expect(container.querySelector('.move-arrows--strike')).not.toBeInTheDocument();
+  });
+
+  // The rest of the graph steps back for the beat — but only for that beat.
+  it('fades the rest of the graph only while the winning edge is lit', () => {
+    const { container, rerender } = renderPicker({
+      winningEdge: { from: 'rock', to: 'scissors', role: 'you' },
+    });
+    expect(container.querySelector('.move-arrows--strike')).toBeInTheDocument();
+    rerender(
+      <MovePicker
+        myDelays={{}}
+        oppDelays={{}}
+        myChosenMove={null}
+        lockedIn={false}
+        disabled={false}
+        round={3}
+        myLastMove={null}
+        onPlay={() => {}}
+        winningEdge={null}
+      />,
+    );
+    expect(container.querySelector('.move-arrows--strike')).not.toBeInTheDocument();
   });
 });

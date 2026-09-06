@@ -11,8 +11,12 @@
   --you: var(--accent);
   --player: var(--you);
   --opp: #f5a524;
-  /* "Beats" arrows on the pentagon. */
-  --graph: #f5c518;
+  /* The pentagon's "beats" arrows. Deliberately neutral: the graph is
+     structure, and colour on this board means role or state — never
+     structure. Amber arrows would read as the opponent's. */
+  --graph: #7c8699;
+  /* The gold the arrows used to wear, kept for the one thing it means. */
+  --trophy: #f5c518;
   color-scheme: dark;
 }
 
@@ -262,9 +266,29 @@ button.ghost {
   width: 64px;
   height: 64px;
 }
+.player-avatar--sm {
+  width: 36px;
+  height: 36px;
+  border-width: 2px;
+}
+.player-avatar--xs {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+}
 .player-avatar--you {
-  border-color: var(--accent);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: var(--you);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--you) 35%, transparent);
+}
+.player-avatar--opp {
+  border-color: var(--opp);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--opp) 28%, transparent);
+}
+.player-avatar--sm.player-avatar--you,
+.player-avatar--sm.player-avatar--opp,
+.player-avatar--xs.player-avatar--you,
+.player-avatar--xs.player-avatar--opp {
+  box-shadow: none;
 }
 .player-avatar--dimmed {
   opacity: 0.55;
@@ -289,6 +313,15 @@ button.ghost {
   font-size: 2.25rem;
   font-weight: 700;
   color: var(--muted);
+}
+.player-avatar--md .player-avatar__initial {
+  font-size: 1.5rem;
+}
+.player-avatar--sm .player-avatar__initial {
+  font-size: 1rem;
+}
+.player-avatar--xs .player-avatar__initial {
+  font-size: 0.62rem;
 }
 .player-avatar--ready .player-avatar__ready-dot {
   position: absolute;
@@ -375,7 +408,15 @@ button.ghost {
   stroke: var(--graph);
   stroke-width: 2;
   stroke-opacity: 0.7;
-  transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease;
+  transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease,
+    opacity 0.25s ease;
+}
+/* Only while the reveal's outro lights the deciding edge. The graph is never
+   faded while a choice is live — during the outro nothing is decidable, so
+   the winning arrow gets the board to itself for a beat.
+   `opacity`, not `stroke-opacity`, so the arrowheads fade with their lines. */
+.move-arrows--strike .beat-arrow:not(.beat-arrow--won) {
+  opacity: 0.18;
 }
 /* An attack the opponent can't make this round. A node with no solid incoming
    arrow is therefore a move that cannot lose. */
@@ -384,6 +425,37 @@ button.ghost {
   stroke-opacity: 0.3;
   stroke-dasharray: 5 5;
 }
+/* The round's deciding edge, lit as the reveal card dissolves off it. */
+/* The glow does the work the hue can't: --opp amber sits right next to the
+   --graph gold every other arrow is drawn in, so weight and a lit halo are
+   what separate the winning edge from the rest of the graph. */
+.beat-arrow--won {
+  stroke: var(--you);
+  stroke-opacity: 1;
+  stroke-width: 4.5;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--you) 75%, transparent));
+  animation: arrow-strike 600ms ease-out both;
+}
+.beat-arrow--won-opp {
+  stroke: var(--opp);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--opp) 85%, transparent));
+}
+@keyframes arrow-strike {
+  0% {
+    stroke-width: 2;
+    stroke-opacity: 0.7;
+  }
+  35% {
+    stroke-width: 6;
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-width: 4.5;
+    stroke-opacity: 0.95;
+  }
+}
+
 /* Preview emphasis wins over the faded state; the caption carries the rest. */
 .beat-arrow--preview {
   stroke: var(--you);
@@ -396,6 +468,9 @@ button.ghost {
 }
 .arrowhead--you path {
   fill: var(--you);
+}
+.arrowhead--opp path {
+  fill: var(--opp);
 }
 .arrowhead--off path {
   fill: var(--opp);
@@ -614,22 +689,6 @@ button.ghost {
   padding: 4px 6px;
   font-size: 0.8rem;
   line-height: 1;
-}
-
-.choice-locked {
-  width: 100%;
-  text-align: center;
-  margin: 10px 0 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: #0f2433;
-  border: 1px solid #1d4e6b;
-  color: #8fd0f5;
-  font-size: 0.9rem;
-}
-.choice-locked__pick {
-  font-weight: 700;
-  color: var(--you);
 }
 
 .rule-note {
@@ -870,5 +929,389 @@ button.ghost {
   }
   .move-btn:hover:not(:disabled) {
     transform: translate(-50%, -50%);
+  }
+}
+
+/* ---- Phase 3: round reveal, waiting state, history strip ----------------- */
+
+/* The pip that just filled gets one pulse, so a win registers without
+   watching the number. */
+.win-pip--pulse {
+  animation: pip-pulse 620ms ease-out 1150ms 1 backwards;
+}
+@keyframes pip-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.45);
+  }
+  45% {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35);
+  }
+}
+
+/* After lock-in the centre carries your pick and the wait. */
+.picker-center--waiting {
+  /* Wider than the idle slot so "Waiting for opponent…" holds one line. */
+  width: min(48cqw, 176px);
+  border-color: color-mix(in srgb, var(--you) 45%, transparent);
+  background: color-mix(in srgb, var(--you) 14%, var(--card));
+}
+.picker-center__pick {
+  font-size: clamp(0.72rem, 3.6cqw, 0.9rem);
+  font-weight: 700;
+  color: var(--you);
+}
+.picker-center__waiting {
+  margin: 0;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  color: var(--muted);
+  animation: waiting-pulse 1.8s ease-in-out infinite;
+}
+@keyframes waiting-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The showdown: both picks, the verb, the verdict. Wider than the picker's
+   centre slot, and it takes the taps so it can be skipped from anywhere. */
+/* Nothing else on the board is actionable while this is up, so it takes the
+   room. The arrows stay visible around it and light up underneath on the way
+   out. Beats are staggered animation-delays off one shared start. */
+.picker-center--reveal {
+  width: min(88cqw, 330px);
+  /* Nearly opaque: the arrows underneath must not compete with the verdict. */
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  gap: 7px;
+  pointer-events: auto;
+  animation: reveal-in 220ms ease-out both;
+}
+/* The dissolve. Later than reveal-in, so it wins. */
+.reveal-card--exiting {
+  animation: reveal-out 250ms ease-in both;
+}
+.reveal-card__side {
+  display: flex;
+}
+.reveal-card__side--you {
+  animation: side-in-left 250ms ease-out 150ms both;
+}
+.reveal-card__side--opp {
+  animation: side-in-right 250ms ease-out 150ms both;
+}
+/* The clash: both picks fly in from their own player's side and meet. */
+.reveal-card__move--you {
+  animation: clash-from-left 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 400ms both;
+}
+.reveal-card__move--opp {
+  animation: clash-from-right 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 400ms both;
+}
+/* A drawn round has no winner to lean in — the picks bounce apart instead. */
+.reveal-card--draw .reveal-card__move--you {
+  animation-name: clash-bounce-left;
+}
+.reveal-card--draw .reveal-card__move--opp {
+  animation-name: clash-bounce-right;
+}
+.reveal-card__impact {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  opacity: 0;
+  animation: impact-ring 420ms ease-out 700ms both;
+}
+.reveal-card--draw .reveal-card__impact {
+  border-color: var(--muted);
+}
+.reveal-card--win {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, transparent);
+}
+.reveal-card--loss {
+  border-color: color-mix(in srgb, var(--opp) 55%, transparent);
+}
+.reveal-card__picks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.reveal-card__move {
+  font-size: clamp(1.6rem, 8cqw, 2.4rem);
+  line-height: 1;
+  animation: pick-pop 300ms ease-out both;
+}
+.reveal-card__vs {
+  color: var(--muted);
+  font-size: clamp(0.6rem, 3cqw, 0.75rem);
+}
+.reveal-card__verb {
+  animation: rise-in 280ms ease-out 820ms both;
+  margin: 0;
+  font-size: clamp(0.72rem, 3.4cqw, 0.88rem);
+  line-height: 1.3;
+  color: var(--muted);
+}
+.reveal-card__verdict {
+  animation: verdict-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) 1150ms both;
+  margin: 0;
+  font-size: clamp(0.95rem, 4.8cqw, 1.25rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.reveal-card--win .reveal-card__verdict {
+  color: var(--accent-2);
+}
+.reveal-card--loss .reveal-card__verdict {
+  color: var(--opp);
+}
+.reveal-card--draw .reveal-card__verdict {
+  color: var(--muted);
+}
+/* Tap anywhere on the card to move on; a real button so it is reachable and
+   announced rather than being a click-handler on a div. */
+.reveal-card__skip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes reveal-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+@keyframes side-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes side-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes clash-from-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px) scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(5px) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes clash-from-right {
+  0% {
+    opacity: 0;
+    transform: translateX(34px) scale(0.6);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-5px) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes clash-bounce-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-34px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-4px) scale(1);
+  }
+}
+@keyframes clash-bounce-right {
+  0% {
+    opacity: 0;
+    transform: translateX(34px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(-4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(4px) scale(1);
+  }
+}
+@keyframes impact-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  40% {
+    opacity: 0.9;
+    transform: scale(1.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes verdict-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Match end: the winner's face, then the verdict. Phase 4 rebuilds the rest
+   of this screen; the avatar is the part Phase 3 owes it. */
+.match-results__winner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.match-results__winner .player-avatar {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trophy) 55%, transparent);
+}
+.match-results__winner-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* Rounds so far, as chips. The full per-round detail moved into a disclosure. */
+ul.history-strip {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.history-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #11131b;
+  border: 1px solid #262a38;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.history-chip[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--you) 55%, transparent);
+  background: color-mix(in srgb, var(--you) 12%, #11131b);
+}
+.history-chip--win {
+  border-color: color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+.history-chip--loss {
+  border-color: color-mix(in srgb, var(--opp) 35%, transparent);
+}
+.history-chip__round {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.history-chip__picks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.history-chip__vs {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.history-strip__detail {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.history-full {
+  margin-top: 12px;
+}
+.history-full summary {
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.history-full ul {
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker-center--reveal,
+  .reveal-card--exiting,
+  .reveal-card__side,
+  .reveal-card__move,
+  .reveal-card__verb,
+  .reveal-card__verdict,
+  .beat-arrow--won,
+  .picker-center__waiting,
+  .win-pip--pulse {
+    animation: none;
+  }
+  /* The ring is pure decoration — with no motion there is nothing to show. */
+  .reveal-card__impact {
+    display: none;
   }
 }
