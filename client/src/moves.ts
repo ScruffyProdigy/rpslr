@@ -25,6 +25,11 @@ export function winsNeeded(bestOf: number): number {
   return Math.floor(bestOf / 2) + 1;
 }
 
+/** Spoken form of a cooldown, e.g. "on cooldown, 2 turns". */
+export function cooldownPhrase(turns: number): string {
+  return `on cooldown, ${turns} turn${turns === 1 ? '' : 's'}`;
+}
+
 /** Winner-over-loser phrasing from the official RPSLR rules copy. */
 const BEAT_VERBS: Partial<Record<Move, Partial<Record<Move, string>>>> = {
   rock: { scissors: 'crushes', lizard: 'crushes' },

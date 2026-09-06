@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getEnv, getLobbyLink, getLobbyUserFromUrl, getWebSocketUrl } from './env';
+import { getEnv, getLobbyLink, getLobbyUserFromUrl, getWebSocketUrl, isDebugMode } from './env';
 
 afterEach(() => {
   delete window.env;
@@ -85,5 +85,19 @@ describe('getLobbyLink', () => {
       seat: null,
       lobbyUser: null,
     });
+  });
+});
+
+describe('isDebugMode', () => {
+  it('is on only for debug=1', () => {
+    expect(isDebugMode('?debug=1')).toBe(true);
+    expect(isDebugMode('?match=abc&debug=1')).toBe(true);
+  });
+
+  it('is off without the flag or with any other value', () => {
+    expect(isDebugMode('')).toBe(false);
+    expect(isDebugMode('?match=abc')).toBe(false);
+    expect(isDebugMode('?debug=0')).toBe(false);
+    expect(isDebugMode('?debug')).toBe(false);
   });
 });
