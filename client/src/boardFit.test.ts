@@ -21,7 +21,9 @@ const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 function declaration(selector: string, prop: string): string {
   const rule = new RegExp(`(?:^|\\n)${selector.replace(/\./g, '\\.')}\\s*\\{([^}]*)\\}`).exec(css);
   if (!rule) throw new Error(`styles.css has no rule for ${selector}`);
-  const found = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(rule[1]);
+  // Strip comments first, or a commented declaration reads as missing.
+  const body = rule[1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const found = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`).exec(body);
   if (!found) throw new Error(`${selector} no longer declares ${prop}`);
   return found[1].trim();
 }
@@ -123,5 +125,48 @@ describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
     // Phase 2 rejected the old 28% opacity for failing contrast; the cooldown
     // state must stay legible, so its colour comes from the muted token.
     expect(declaration('.move-btn--cooldown', 'color')).toBe('var(--muted)');
+  });
+});
+
+
+describe('hover never displaces a move button (regression)', () => {
+  // The move buttons are positioned with translate(-50%, -50%). A hover rule
+  // that sets `transform` without re-stating it flings the button half its own
+  // size out from under the cursor, hover ends, it snaps back — jitter.
+  it('excludes move buttons from the global hover lift', () => {
+    expect(css).toMatch(/button:hover:not\(:disabled\):not\(\.move-btn\)/);
+  });
+
+  it('centres move buttons with `translate`, not `transform`', () => {
+    // The two are separate properties that compose, so a hover or keyframe
+    // touching `transform` can no longer drop the centring.
+    expect(declaration('.move-btn', 'translate')).toBe('-50% -50%');
+    const rule = /(?:^|\n)\.move-btn\s*\{([^}]*)\}/.exec(css);
+    expect(rule?.[1]).not.toMatch(/(?:^|;)\s*transform:/);
+  });
+
+  it('grows the button on hover instead of moving it', () => {
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      const compound = selector.replace(/:not\([^)]*\)/g, '').trim().split(/\s+/).pop() ?? '';
+      if (!compound.startsWith('.move-btn') || !compound.includes(':hover')) continue;
+      expect(body).not.toMatch(/(?:^|;)\s*transform:/);
+    }
+  });
+
+  it('grows whatever you are inspecting, playable or not', () => {
+    // Size says "this is the move the centre is describing". Whether you can
+    // play it is carried by the ring colour and the presence of Lock in.
+    expect(declaration('.move-btn--preview,\n.move-btn--selected', 'scale')).toBe('1.07');
+    const muted = /\.move-btn--cooldown\.move-btn--preview\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(muted).not.toMatch(/(?:^|;)\s*scale:/);
+    expect(muted).toContain('border-color');
+  });
+
+  // :hover sticks after a tap on touch, leaving the control displaced.
+  it('puts the hover affordances behind a hover media query', () => {
+    const lift = css.indexOf('.move-btn:hover:not(:disabled):not([aria-disabled=');
+    const guard = css.lastIndexOf('@media (hover: hover)', lift);
+    expect(guard).toBeGreaterThan(-1);
+    expect(css.slice(guard, lift)).not.toContain('}');
   });
 });

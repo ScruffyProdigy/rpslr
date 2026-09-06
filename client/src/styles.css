@@ -166,8 +166,14 @@ button {
   color: white;
   transition: transform 0.05s ease, opacity 0.15s ease;
 }
-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+/* Hover lift only where hovering is real. On touch, :hover sticks after a tap
+   and leaves the control displaced. Move buttons are excluded outright: they
+   are positioned with translate(-50%, -50%), and this rule's higher
+   specificity would replace that and fling them half their own size. */
+@media (hover: hover) {
+  button:hover:not(:disabled):not(.move-btn) {
+    transform: translateY(-1px);
+  }
 }
 button:disabled {
   opacity: 0.5;
@@ -479,7 +485,11 @@ button.ghost {
 
 .move-btn {
   position: absolute;
-  transform: translate(-50%, -50%);
+  /* Centred with the standalone `translate` property, not `transform`. The two
+     compose rather than compete, so no hover or animation rule can drop the
+     centring and fling the button out from under the cursor. */
+  translate: -50% -50%;
+  transition: scale 0.12s ease, border-color 0.12s ease;
   width: min(27.4cqw, 104px);
   height: min(27.4cqw, 104px);
   min-width: 0;
@@ -510,9 +520,11 @@ button.ghost {
   font-size: clamp(0.66rem, 3.3cqw, 0.76rem);
   font-weight: 600;
 }
-.move-btn:hover:not(:disabled):not([aria-disabled='true']) {
-  transform: translate(-50%, -50%) scale(1.04);
-  border-color: var(--you);
+@media (hover: hover) {
+  .move-btn:hover:not(:disabled):not([aria-disabled='true']) {
+    scale: 1.04;
+    border-color: var(--you);
+  }
 }
 /* The global disabled fade would bury the ⏳ pill; cooldown is shown by the
    muted surface and the pill instead, which stay above 3:1. */
@@ -540,8 +552,15 @@ button.ghost {
   border-color: var(--you);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--you) 22%, transparent);
 }
-/* Inspecting an unavailable move is not the same as choosing one, so its ring
-   is muted rather than in the player's colour. */
+/* Growth means "this is what I am inspecting", whether or not you can play it.
+   On a phone there is no hover, so size is the only channel that says which
+   move the centre is talking about. Playability is a separate channel: the
+   ring's colour, and whether the centre offers Lock in. */
+.move-btn--preview,
+.move-btn--selected {
+  scale: 1.07;
+}
+/* Inspecting something you cannot play: same growth, muted ring. */
 .move-btn--cooldown.move-btn--preview {
   border-color: #6c7488;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 16%, transparent);
@@ -961,7 +980,7 @@ button.ghost {
     transition: none;
   }
   .move-btn:hover:not(:disabled) {
-    transform: translate(-50%, -50%);
+    scale: 1;
   }
 }
 
