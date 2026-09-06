@@ -24,7 +24,13 @@ function seat(
     // who hasn't arrived yet rather than an open slot.
     reservedForLobbyUser: playerId ? null : `lobby-${seatKey}`,
     player: playerId
-      ? { id: playerId, name: playerId, lobbyUserId: null, score, profile: null }
+      ? {
+          id: playerId,
+          name: seatKey === MY_SEAT ? 'Ada' : 'Grace',
+          lobbyUserId: null,
+          score,
+          profile: null,
+        }
       : null,
     lobbyProfile: null,
     delays,
@@ -253,6 +259,18 @@ describe('<Board> waiting for the opponent (JQ 3.3)', () => {
     );
     const center = container.querySelector('.picker-center--waiting') as HTMLElement;
     expect(within(center).getByText(/Revealing round/)).toBeInTheDocument();
+  });
+});
+
+describe('<Board> match end (JQ-114)', () => {
+  it('crowns the winner with their avatar above the banner', () => {
+    const { container } = renderBoard(
+      state({ currentRound: 3, scores: [3, 1], results: [ROUND_1], finished: true }),
+    );
+    const results = container.querySelector('.match-results') as HTMLElement;
+    expect(results.querySelector('.player-avatar--lg')).toBeInTheDocument();
+    expect(results.querySelector('.match-results__winner')).toBeInTheDocument();
+    expect(within(results).getByText('Ada')).toBeInTheDocument();
   });
 });
 

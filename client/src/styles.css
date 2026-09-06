@@ -1022,6 +1022,23 @@ button.ghost {
   }
 }
 
+/* Match end: the winner's face, then the verdict. Phase 4 rebuilds the rest
+   of this screen; the avatar is the part Phase 3 owes it. */
+.match-results__winner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.match-results__winner .player-avatar {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--graph) 55%, transparent);
+}
+.match-results__winner-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
 /* Rounds so far, as chips. The full per-round detail moved into a disclosure. */
 ul.history-strip {
   flex-direction: row;

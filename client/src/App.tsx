@@ -472,6 +472,7 @@ export function Board({
       : null;
   // The deciding round plays out before the match-end banner takes the screen.
   const revealingNow = revealing != null;
+  const winner = state.matchWinnerSeatKey == null ? null : iWon ? you : opponent;
 
   return (
     <div className="board">
@@ -504,6 +505,18 @@ export function Board({
 
       {finished && !revealingNow ? (
         <div className="match-results">
+          {winner && (
+            <div className="match-results__winner">
+              <PlayerAvatar
+                profile={winner.profile}
+                displayName={winner.name}
+                placeholder={winner.placeholder}
+                role={iWon ? 'you' : 'opp'}
+                size="lg"
+              />
+              <span className="match-results__winner-name">{winner.name}</span>
+            </div>
+          )}
           <div className={`result-banner ${iWon ? 'win' : 'loss'}`}>
             {iWon ? '🏆 You win the match!' : 'You lost the match.'}
           </div>
