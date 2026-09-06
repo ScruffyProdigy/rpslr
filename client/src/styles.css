@@ -1241,8 +1241,15 @@ button.ghost {
 }
 
 
-/* Rounds so far, as chips. The full per-round detail moved into a disclosure. */
+/* Rounds so far, as chips. The full per-round detail moved into a disclosure.
+   The reset is on the strip itself, not inherited from `.history ul` — the
+   match-end card renders this same list outside `.history`, where the default
+   bullets and padding came back. */
 ul.history-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   gap: 8px;
