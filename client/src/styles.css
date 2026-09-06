@@ -520,9 +520,12 @@ button.ghost {
   font-size: clamp(0.66rem, 3.3cqw, 0.76rem);
   font-weight: 600;
 }
+/* Hover does not size anything: pointing at a move already puts it into the
+   preview state, so growth is owned in one place below. A second scale here
+   would win on specificity and make a hovered playable move *smaller* than a
+   hovered unavailable one, which is backwards. */
 @media (hover: hover) {
   .move-btn:hover:not(:disabled):not([aria-disabled='true']) {
-    scale: 1.04;
     border-color: var(--you);
   }
 }
@@ -558,7 +561,7 @@ button.ghost {
    ring's colour, and whether the centre offers Lock in. */
 .move-btn--preview,
 .move-btn--selected {
-  scale: 1.07;
+  scale: 1.08;
 }
 /* Inspecting something you cannot play: same growth, muted ring. */
 .move-btn--cooldown.move-btn--preview {
@@ -978,9 +981,6 @@ button.ghost {
   .move-btn,
   .beat-arrow {
     transition: none;
-  }
-  .move-btn:hover:not(:disabled) {
-    scale: 1;
   }
 }
 

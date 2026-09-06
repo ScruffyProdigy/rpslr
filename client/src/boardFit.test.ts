@@ -153,10 +153,19 @@ describe('hover never displaces a move button (regression)', () => {
     }
   });
 
+  it('sizes a move in exactly one place', () => {
+    // Two scale rules would compete on specificity, and hover's exclusion of
+    // unavailable moves would make the playable one grow less. One owner only.
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      if (!selector.includes(':hover')) continue;
+      expect(body).not.toMatch(/(?:^|;)\s*scale:/);
+    }
+  });
+
   it('grows whatever you are inspecting, playable or not', () => {
     // Size says "this is the move the centre is describing". Whether you can
     // play it is carried by the ring colour and the presence of Lock in.
-    expect(declaration('.move-btn--preview,\n.move-btn--selected', 'scale')).toBe('1.07');
+    expect(declaration('.move-btn--preview,\n.move-btn--selected', 'scale')).toBe('1.08');
     const muted = /\.move-btn--cooldown\.move-btn--preview\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(muted).not.toMatch(/(?:^|;)\s*scale:/);
     expect(muted).toContain('border-color');
