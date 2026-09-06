@@ -11,8 +11,12 @@
   --you: var(--accent);
   --player: var(--you);
   --opp: #f5a524;
-  /* "Beats" arrows on the pentagon. */
-  --graph: #f5c518;
+  /* The pentagon's "beats" arrows. Deliberately neutral: the graph is
+     structure, and colour on this board means role or state — never
+     structure. Amber arrows would read as the opponent's. */
+  --graph: #7c8699;
+  /* The gold the arrows used to wear, kept for the one thing it means. */
+  --trophy: #f5c518;
   color-scheme: dark;
 }
 
@@ -437,9 +441,6 @@ button.ghost {
   stroke: var(--opp);
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--opp) 85%, transparent));
 }
-.arrowhead--opp path {
-  fill: var(--opp);
-}
 @keyframes arrow-strike {
   0% {
     stroke-width: 2;
@@ -467,6 +468,9 @@ button.ghost {
 }
 .arrowhead--you path {
   fill: var(--you);
+}
+.arrowhead--opp path {
+  fill: var(--opp);
 }
 .arrowhead--off path {
   fill: var(--opp);
@@ -1022,7 +1026,7 @@ button.ghost {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid var(--graph);
+  border: 2px solid var(--text);
   opacity: 0;
   animation: impact-ring 420ms ease-out 700ms both;
 }
@@ -1227,7 +1231,7 @@ button.ghost {
   margin-bottom: 14px;
 }
 .match-results__winner .player-avatar {
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--graph) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trophy) 55%, transparent);
 }
 .match-results__winner-name {
   font-weight: 700;
