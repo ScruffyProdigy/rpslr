@@ -30,7 +30,10 @@ export function cooldownPhrase(turns: number): string {
   return `on cooldown, ${turns} turn${turns === 1 ? '' : 's'}`;
 }
 
-/** Winner-over-loser phrasing from the official RPSLR rules copy. */
+/**
+ * Winner-over-loser phrasing from the official RPSLR rules copy. Key order is
+ * the order the README lists them in, and `beatsOf` relies on it.
+ */
 const BEAT_VERBS: Partial<Record<Move, Partial<Record<Move, string>>>> = {
   rock: { scissors: 'crushes', lizard: 'crushes' },
   paper: { rock: 'covers', robot: 'disproves' },
@@ -38,6 +41,46 @@ const BEAT_VERBS: Partial<Record<Move, Partial<Record<Move, string>>>> = {
   lizard: { paper: 'eats', robot: 'poisons' },
   robot: { scissors: 'smashes', rock: 'vaporizes' },
 };
+
+/** The two moves `move` beats, in rules-copy order. */
+export function beatsOf(move: Move): Move[] {
+  return Object.keys(BEAT_VERBS[move] ?? {}) as Move[];
+}
+
+/**
+ * Preview caption for a move, e.g. "Rock crushes Scissors & Lizard" or
+ * "Robot smashes Scissors & vaporizes Rock". A verb shared by both targets is
+ * said once.
+ */
+export function describeBeatsOf(move: Move): string {
+  const [a, b] = beatsOf(move);
+  const verbs = BEAT_VERBS[move] ?? {};
+  const name = MOVE_META[move].label;
+  if (verbs[a] === verbs[b]) {
+    return `${name} ${verbs[a]} ${MOVE_META[a].label} & ${MOVE_META[b].label}`;
+  }
+  return `${name} ${verbs[a]} ${MOVE_META[a].label} & ${verbs[b]} ${MOVE_META[b].label}`;
+}
+
+/**
+ * What can beat `move` this round. `all` is the two moves that beat it; `live`
+ * drops the ones the opponent has on cooldown, so `safe` means the move cannot
+ * lose. This is the same read a familiar player makes off the pentagon — a node
+ * with no solid incoming arrows — so the picker draws arrows from it.
+ */
+export function threatsTo(
+  move: Move,
+  oppDelays: Record<string, number>,
+): { all: Move[]; live: Move[]; safe: boolean } {
+  const all = ALL_MOVES.filter((m) => beatsOf(m).includes(move));
+  const live = all.filter((m) => (oppDelays[m] ?? 0) === 0);
+  return { all, live, safe: live.length === 0 };
+}
+
+/** Spoken form of an opponent cooldown, for the preview caption. */
+export function opponentCooldownPhrase(move: Move, turns: number): string {
+  return `Opponent can't play ${MOVE_META[move].label} for ${turns} turn${turns === 1 ? '' : 's'}`;
+}
 
 /** e.g. "Paper disproves Robot" */
 export function describeBeat(winner: Move, loser: Move): string {

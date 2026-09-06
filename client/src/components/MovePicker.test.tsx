@@ -1,0 +1,262 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MovePicker } from './MovePicker';
+import type { Move } from '../api';
+import { CIRCLE_ORDER } from '../lib/pentagon';
+import { threatsTo } from '../moves';
+
+function renderPicker(
+  over: {
+    myDelays?: Record<string, number>;
+    oppDelays?: Record<string, number>;
+    myChosenMove?: Move | null;
+    lockedIn?: boolean;
+    disabled?: boolean;
+    round?: number;
+    myLastMove?: Move | null;
+    onPlay?: (m: Move) => void;
+  } = {},
+) {
+  const onPlay = over.onPlay ?? vi.fn();
+  const utils = render(
+    <MovePicker
+      myDelays={over.myDelays ?? {}}
+      oppDelays={over.oppDelays ?? {}}
+      myChosenMove={over.myChosenMove ?? null}
+      lockedIn={over.lockedIn ?? false}
+      disabled={over.disabled ?? false}
+      round={over.round ?? 3}
+      myLastMove={over.myLastMove ?? null}
+      onPlay={onPlay}
+    />,
+  );
+  return { ...utils, onPlay };
+}
+
+/** The `<line>` for one "beats" edge, e.g. robot → rock. */
+function arrow(container: HTMLElement, from: Move, to: Move): SVGLineElement {
+  const el = container.querySelector<SVGLineElement>(`line[data-from="${from}"][data-to="${to}"]`);
+  if (!el) throw new Error(`no arrow ${from} → ${to}`);
+  return el;
+}
+
+function incomingArrows(container: HTMLElement, to: Move): SVGLineElement[] {
+  return Array.from(container.querySelectorAll<SVGLineElement>(`line[data-to="${to}"]`));
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
+describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
+  it('renders the five moves', () => {
+    renderPicker();
+    for (const m of CIRCLE_ORDER) {
+      expect(screen.getByRole('button', { name: new RegExp(`^${m}`, 'i') })).toBeInTheDocument();
+    }
+  });
+
+  it('disables only your own cooldowns, and shows the numeric pill', () => {
+    renderPicker({ myDelays: { lizard: 2 }, oppDelays: { robot: 1 } });
+    expect(screen.getByRole('button', { name: /^Lizard, on cooldown, 2 turns/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Robot/ })).toBeEnabled();
+    expect(screen.getByLabelText('on cooldown, 2 turns')).toHaveTextContent('2');
+  });
+
+  it('drops the old opponent/self availability ring classes', () => {
+    const { container } = renderPicker({ oppDelays: { robot: 1 } });
+    expect(container.querySelector('.my-allowed')).toBeNull();
+    expect(container.querySelector('.opp-allowed')).toBeNull();
+  });
+
+  it('dims the other moves only once you have locked in', () => {
+    const { container, rerender } = renderPicker();
+    expect(container.querySelector('.move-btn--dimmed')).toBeNull();
+    rerender(
+      <MovePicker
+        myDelays={{}}
+        oppDelays={{}}
+        myChosenMove="rock"
+        lockedIn
+        disabled
+        round={3}
+        myLastMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    expect(container.querySelectorAll('.move-btn--dimmed')).toHaveLength(4);
+    expect(screen.getByRole('button', { name: /^Rock/ })).toHaveClass('move-btn--selected');
+  });
+});
+
+describe('<MovePicker> opponent cooldown is drawn on the graph (JQ 2.3)', () => {
+  it('fades the arrows leaving a move the opponent cannot play, and no others', () => {
+    const { container } = renderPicker({ oppDelays: { robot: 2 } });
+    // Robot smashes Scissors & vaporizes Rock — neither attack is coming.
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'robot', 'scissors')).toHaveClass('beat-arrow--opp-off');
+    expect(container.querySelectorAll('.beat-arrow--opp-off')).toHaveLength(2);
+  });
+
+  it('leaves a safe move with no solid incoming arrow', () => {
+    const oppDelays = { paper: 1, robot: 2 };
+    const { container } = renderPicker({ oppDelays });
+
+    expect(threatsTo('rock', oppDelays).safe).toBe(true);
+    for (const line of incomingArrows(container, 'rock')) {
+      expect(line).toHaveClass('beat-arrow--opp-off');
+    }
+
+    // Lizard is still beaten by Rock and Scissors, both playable.
+    expect(threatsTo('lizard', oppDelays).safe).toBe(false);
+    expect(
+      incomingArrows(container, 'lizard').some((l) => !l.classList.contains('beat-arrow--opp-off')),
+    ).toBe(true);
+  });
+
+  it('marks the node and names the wait in the preview caption', async () => {
+    const user = userEvent.setup();
+    renderPicker({ oppDelays: { robot: 2 } });
+    await user.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(screen.getByText("Opponent can't play Robot for 2 turns")).toBeInTheDocument();
+  });
+
+  it('shows a two-item legend', () => {
+    renderPicker();
+    const legend = screen.getByText(/your cooldown/);
+    expect(legend).toHaveTextContent(
+      /your cooldown · .*opponent cooldown \(faded arrows = attacks they can’t make\)/,
+    );
+  });
+});
+
+describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
+  it('previews on the first tap without playing the move', async () => {
+    const user = userEvent.setup();
+    const { container, onPlay } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(screen.getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Rock/ })).toHaveClass('move-btn--preview');
+    expect(screen.getByRole('button', { name: /^Scissors/ })).toHaveClass('move-btn--target');
+    expect(arrow(container, 'rock', 'lizard')).toHaveClass('beat-arrow--preview');
+    expect(arrow(container, 'paper', 'rock')).not.toHaveClass('beat-arrow--preview');
+  });
+
+  it('locks in on the second tap of the same move', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker();
+    const rock = screen.getByRole('button', { name: /^Rock/ });
+    await user.click(rock);
+    await user.click(rock);
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('switches the preview instead of locking when you tap a different move', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(screen.getByText('Paper covers Rock & disproves Robot')).toBeInTheDocument();
+  });
+
+  it('offers an explicit Lock in button in the centre', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Scissors/ }));
+    await user.click(screen.getByRole('button', { name: 'Lock in Scissors' }));
+    expect(onPlay).toHaveBeenCalledWith('scissors');
+  });
+
+  it('previews on keyboard focus too', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.tab();
+    expect(screen.getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+  });
+
+  it('prompts before anything is previewed', () => {
+    renderPicker();
+    expect(screen.getByText('Pick a move')).toBeInTheDocument();
+  });
+
+  it('pins the caption for your pick once the round is locked', () => {
+    renderPicker({ lockedIn: true, disabled: true, myChosenMove: 'lizard' });
+    expect(screen.getByText('Lizard eats Paper & poisons Robot')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
+  it('shows the tap hint in the first two rounds and remembers dismissal', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPicker({ round: 1 });
+    const hint = screen.getByText(/Tap to preview · tap again to lock in/);
+    expect(hint).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/Tap to preview/)).not.toBeInTheDocument();
+
+    unmount();
+    renderPicker({ round: 1 });
+    expect(screen.queryByText(/Tap to preview/)).not.toBeInTheDocument();
+  });
+
+  it('drops the tap hint from round 3', () => {
+    renderPicker({ round: 3 });
+    expect(screen.queryByText(/Tap to preview/)).not.toBeInTheDocument();
+  });
+
+  it('retires the tap hint once you lock a move in', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPicker({ round: 1 });
+    const rock = screen.getByRole('button', { name: /^Rock/ });
+    await user.click(rock);
+    await user.click(rock);
+
+    unmount();
+    renderPicker({ round: 2 });
+    expect(screen.queryByText(/Tap to preview/)).not.toBeInTheDocument();
+  });
+
+  it('explains your first cooldown using the move you just played', () => {
+    renderPicker({ round: 3, myDelays: { rock: 2 }, myLastMove: 'rock' });
+    expect(
+      screen.getByText("You played Rock last round — it's back in 2 turns."),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to the opening cooldowns when there is no previous round', () => {
+    renderPicker({ round: 1, myDelays: { lizard: 1, robot: 2 } });
+    // The tap hint owns round 1; the cooldown note takes over once it is gone.
+    expect(screen.queryByText(/start on cooldown/)).not.toBeInTheDocument();
+
+    window.localStorage.setItem('rpslr.seen.tapHint', '1');
+    renderPicker({ round: 1, myDelays: { lizard: 1, robot: 2 } });
+    expect(screen.getByText(/Lizard & Robot start on cooldown/)).toBeInTheDocument();
+  });
+
+  it('shows at most one note at a time', () => {
+    const { container } = renderPicker({ round: 1, myDelays: { lizard: 1, robot: 2 } });
+    expect(container.querySelectorAll('.picker-note')).toHaveLength(1);
+  });
+
+  it('says nothing about cooldowns when none of your moves are on one', () => {
+    renderPicker({ round: 3, oppDelays: { robot: 2 } });
+    expect(screen.queryByText(/back in/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/start on cooldown/)).not.toBeInTheDocument();
+  });
+
+  it('survives localStorage throwing', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    expect(() => renderPicker({ round: 1 })).not.toThrow();
+    expect(screen.getByText(/Tap to preview/)).toBeInTheDocument();
+    spy.mockRestore();
+  });
+});

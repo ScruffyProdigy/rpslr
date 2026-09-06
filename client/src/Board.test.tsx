@@ -115,10 +115,11 @@ describe('<Board> cooldown pill (JQ-103)', () => {
     expect(screen.getByRole('button', { name: /Lizard, on cooldown, 2 turns/ })).toBeDisabled();
   });
 
-  it('does not render opponent cooldown marks on the buttons', () => {
+  // Phase 2.3 moved the opponent's state off your button's border and onto the
+  // node as a marker; it still must not affect whether you can play the move.
+  it('marks an opponent cooldown on the node without disabling your button', () => {
     renderBoard(state({ oppDelays: { rock: 3 } }));
-    expect(screen.queryByLabelText(/opponent cooldown/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rock' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Rock, opponent cooldown, 3 turns' })).toBeEnabled();
   });
 })
 

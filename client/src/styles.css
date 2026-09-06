@@ -6,9 +6,13 @@
   --text: #e6e8ee;
   --muted: #9aa1b1;
   --danger: #f87171;
-  --player: var(--accent);
-  /* Opponent indicators are amber; --danger is reserved for errors and losses. */
+  /* Semantic role colours: you are blue, the opponent is amber, every match.
+     --danger is reserved for errors and losses. --player is the older alias. */
+  --you: var(--accent);
+  --player: var(--you);
   --opp: #f5a524;
+  /* "Beats" arrows on the pentagon. */
+  --graph: #f5c518;
   color-scheme: dark;
 }
 
@@ -27,6 +31,9 @@ body {
   max-width: 760px;
   margin: 0 auto;
   padding: 24px 16px 64px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -338,31 +345,141 @@ button.ghost {
   color: var(--muted);
   margin: 0 0 4px;
 }
-.move-btn {
-  background: #11131b;
-  border: 1px solid #303544;
-  color: var(--text);
+/* ---- Move picker (pentagon) ----------------------------------------------
+   The board is a fixed 380-unit square scaled by its container width, so the
+   SVG arrows and the buttons shrink together and tap targets stay honest. */
+.move-picker {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 16px 22px;
-  min-width: 96px;
+  gap: 10px;
 }
-.move-btn .emoji {
-  font-size: 2rem;
+.move-board {
+  position: relative;
+  width: min(100%, 380px);
+  aspect-ratio: 1;
+  container-type: inline-size;
+  margin: 8px 0 2px;
+}
+
+.move-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+.beat-arrow {
+  stroke: var(--graph);
+  stroke-width: 2;
+  stroke-opacity: 0.7;
+  transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease;
+}
+/* An attack the opponent can't make this round. A node with no solid incoming
+   arrow is therefore a move that cannot lose. */
+.beat-arrow--opp-off {
+  stroke: var(--opp);
+  stroke-opacity: 0.3;
+  stroke-dasharray: 5 5;
+}
+/* Preview emphasis wins over the faded state; the caption carries the rest. */
+.beat-arrow--preview {
+  stroke: var(--you);
+  stroke-opacity: 1;
+  stroke-width: 3.5;
+  stroke-dasharray: none;
+}
+.arrowhead path {
+  fill: var(--graph);
+}
+.arrowhead--you path {
+  fill: var(--you);
+}
+.arrowhead--off path {
+  fill: var(--opp);
+  fill-opacity: 0.45;
+}
+
+.move-btn {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: min(27.4cqw, 104px);
+  height: min(27.4cqw, 104px);
+  min-width: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  background: #161922;
+  border: 2px solid #3d4458;
+  color: var(--text);
+  box-shadow: none;
+  z-index: 1;
+  overflow: visible;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+.move-btn__emoji {
+  font-size: clamp(1.25rem, 8.5cqw, 2rem);
+  line-height: 1;
+}
+.move-btn__name {
+  font-size: clamp(0.66rem, 3.3cqw, 0.76rem);
+  font-weight: 600;
 }
 .move-btn:hover:not(:disabled) {
-  border-color: var(--accent);
+  transform: translate(-50%, -50%) scale(1.04);
+  border-color: var(--you);
 }
-.move-btn.cooldown {
-  opacity: 0.55;
-}
-/* A cooldown button is already dimmed by :disabled — don't stack a second fade
-   on top of it, or the ⏳ pill becomes unreadable. */
-.move-btn.circle.cooldown {
+/* The global disabled fade would bury the ⏳ pill; cooldown is shown by the
+   muted surface and the pill instead, which stay above 3:1. */
+.move-btn:disabled {
   opacity: 1;
+  cursor: default;
 }
+.move-btn--cooldown {
+  background: #14161e;
+  border-color: #2b3040;
+  color: var(--muted);
+}
+.move-btn--cooldown .move-btn__emoji {
+  opacity: 0.6;
+}
+/* Preview: the move you are considering, plus the two it beats. */
+.move-btn--preview {
+  border-color: var(--you);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--you) 22%, transparent);
+}
+.move-btn--target {
+  border-color: color-mix(in srgb, var(--you) 55%, #3d4458);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 16%, transparent);
+}
+.move-btn--selected {
+  border-color: var(--you);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--you) 45%, transparent);
+}
+/* Only once the round is decided does anything fade out. */
+.move-btn--dimmed {
+  opacity: 0.45;
+}
+.move-btn__check {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: clamp(0.7rem, 3.4cqw, 0.9rem);
+  font-weight: 800;
+  color: var(--you);
+  line-height: 1;
+}
+
 .cooldown-pill {
   display: inline-flex;
   align-items: center;
@@ -378,103 +495,127 @@ button.ghost {
   background: #262a38;
   border: 1px solid #3d4458;
 }
+.move-btn .cooldown-pill {
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(0.6rem, 3cqw, 0.72rem);
+}
 .cooldown-pill--legend {
   font-size: 0.68rem;
   padding: 0 5px;
   vertical-align: middle;
 }
 
-/* Pentagon "which beats which" layout */
-.move-circle-wrap {
-  width: 100%;
-  display: flex;
+/* Opponent cooldown lives on the node, not as a ring around your button. */
+.opp-cooldown-mark {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  overflow-x: clip;
-}
-.move-circle {
-  position: relative;
-  flex-shrink: 0;
-  margin: 14px 0 6px;
-}
-.move-arrows {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-.move-btn.circle {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 104px;
-  height: 104px;
-  min-width: 0;
-  padding: 8px;
-  gap: 2px;
+  width: clamp(1.05rem, 5.2cqw, 1.35rem);
+  height: clamp(1.05rem, 5.2cqw, 1.35rem);
   border-radius: 50%;
-  background: #161922;
-  border: 2px solid #303544;
-  box-shadow: none;
-  z-index: 1;
-  /* anchor the ✓ badge */
-  overflow: visible;
-}
-.move-btn.circle .emoji {
-  font-size: 2rem;
+  font-size: clamp(0.55rem, 2.9cqw, 0.72rem);
   line-height: 1;
+  background: color-mix(in srgb, var(--opp) 22%, #11131b);
+  border: 1px solid color-mix(in srgb, var(--opp) 65%, transparent);
 }
-.move-btn .move-name {
-  font-size: 0.76rem;
-  font-weight: 600;
+.opp-cooldown-mark--legend {
+  position: static;
+  width: 1.05rem;
+  height: 1.05rem;
+  font-size: 0.6rem;
+  vertical-align: middle;
 }
-.move-btn.circle:hover:not(:disabled):not(.dimmed) {
-  transform: translate(-50%, -50%) scale(1.06);
-}
-.move-btn.circle.my-allowed:not(.selected):not(.dimmed):hover:not(:disabled) {
-  border-color: var(--player);
-}
-.move-btn.circle.selected {
-  border: 2px solid var(--player);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 40%, transparent);
-  opacity: 1;
-}
-.move-btn.circle.dimmed {
-  opacity: 0.28;
-  border-style: dashed;
-  box-shadow: none;
-}
-/* Blue = you can play; red = opponent can play; nested when both can. */
-.move-btn.circle.my-allowed:not(.selected):not(.dimmed) {
-  border-color: var(--player);
-}
-.move-btn.circle.opp-allowed:not(.selected):not(.dimmed) {
-  box-shadow: 0 0 0 2px var(--opp);
-}
-.move-btn.circle.my-allowed.opp-allowed:not(.selected):not(.dimmed) {
-  border-color: var(--player);
-  box-shadow:
-    0 0 0 2px var(--player),
-    0 0 0 5px var(--opp);
-}
-.move-btn.circle.cooldown.opp-allowed:not(.my-allowed):not(.selected):not(.dimmed) {
-  border: 2px solid #303544;
-  box-shadow: 0 0 0 2px var(--opp);
-}
-.move-btn.circle.cooldown:not(.opp-allowed):not(.selected) {
-  border: 2px dashed var(--player);
-  box-shadow: none;
-}
-.move-circle--locked .move-arrows {
-  opacity: 0.35;
-}
-.move-btn .choice-check {
+
+/* The pentagon's middle cell: prompt, preview caption, explicit commit. Kept
+   narrower than the gap between the side nodes, and click-through, so it never
+   sits on a tap target. */
+.picker-center {
   position: absolute;
-  top: 4px;
-  right: 6px;
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--player);
+  left: 50%;
+  top: 53.2%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  width: min(38cqw, 146px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 84%, transparent);
+  border: 1px solid #2b3040;
+  backdrop-filter: blur(3px);
+}
+.picker-center--idle {
+  background: none;
+  border-color: transparent;
+  backdrop-filter: none;
+  padding: 0;
+}
+.picker-center__idle {
+  font-size: clamp(0.65rem, 3.2cqw, 0.8rem);
+  color: var(--muted);
+}
+.picker-center__caption {
+  margin: 0;
+  font-size: clamp(0.62rem, 3.1cqw, 0.75rem);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.picker-center__opp {
+  margin: 0;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  line-height: 1.3;
+  color: var(--opp);
+}
+.picker-center__lock {
+  pointer-events: auto;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  font-size: clamp(0.62rem, 3.1cqw, 0.74rem);
+}
+
+.graph-legend {
+  width: 100%;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+/* One-time teaching notes (tap-to-preview, first cooldown). */
+.picker-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--you) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--you) 35%, transparent);
+}
+.picker-note__dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 4px 6px;
+  font-size: 0.8rem;
   line-height: 1;
 }
+
 .choice-locked {
   width: 100%;
   text-align: center;
@@ -488,42 +629,9 @@ button.ghost {
 }
 .choice-locked__pick {
   font-weight: 700;
-  color: var(--player);
+  color: var(--you);
 }
-.dot-legend {
-  width: 100%;
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--muted);
-  margin: 2px 0 0;
-}
-.dot-legend .dot {
-  font-size: 0.8rem;
-}
-.dot-legend .legend-ring {
-  display: inline-block;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  vertical-align: middle;
-  margin-right: 2px;
-  box-sizing: border-box;
-}
-.dot-legend .legend-ring.mine {
-  border: 2px solid var(--player);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--player) 35%, transparent);
-}
-.dot-legend .legend-ring.opp {
-  border: 2px solid var(--opp);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--opp) 35%, transparent);
-  margin-left: 0;
-}
-.dot-legend .dot.mine {
-  color: var(--player);
-}
-.dot-legend .dot.opp {
-  color: var(--opp);
-}
+
 .rule-note {
   margin: 0;
   font-size: 0.78rem;
@@ -753,15 +861,14 @@ button.ghost {
     max-width: 148px;
     padding: 12px 8px;
   }
-  /* Scale down on narrow screens; wrapper flex-centers the 380px box so
-     transform-origin: center top keeps the visual horizontally centered. */
-  .move-circle-wrap {
-    height: calc(380px * 0.88);
-    margin-bottom: -28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .move-btn,
+  .beat-arrow {
+    transition: none;
   }
-  .move-circle-wrap .move-circle {
-    transform: scale(0.88);
-    transform-origin: center top;
-    margin: 0;
+  .move-btn:hover:not(:disabled) {
+    transform: translate(-50%, -50%);
   }
 }

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Move, type MatchState, type Seat, type StatusResponse } from './api';
+import { MovePicker } from './components/MovePicker';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatDisplayName, seatProfile } from './lib/seatProfile';
 import {
   MOVE_META,
-  cooldownPhrase,
   describeOutcome,
   describeRoundMatchup,
   opponentMoveFromResult,
@@ -450,6 +450,8 @@ export function Board({
   const showRules = !finished && (!allSeated || match.currentRound <= 1);
   const myDelays = seats.find((s) => s.seatKey === mySeatKey)?.delays ?? {};
   const oppDelays = seats.find((s) => s.seatKey !== mySeatKey)?.delays ?? {};
+  // Feeds the one-time cooldown explainer ("you played Rock last round…").
+  const myLastMove = results.length > 0 ? results[results.length - 1].moves[myPlayerId] ?? null : null;
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -496,25 +498,16 @@ export function Board({
               Opponent has locked in — pick your move!
             </p>
           )}
-          <div className="move-circle-wrap">
-            <MoveCircle
-              myDelays={myDelays}
-              oppDelays={oppDelays}
-              myChosenMove={myChosenMove}
-              lockedIn={youMovedThisRound}
-              disabled={!connected || !allSeated || youMovedThisRound}
-              onPlay={onPlay}
-            />
-          </div>
-          <p className="dot-legend">
-            <span className="legend-ring mine" aria-hidden="true" />
-            you can play · <span className="legend-ring opp" aria-hidden="true" />
-            opponent can play ·{' '}
-            <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
-              ⏳ N
-            </span>{' '}
-            your cooldown
-          </p>
+          <MovePicker
+            myDelays={myDelays}
+            oppDelays={oppDelays}
+            myChosenMove={myChosenMove}
+            lockedIn={youMovedThisRound}
+            disabled={!connected || !allSeated || youMovedThisRound}
+            round={match.currentRound}
+            myLastMove={myLastMove}
+            onPlay={onPlay}
+          />
           {youMovedThisRound && myChosenMove && (
             <p className="choice-locked" role="status">
               <span className="choice-locked__pick">
@@ -544,152 +537,6 @@ function LobbyReturnButton({ href }: { href: string }) {
     <a className="lobby-return-btn" href={href}>
       ← Back to Lobby
     </a>
-  );
-}
-
-// Pentagon layout where each move beats the next two clockwise, so the "beats"
-// arrows form the classic RPSLR pentagon + pentagram.
-const CIRCLE_ORDER: Move[] = ['rock', 'scissors', 'lizard', 'paper', 'robot'];
-const CIRCLE_SIZE = 380;
-const CIRCLE_R = 128;
-const ARROW_INSET = 58; // pull arrow endpoints off the buttons
-// One vertex sits at the top, so the pentagon's bounding box is taller below center
-// than above; nudge the layout center down so the shape reads centered in the square.
-const CIRCLE_CENTER_Y = CIRCLE_SIZE / 2 + 12;
-
-function circleNodePos(i: number) {
-  const angle = (-90 + i * 72) * (Math.PI / 180); // start at top, go clockwise
-  const cx = CIRCLE_SIZE / 2;
-  return {
-    x: cx + CIRCLE_R * Math.cos(angle),
-    y: CIRCLE_CENTER_Y + CIRCLE_R * Math.sin(angle),
-  };
-}
-
-const CIRCLE_EDGES: Array<{ from: number; to: number }> = (() => {
-  const edges: Array<{ from: number; to: number }> = [];
-  for (let i = 0; i < CIRCLE_ORDER.length; i++) {
-    edges.push({ from: i, to: (i + 1) % CIRCLE_ORDER.length });
-    edges.push({ from: i, to: (i + 2) % CIRCLE_ORDER.length });
-  }
-  return edges;
-})();
-
-function MoveCircle({
-  myDelays,
-  oppDelays,
-  myChosenMove,
-  lockedIn,
-  disabled,
-  onPlay,
-}: {
-  myDelays: Record<string, number>;
-  oppDelays: Record<string, number>;
-  myChosenMove: Move | null;
-  lockedIn: boolean;
-  disabled: boolean;
-  onPlay: (move: Move) => void;
-}) {
-  return (
-    <div
-      className={`move-circle ${lockedIn ? 'move-circle--locked' : ''}`}
-      style={{ width: CIRCLE_SIZE, height: CIRCLE_SIZE }}
-    >
-      <svg
-        className="move-arrows"
-        width={CIRCLE_SIZE}
-        height={CIRCLE_SIZE}
-        viewBox={`0 0 ${CIRCLE_SIZE} ${CIRCLE_SIZE}`}
-        aria-hidden="true"
-      >
-        <defs>
-          <marker
-            id="rps-arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0,0 L10,5 L0,10 z" fill="#f5c518" />
-          </marker>
-        </defs>
-        {CIRCLE_EDGES.map(({ from, to }, k) => {
-          const a = circleNodePos(from);
-          const b = circleNodePos(to);
-          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-          const ux = (b.x - a.x) / len;
-          const uy = (b.y - a.y) / len;
-          return (
-            <line
-              key={k}
-              x1={a.x + ux * ARROW_INSET}
-              y1={a.y + uy * ARROW_INSET}
-              x2={b.x - ux * ARROW_INSET}
-              y2={b.y - uy * ARROW_INSET}
-              stroke="#f5c518"
-              strokeWidth={2}
-              strokeOpacity={0.7}
-              markerEnd="url(#rps-arrow)"
-            />
-          );
-        })}
-      </svg>
-      {CIRCLE_ORDER.map((m, i) => {
-        const pos = circleNodePos(i);
-        const myDelay = myDelays[m] ?? 0;
-        const oppDelay = oppDelays[m] ?? 0;
-        const onCooldown = myDelay > 0;
-        const selected = myChosenMove === m;
-        const dimmed = lockedIn && !selected;
-        const myAllowed = !lockedIn && myDelay === 0;
-        const oppAllowed = !lockedIn && oppDelay === 0;
-        return (
-          <button
-            key={m}
-            className={[
-              'move-btn',
-              'circle',
-              onCooldown ? 'cooldown' : '',
-              myAllowed ? 'my-allowed' : '',
-              oppAllowed ? 'opp-allowed' : '',
-              selected ? 'selected' : '',
-              dimmed ? 'dimmed' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            style={{ left: pos.x, top: pos.y }}
-            disabled={disabled || onCooldown}
-            onClick={() => onPlay(m)}
-            aria-label={
-              onCooldown
-                ? `${MOVE_META[m].label}, ${cooldownPhrase(myDelay)}`
-                : MOVE_META[m].label
-            }
-            aria-pressed={selected}
-            title={
-              selected
-                ? `${MOVE_META[m].label} — your choice this round`
-                : onCooldown
-                  ? `${MOVE_META[m].label} on cooldown: ${myDelay} delay mark(s)`
-                  : lockedIn
-                    ? 'Choice already locked in'
-                    : MOVE_META[m].label
-            }
-          >
-            {selected && <span className="choice-check" aria-hidden="true">✓</span>}
-            <span className="emoji">{MOVE_META[m].emoji}</span>
-            <span className="move-name">{MOVE_META[m].label}</span>
-            {onCooldown && (
-              <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
-                ⏳ {myDelay}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
