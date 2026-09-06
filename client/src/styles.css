@@ -262,9 +262,29 @@ button.ghost {
   width: 64px;
   height: 64px;
 }
+.player-avatar--sm {
+  width: 28px;
+  height: 28px;
+  border-width: 2px;
+}
+.player-avatar--xs {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+}
 .player-avatar--you {
-  border-color: var(--accent);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: var(--you);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--you) 35%, transparent);
+}
+.player-avatar--opp {
+  border-color: var(--opp);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--opp) 28%, transparent);
+}
+.player-avatar--sm.player-avatar--you,
+.player-avatar--sm.player-avatar--opp,
+.player-avatar--xs.player-avatar--you,
+.player-avatar--xs.player-avatar--opp {
+  box-shadow: none;
 }
 .player-avatar--dimmed {
   opacity: 0.55;
@@ -289,6 +309,15 @@ button.ghost {
   font-size: 2.25rem;
   font-weight: 700;
   color: var(--muted);
+}
+.player-avatar--md .player-avatar__initial {
+  font-size: 1.5rem;
+}
+.player-avatar--sm .player-avatar__initial {
+  font-size: 0.8rem;
+}
+.player-avatar--xs .player-avatar__initial {
+  font-size: 0.62rem;
 }
 .player-avatar--ready .player-avatar__ready-dot {
   position: absolute;
@@ -616,22 +645,6 @@ button.ghost {
   line-height: 1;
 }
 
-.choice-locked {
-  width: 100%;
-  text-align: center;
-  margin: 10px 0 0;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: #0f2433;
-  border: 1px solid #1d4e6b;
-  color: #8fd0f5;
-  font-size: 0.9rem;
-}
-.choice-locked__pick {
-  font-weight: 700;
-  color: var(--you);
-}
-
 .rule-note {
   margin: 0;
   font-size: 0.78rem;
@@ -870,5 +883,210 @@ button.ghost {
   }
   .move-btn:hover:not(:disabled) {
     transform: translate(-50%, -50%);
+  }
+}
+
+/* ---- Phase 3: round reveal, waiting state, history strip ----------------- */
+
+/* The pip that just filled gets one pulse, so a win registers without
+   watching the number. */
+.win-pip--pulse {
+  animation: pip-pulse 620ms ease-out 1;
+}
+@keyframes pip-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.45);
+  }
+  45% {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35);
+  }
+}
+
+/* After lock-in the centre carries your pick and the wait. */
+.picker-center--waiting {
+  /* Wider than the idle slot so "Waiting for opponent…" holds one line. */
+  width: min(48cqw, 176px);
+  border-color: color-mix(in srgb, var(--you) 45%, transparent);
+  background: color-mix(in srgb, var(--you) 14%, var(--card));
+}
+.picker-center__pick {
+  font-size: clamp(0.72rem, 3.6cqw, 0.9rem);
+  font-weight: 700;
+  color: var(--you);
+}
+.picker-center__waiting {
+  margin: 0;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  color: var(--muted);
+  animation: waiting-pulse 1.8s ease-in-out infinite;
+}
+@keyframes waiting-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The showdown: both picks, the verb, the verdict. Wider than the picker's
+   centre slot, and it takes the taps so it can be skipped from anywhere. */
+.picker-center--reveal {
+  width: min(64cqw, 236px);
+  /* Nearly opaque: the arrows underneath must not compete with the verdict. */
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  gap: 6px;
+  pointer-events: auto;
+  animation: reveal-in 280ms ease-out both;
+}
+.reveal-card--win {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, transparent);
+}
+.reveal-card--loss {
+  border-color: color-mix(in srgb, var(--opp) 55%, transparent);
+}
+.reveal-card__picks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.reveal-card__move {
+  font-size: clamp(1.1rem, 5.6cqw, 1.5rem);
+  line-height: 1;
+  animation: pick-pop 300ms ease-out both;
+}
+.reveal-card__vs {
+  color: var(--muted);
+  font-size: clamp(0.6rem, 3cqw, 0.75rem);
+}
+.reveal-card__verb {
+  margin: 0;
+  font-size: clamp(0.62rem, 3.1cqw, 0.76rem);
+  line-height: 1.3;
+  color: var(--muted);
+}
+.reveal-card__verdict {
+  margin: 0;
+  font-size: clamp(0.76rem, 3.9cqw, 0.95rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+.reveal-card--win .reveal-card__verdict {
+  color: var(--accent-2);
+}
+.reveal-card--loss .reveal-card__verdict {
+  color: var(--opp);
+}
+.reveal-card--draw .reveal-card__verdict {
+  color: var(--muted);
+}
+/* Tap anywhere on the card to move on; a real button so it is reachable and
+   announced rather than being a click-handler on a div. */
+.reveal-card__skip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes pick-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Rounds so far, as chips. The full per-round detail moved into a disclosure. */
+ul.history-strip {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.history-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #11131b;
+  border: 1px solid #262a38;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.history-chip[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--you) 55%, transparent);
+  background: color-mix(in srgb, var(--you) 12%, #11131b);
+}
+.history-chip--win {
+  border-color: color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+.history-chip--loss {
+  border-color: color-mix(in srgb, var(--opp) 35%, transparent);
+}
+.history-chip__round {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.history-chip__picks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.history-chip__vs {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.history-strip__detail {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.history-full {
+  margin-top: 12px;
+}
+.history-full summary {
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.history-full ul {
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker-center--reveal,
+  .reveal-card__move,
+  .picker-center__waiting,
+  .win-pip--pulse {
+    animation: none;
   }
 }

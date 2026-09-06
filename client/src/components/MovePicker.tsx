@@ -32,20 +32,25 @@ export function MovePicker({
   oppDelays,
   myChosenMove,
   lockedIn,
+  opponentLockedIn = false,
   disabled,
   round,
   myLastMove,
   onPlay,
+  centerSlot,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
   myChosenMove: Move | null;
   lockedIn: boolean;
+  opponentLockedIn?: boolean;
   disabled: boolean;
   round: number;
   /** Your pick from the previous round, for the cooldown explainer. */
   myLastMove: Move | null;
   onPlay: (move: Move) => void;
+  /** Takes over the centre slot — the round reveal, while it holds. */
+  centerSlot?: React.ReactNode;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -235,14 +240,17 @@ export function MovePicker({
           );
         })}
 
-        <PickerCenter
-          preview={preview}
-          picked={picked}
-          lockedIn={lockedIn}
-          myChosenMove={myChosenMove}
-          oppDelays={oppDelays}
-          onCommit={commit}
-        />
+        {centerSlot ?? (
+          <PickerCenter
+            preview={preview}
+            picked={picked}
+            lockedIn={lockedIn}
+            opponentLockedIn={opponentLockedIn}
+            myChosenMove={myChosenMove}
+            oppDelays={oppDelays}
+            onCommit={commit}
+          />
+        )}
       </div>
 
       <p className="graph-legend">
@@ -283,6 +291,7 @@ function PickerCenter({
   preview,
   picked,
   lockedIn,
+  opponentLockedIn,
   myChosenMove,
   oppDelays,
   onCommit,
@@ -290,11 +299,28 @@ function PickerCenter({
   preview: Move | null;
   picked: Move | null;
   lockedIn: boolean;
+  opponentLockedIn: boolean;
   myChosenMove: Move | null;
   oppDelays: Record<string, number>;
   onCommit: (move: Move) => void;
 }) {
-  // After lock-in the caption stays pinned until the round reveals.
+  // After lock-in the centre holds your pick — and the wait — so the page
+  // below the board doesn't have to say anything.
+  if (lockedIn && myChosenMove) {
+    return (
+      <div className="picker-center picker-center--waiting" role="status">
+        <span className="picker-center__pick">
+          <span aria-hidden="true">{MOVE_META[myChosenMove].emoji}</span>{' '}
+          {MOVE_META[myChosenMove].label}
+        </span>
+        <p className="picker-center__caption">{describeBeatsOf(myChosenMove)}</p>
+        <p className="picker-center__waiting">
+          {opponentLockedIn ? 'Revealing round…' : 'Waiting for opponent…'}
+        </p>
+      </div>
+    );
+  }
+
   const shown = lockedIn ? myChosenMove : preview;
   if (!shown) {
     return (

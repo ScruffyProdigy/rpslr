@@ -1,13 +1,18 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Board } from './App';
-import type { MatchState, Move, Seat } from './api';
+import type { MatchState, Move, RoundResult, Seat } from './api';
 
 const MY_SEAT = 'a';
 const MY_PLAYER = 'player-a';
 const OPP_PLAYER = 'player-b';
 
-function seat(seatKey: string, playerId: string | null, delays: Record<string, number> = {}): Seat {
+function seat(
+  seatKey: string,
+  playerId: string | null,
+  delays: Record<string, number> = {},
+  score = 0,
+): Seat {
   return {
     id: `seat-${seatKey}`,
     matchId: 'match-1',
@@ -15,9 +20,11 @@ function seat(seatKey: string, playerId: string | null, delays: Record<string, n
     teamKey: null,
     role: seatKey === MY_SEAT ? 'Challenger' : 'Opponent',
     position: seatKey === MY_SEAT ? 0 : 1,
-    reservedForLobbyUser: null,
+    // Lobby matches reserve both seats up front, so an empty seat is a player
+    // who hasn't arrived yet rather than an open slot.
+    reservedForLobbyUser: playerId ? null : `lobby-${seatKey}`,
     player: playerId
-      ? { id: playerId, name: playerId, lobbyUserId: null, score: 0, profile: null }
+      ? { id: playerId, name: playerId, lobbyUserId: null, score, profile: null }
       : null,
     lobbyProfile: null,
     delays,
@@ -30,6 +37,9 @@ function state(over: {
   myDelays?: Record<string, number>;
   oppDelays?: Record<string, number>;
   submitted?: string[];
+  results?: RoundResult[];
+  scores?: [number, number];
+  finished?: boolean;
 } = {}): MatchState {
   const {
     currentRound = 1,
@@ -37,6 +47,9 @@ function state(over: {
     myDelays = {},
     oppDelays = {},
     submitted = [],
+    results = [],
+    scores = [0, 0],
+    finished = false,
   } = over;
   return {
     match: {
@@ -48,21 +61,24 @@ function state(over: {
       lobbyGraphqlUrl: null,
       name: 'Friendly Match',
       gameMode: 'rpslr',
-      status: 'playing',
+      status: finished ? 'finished' : 'playing',
       bestOf: 5,
       currentRound,
       createdAt: '2026-01-01T00:00:00Z',
     },
-    seats: [seat(MY_SEAT, MY_PLAYER, myDelays), seat('b', bothSeated ? OPP_PLAYER : null, oppDelays)],
-    results: [],
+    seats: [
+      seat(MY_SEAT, MY_PLAYER, myDelays, scores[0]),
+      seat('b', bothSeated ? OPP_PLAYER : null, oppDelays, scores[1]),
+    ],
+    results,
     submittedPlayerIds: submitted,
     currentRoundMoves: {},
-    matchWinnerSeatKey: null,
+    matchWinnerSeatKey: finished ? MY_SEAT : null,
   };
 }
 
-function renderBoard(s: MatchState, myChosenMove: Move | null = null) {
-  return render(
+function boardEl(s: MatchState, myChosenMove: Move | null = null) {
+  return (
     <Board
       myPlayerId={MY_PLAYER}
       mySeatKey={MY_SEAT}
@@ -71,9 +87,19 @@ function renderBoard(s: MatchState, myChosenMove: Move | null = null) {
       error={null}
       myChosenMove={myChosenMove}
       onPlay={() => {}}
-    />,
+    />
   );
 }
+
+function renderBoard(s: MatchState, myChosenMove: Move | null = null) {
+  return render(boardEl(s, myChosenMove));
+}
+
+const ROUND_1: RoundResult = {
+  round: 1,
+  outcome: MY_SEAT,
+  moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' },
+};
 
 describe('<Board> rules note (JQ-101)', () => {
   it('shows the rules while waiting for the opponent', () => {
@@ -127,5 +153,112 @@ describe('<Board> live indicator (JQ-99)', () => {
   it('no longer renders the developer live/connecting label', () => {
     renderBoard(state());
     expect(screen.queryByText(/● live|○ connecting/)).not.toBeInTheDocument();
+  });
+});
+
+describe('<Board> round header (JQ 3.2)', () => {
+  it('carries the running score beside the round number', () => {
+    renderBoard(state({ currentRound: 4, scores: [2, 1], results: [ROUND_1] }));
+    expect(screen.getByText('Round 4 · You 2 – 1')).toBeInTheDocument();
+  });
+
+  it('pulses the pip of the seat that just took the round', () => {
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    expect(container.querySelector('.win-pip--pulse')).not.toBeInTheDocument();
+    rerender(
+      boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })),
+    );
+    const mine = container.querySelector('.player.you') as HTMLElement;
+    expect(mine.querySelector('.win-pip--pulse')).toBeInTheDocument();
+  });
+});
+
+describe('<Board> round reveal (JQ 3.1)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not replay finished rounds when a page reload lands mid-match', () => {
+    const { container } = renderBoard(state({ currentRound: 2, results: [ROUND_1] }));
+    expect(container.querySelector('.reveal-card')).not.toBeInTheDocument();
+  });
+
+  it('reveals the round in the pentagon centre when the result arrives', () => {
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    const card = container.querySelector('.reveal-card') as HTMLElement;
+    expect(within(card).getByText('Paper disproves Robot')).toBeInTheDocument();
+    expect(within(card).getByText('You take round 1')).toBeInTheDocument();
+  });
+
+  it('locks the picker while the reveal is up', () => {
+    const { rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    expect(screen.getByRole('button', { name: /^Rock/ })).toBeDisabled();
+  });
+
+  it('hands the board back to the picker after the hold', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    expect(container.querySelector('.reveal-card')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Rock/ })).toBeEnabled();
+  });
+
+  it('can be skipped by tapping', () => {
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    fireEvent.click(screen.getByRole('button', { name: /skip/i }));
+    expect(container.querySelector('.reveal-card')).not.toBeInTheDocument();
+  });
+
+  // The deciding round is the one most worth seeing, so it plays before the
+  // match-end banner takes the screen.
+  it('plays the deciding round before the match-end banner', () => {
+    vi.useFakeTimers();
+    const finalRound: RoundResult = {
+      round: 3,
+      outcome: MY_SEAT,
+      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'scissors' },
+    };
+    const { container, rerender } = render(boardEl(state({ currentRound: 3, scores: [2, 1] })));
+    rerender(
+      boardEl(state({ currentRound: 3, scores: [3, 1], results: [finalRound], finished: true })),
+    );
+    expect(container.querySelector('.reveal-card')).toBeInTheDocument();
+    expect(screen.queryByText(/You win the match/)).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(2500);
+    });
+    expect(screen.getByText(/You win the match/)).toBeInTheDocument();
+  });
+});
+
+describe('<Board> waiting for the opponent (JQ 3.3)', () => {
+  it('shows your pick in the pentagon centre instead of a page-level paragraph', () => {
+    const { container } = renderBoard(state({ submitted: [MY_PLAYER] }), 'rock');
+    expect(container.querySelector('.choice-locked')).not.toBeInTheDocument();
+    const center = container.querySelector('.picker-center--waiting') as HTMLElement;
+    expect(center.querySelector('.picker-center__pick')).toHaveTextContent('Rock');
+    expect(within(center).getByText(/Waiting for opponent/)).toBeInTheDocument();
+  });
+
+  it('says the round is revealing once both sides are in', () => {
+    const { container } = renderBoard(
+      state({ submitted: [MY_PLAYER, OPP_PLAYER] }),
+      'rock',
+    );
+    const center = container.querySelector('.picker-center--waiting') as HTMLElement;
+    expect(within(center).getByText(/Revealing round/)).toBeInTheDocument();
+  });
+});
+
+describe('<Board> reserved opponent (JQ 3.5)', () => {
+  it('says the reserved opponent is on their way', () => {
+    renderBoard(state({ bothSeated: false }));
+    expect(screen.getByText(/on their way/i)).toBeInTheDocument();
   });
 });

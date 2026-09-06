@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type Move, type MatchState, type Seat, type StatusResponse } from './api';
+import {
+  api,
+  type Move,
+  type MatchState,
+  type RoundResult,
+  type Seat,
+  type StatusResponse,
+} from './api';
+import { History } from './components/History';
+import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MovePicker } from './components/MovePicker';
 import { PlayerAvatar } from './components/PlayerAvatar';
+import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
-import { seatDisplayName, seatProfile } from './lib/seatProfile';
-import {
-  MOVE_META,
-  describeOutcome,
-  describeRoundMatchup,
-  opponentMoveFromResult,
-  winsNeeded,
-} from './moves';
+import { seatIdentity } from './lib/seatProfile';
+import { useRoundReveal } from './lib/useRoundReveal';
+import { winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -418,6 +423,9 @@ function Lobby({
   );
 }
 
+/** Stable empty list so the reveal hook can run before the loading return. */
+const NO_RESULTS: RoundResult[] = [];
+
 export function Board({
   myPlayerId,
   mySeatKey,
@@ -435,9 +443,15 @@ export function Board({
   myChosenMove: Move | null;
   onPlay: (move: Move) => void;
 }) {
+  const { revealing, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
+
   if (!state) return <p>Loading match…</p>;
 
   const { match, seats, results } = state;
+  const mySeat = seats.find((s) => s.seatKey === mySeatKey) ?? null;
+  const oppSeat = seats.find((s) => s.seatKey !== mySeatKey) ?? null;
+  const you = seatIdentity(mySeat, 'You');
+  const opponent = seatIdentity(oppSeat, 'Opponent');
   const finished = match.status === 'finished';
   const allSeated = seats.every((s) => s.player);
   const iWon = state.matchWinnerSeatKey === mySeatKey;
@@ -448,14 +462,16 @@ export function Board({
   // Lobby players never see the create card, so round 1 is the only chance to
   // tell them the rules.
   const showRules = !finished && (!allSeated || match.currentRound <= 1);
-  const myDelays = seats.find((s) => s.seatKey === mySeatKey)?.delays ?? {};
-  const oppDelays = seats.find((s) => s.seatKey !== mySeatKey)?.delays ?? {};
+  const myDelays = mySeat?.delays ?? {};
+  const oppDelays = oppSeat?.delays ?? {};
   // Feeds the one-time cooldown explainer ("you played Rock last round…").
   const myLastMove = results.length > 0 ? results[results.length - 1].moves[myPlayerId] ?? null : null;
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
       : null;
+  // The deciding round plays out before the match-end banner takes the screen.
+  const revealingNow = revealing != null;
 
   return (
     <div className="board">
@@ -479,11 +495,14 @@ export function Board({
         mySeatKey={mySeatKey}
         submittedPlayerIds={submitted}
         bestOf={match.bestOf}
+        pulseSeatKey={revealing && revealing.outcome !== 'draw' ? revealing.outcome : null}
       />
 
-      {!allSeated && !finished && <p className="hint">Waiting for all seats to be filled…</p>}
+      {!allSeated && !finished && !revealingNow && (
+        <p className="hint">Waiting for all seats to be filled…</p>
+      )}
 
-      {finished ? (
+      {finished && !revealingNow ? (
         <div className="match-results">
           <div className={`result-banner ${iWon ? 'win' : 'loss'}`}>
             {iWon ? '🏆 You win the match!' : 'You lost the match.'}
@@ -492,8 +511,12 @@ export function Board({
         </div>
       ) : (
         <div className="moves">
-          <p className="round-label">Round {match.currentRound}</p>
-          {!youMovedThisRound && opponentLockedIn && (
+          <p className="round-label">
+            {`Round ${match.currentRound} · You ${mySeat?.player?.score ?? 0} – ${
+              oppSeat?.player?.score ?? 0
+            }`}
+          </p>
+          {!youMovedThisRound && opponentLockedIn && !revealingNow && (
             <p className="hint opponent-ready" role="status">
               Opponent has locked in — pick your move!
             </p>
@@ -503,20 +526,24 @@ export function Board({
             oppDelays={oppDelays}
             myChosenMove={myChosenMove}
             lockedIn={youMovedThisRound}
-            disabled={!connected || !allSeated || youMovedThisRound}
+            opponentLockedIn={opponentLockedIn}
+            disabled={!connected || !allSeated || youMovedThisRound || revealingNow}
             round={match.currentRound}
             myLastMove={myLastMove}
             onPlay={onPlay}
+            centerSlot={
+              revealing ? (
+                <RevealCard
+                  result={revealing}
+                  mySeatKey={mySeatKey}
+                  myPlayerId={myPlayerId}
+                  you={you}
+                  opponent={opponent}
+                  onSkip={skip}
+                />
+              ) : undefined
+            }
           />
-          {youMovedThisRound && myChosenMove && (
-            <p className="choice-locked" role="status">
-              <span className="choice-locked__pick">
-                {MOVE_META[myChosenMove].emoji} {MOVE_META[myChosenMove].label}
-              </span>
-              {' '}locked in —{' '}
-              {opponentLockedIn ? 'revealing round…' : 'waiting for opponent…'}
-            </p>
-          )}
         </div>
       )}
 
@@ -526,17 +553,11 @@ export function Board({
         results={results}
         mySeatKey={mySeatKey}
         myPlayerId={myPlayerId}
-        lobbyReturnUrl={finished ? lobbyReturnUrl : null}
+        you={you}
+        opponent={opponent}
+        lobbyReturnUrl={finished && !revealingNow ? lobbyReturnUrl : null}
       />
     </div>
-  );
-}
-
-function LobbyReturnButton({ href }: { href: string }) {
-  return (
-    <a className="lobby-return-btn" href={href}>
-      ← Back to Lobby
-    </a>
   );
 }
 
@@ -545,11 +566,14 @@ function Scoreboard({
   mySeatKey,
   submittedPlayerIds,
   bestOf,
+  pulseSeatKey,
 }: {
   seats: Seat[];
   mySeatKey: string;
   submittedPlayerIds: string[];
   bestOf: number;
+  /** Seat that just took a round — its newest pip pulses once. */
+  pulseSeatKey: string | null;
 }) {
   const needed = winsNeeded(bestOf);
   return (
@@ -562,13 +586,22 @@ function Scoreboard({
           winsNeeded={needed}
           showVs={i < seats.length - 1}
           lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
+          justWon={seat.seatKey === pulseSeatKey}
         />
       ))}
     </div>
   );
 }
 
-function WinProgress({ wins, needed }: { wins: number; needed: number }) {
+function WinProgress({
+  wins,
+  needed,
+  justWon,
+}: {
+  wins: number;
+  needed: number;
+  justWon: boolean;
+}) {
   const capped = Math.min(wins, needed);
   return (
     <div
@@ -576,9 +609,19 @@ function WinProgress({ wins, needed }: { wins: number; needed: number }) {
       role="img"
       aria-label={`${capped} of ${needed} round wins${capped >= needed ? ', match point' : ''}`}
     >
-      {Array.from({ length: needed }, (_, i) => (
-        <span key={i} className={`win-pip ${i < capped ? 'filled' : 'empty'}`} aria-hidden="true" />
-      ))}
+      {Array.from({ length: needed }, (_, i) => {
+        const filled = i < capped;
+        const pulse = justWon && filled && i === capped - 1;
+        return (
+          <span
+            key={i}
+            className={[  'win-pip', filled ? 'filled' : 'empty', pulse ? 'win-pip--pulse' : '' ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-hidden="true"
+          />
+        );
+      })}
     </div>
   );
 }
@@ -589,24 +632,21 @@ function SeatCard({
   winsNeeded: needed,
   showVs,
   lockedIn,
+  justWon,
 }: {
   seat: Seat;
   mine: boolean;
   winsNeeded: number;
   showVs: boolean;
   lockedIn: boolean;
+  justWon: boolean;
 }) {
-  const profile = seatProfile(seat);
   const seated = Boolean(seat.player);
   const reserved = Boolean(seat.reservedForLobbyUser);
   const waiting = !seated && reserved;
   const open = !seated && !reserved;
   const wins = seat.player?.score ?? 0;
-  const name = seated
-    ? seat.player!.name
-    : waiting
-      ? seatDisplayName(seat, 'Opponent')
-      : 'Open seat';
+  const identity = seatIdentity(seat, open ? 'Open seat' : mine ? 'You' : 'Opponent');
 
   return (
     <>
@@ -621,9 +661,10 @@ function SeatCard({
           .join(' ')}
       >
         <PlayerAvatar
-          profile={profile}
-          displayName={name}
-          highlight={mine}
+          profile={identity.profile}
+          displayName={identity.name}
+          placeholder={identity.placeholder}
+          role={mine ? 'you' : 'opp'}
           dimmed={waiting}
           ready={lockedIn}
         />
@@ -631,69 +672,11 @@ function SeatCard({
           {mine ? 'You' : seat.role ?? 'Opponent'}
           {seat.teamKey ? ` · ${seat.teamKey}` : ''}
         </span>
-        <span className="player-name">{name}</span>
-        {waiting && <span className="player-status">Joining…</span>}
-        <WinProgress wins={wins} needed={needed} />
+        <span className="player-name">{identity.name}</span>
+        {waiting && <span className="player-status">on their way</span>}
+        <WinProgress wins={wins} needed={needed} justWon={justWon} />
       </div>
       {showVs && <span className="vs">vs</span>}
     </>
-  );
-}
-
-export function History({
-  results,
-  mySeatKey,
-  myPlayerId,
-  lobbyReturnUrl,
-}: {
-  results: MatchState['results'];
-  mySeatKey: string;
-  myPlayerId: string;
-  lobbyReturnUrl?: string | null;
-}) {
-  if (results.length === 0) return lobbyReturnUrl ? <LobbyReturnFooter href={lobbyReturnUrl} /> : null;
-  return (
-    <div className="history">
-      <h3>Round history</h3>
-      <ul>
-        {results.map((r) => {
-          const verdict = describeOutcome(r.outcome, mySeatKey);
-          const { myMove, oppMove } = opponentMoveFromResult(r.moves, myPlayerId);
-          const verdictLabel =
-            verdict === 'draw' ? 'Draw' : verdict === 'win' ? 'You won' : 'You lost';
-          return (
-            <li key={r.round} className={`history-row ${verdict}`}>
-              <div className="history-row__head">
-                <span>Round {r.round}</span>
-                <span className="verdict">{verdictLabel}</span>
-              </div>
-              {myMove && oppMove && (
-                <>
-                  <p className="history-row__picks">
-                    <span>
-                      You {MOVE_META[myMove].emoji} {MOVE_META[myMove].label}
-                    </span>
-                    <span className="history-row__sep">·</span>
-                    <span>
-                      Opponent {MOVE_META[oppMove].emoji} {MOVE_META[oppMove].label}
-                    </span>
-                  </p>
-                  <p className="history-row__matchup">{describeRoundMatchup(myMove, oppMove)}</p>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {lobbyReturnUrl && <LobbyReturnFooter href={lobbyReturnUrl} />}
-    </div>
-  );
-}
-
-function LobbyReturnFooter({ href }: { href: string }) {
-  return (
-    <div className="history-lobby-return">
-      <LobbyReturnButton href={href} />
-    </div>
   );
 }

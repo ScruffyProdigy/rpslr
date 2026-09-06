@@ -6,7 +6,6 @@ export type MatchStatus = 'waiting' | 'playing' | 'finished';
 export interface LobbyPlayerProfile {
   displayName?: string;
   avatarUrl?: string;
-  color?: string;
 }
 
 export interface SeatPlayer {
