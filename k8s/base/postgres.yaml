@@ -60,6 +60,15 @@ spec:
               command: ["pg_isready", "-U", "rps", "-d", "rps_game"]
             initialDelaySeconds: 5
             periodSeconds: 5
+          # Autopilot bills on requests, and gives containers with no
+          # resources block a 500m CPU / 2Gi default. Set them explicitly.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
