@@ -777,10 +777,18 @@ button.ghost {
   backdrop-filter: blur(3px);
 }
 .picker-center--idle {
-  background: none;
+  /* Not the card the other states use — with three words in it that reads as
+     an empty panel parked on the board. A soft radial scrim instead: it pulls
+     the arrows down behind the text without drawing an edge of its own. */
+  background: radial-gradient(
+    ellipse 62% 58% at 50% 50%,
+    var(--surface-1) 0%,
+    color-mix(in srgb, var(--surface-1) 72%, transparent) 45%,
+    transparent 78%
+  );
   border-color: transparent;
   backdrop-filter: none;
-  padding: 0;
+  padding: 10px 16px;
 }
 .picker-center__idle {
   font-size: clamp(0.65rem, 3.2cqw, 0.8rem);
@@ -1520,6 +1528,40 @@ ul.history-strip {
 .rules-btn:focus-visible {
   color: var(--text);
   border-color: var(--you);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Focus
+   ---------------------------------------------------------------------------
+   Until now exactly one element styled :focus-visible, so tabbing through the
+   game landed on a UA outline that is nearly invisible on a dark ground — the
+   board looked broken rather than focused. One ring for everything: --you,
+   because focus is the player's own position, and `outline` rather than a
+   box-shadow so it follows each shape's own border-radius (the move buttons
+   are circles). :focus-visible, not :focus, so a mouse click never draws it. */
+.move-btn:focus-visible,
+.picker-center__lock:focus-visible,
+.history-chip:focus-visible,
+.picker-note__dismiss:focus-visible,
+.htp-dialog__close:focus-visible,
+.rules-btn:focus-visible,
+.lobby-link:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--you);
+  outline-offset: 2px;
+}
+/* The board's own buttons sit on a dark well, so the ring needs a little more
+   air to read against the node's border. */
+.move-btn:focus-visible {
+  outline-offset: 3px;
+}
+/* An input already carries a border; doubling it up reads as an error state. */
+input:focus-visible {
+  outline-offset: 0;
 }
 
 /* Waiting for the opponent. The picker is disabled in this state anyway, so
