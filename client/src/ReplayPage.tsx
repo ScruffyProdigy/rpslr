@@ -46,21 +46,36 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
     [state],
   );
 
-  // Hooks run before the early returns below, so the count is 0 until a replay
-  // has been built — the hook handles an empty match without special-casing.
-  const playback = useReplayPlayback(replay?.frames.length ?? 0);
+  // One step past the last round, for the end card. Without it the deciding
+  // round is never played — reaching the final frame *is* the end, so the
+  // round that settled the match would only ever appear as a final score.
+  // Hooks run before the early returns below, so this is 0 until the match
+  // loads; the playback hook handles an empty replay without special-casing.
+  const playback = useReplayPlayback(replay ? replay.frames.length + 1 : 0);
 
   if (error) return <ReplayMessage title="Replay unavailable" body={error} />;
   if (!state) return <ReplayMessage title="Loading the match…" body={null} />;
   if (blocked) return <ReplayMessage title={blocked} body={null} />;
   if (!replay) return <ReplayMessage title="This match has no rounds to replay" body={null} />;
 
-  const frame = replay.frames[playback.index];
-  const shown = replay.frames.slice(0, playback.index + 1);
+  const over = playback.index >= replay.frames.length;
+  // On the end-card step there is no round of its own, so the board keeps the
+  // last one — the strip beneath it still reads as the whole match.
+  const frameIndex = Math.min(playback.index, replay.frames.length - 1);
+  const frame = replay.frames[frameIndex];
+  const shown = replay.frames.slice(0, frameIndex + 1);
   const voice = spectatorVoice(replay.a.identity.name);
   const oppName = replay.b.identity.name;
-  const edge = winningEdgeOf(frame.a.move, frame.b.move);
-  const over = playback.atEnd;
+  // While the verdict is withheld, so is everything that would give it away:
+  // the arrow it was won on, and the scoreboard that has already counted it.
+  const picksBeat = playback.beat === 'picks';
+  const edge = picksBeat ? null : winningEdgeOf(frame.a.move, frame.b.move);
+  // A round with a missing pick is skipped by buildReplay, so a round number is
+  // not an index — look it up rather than assume they line up.
+  const jumpToRound = (round: number) => {
+    const target = replay.frames.findIndex((f) => f.round === round);
+    if (target >= 0) playback.jumpTo(target);
+  };
 
   return (
     <div className="replay">
@@ -76,7 +91,8 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           />
           <span className="replay__name">{replay.a.identity.name}</span>
           <span className="replay__score">
-            {frame.a.score}&ndash;{frame.b.score}
+            {picksBeat ? frame.a.scoreBefore : frame.a.score}&ndash;
+            {picksBeat ? frame.b.scoreBefore : frame.b.score}
           </span>
           <span className="replay__name">{oppName}</span>
           <PlayerAvatar
@@ -93,16 +109,18 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         <MatchEndCard
           iWon={replay.winnerSeatKey === replay.a.seatKey}
           drawn={replay.winnerSeatKey === null}
-          you={replay.a.identity}
-          opponent={replay.b.identity}
+            you={replay.a.identity}
+            opponent={replay.b.identity}
           myScore={replay.finalScore.a}
           oppScore={replay.finalScore.b}
           results={replay.frames.map((f) => f.result)}
-          mySeatKey={replay.a.seatKey}
-          myPlayerId={replay.a.playerId}
+            mySeatKey={replay.a.seatKey}
+            myPlayerId={replay.a.playerId}
           lobbyReturnUrl={null}
           endReason={replay.endReason}
           voice={voice}
+          activeRound={null}
+          onSelectRound={jumpToRound}
         />
       ) : (
         <MovePicker
@@ -121,11 +139,11 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           centerSlot={
             <RevealCard
               result={frame.result}
-              phase="card"
-              mySeatKey={replay.a.seatKey}
-              myPlayerId={replay.a.playerId}
-              you={replay.a.identity}
-              opponent={replay.b.identity}
+              phase={picksBeat ? 'picks' : 'card'}
+                mySeatKey={replay.a.seatKey}
+                myPlayerId={replay.a.playerId}
+                you={replay.a.identity}
+                opponent={replay.b.identity}
               voice={voice}
               onSkip={playback.next}
             />
@@ -145,23 +163,20 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         onSpeed={playback.setSpeed}
       />
 
-      <div className="replay__rounds">
-        <RoundStrip
-          results={shown.map((f) => f.result)}
-          mySeatKey={replay.a.seatKey}
-          myPlayerId={replay.a.playerId}
-          you={replay.a.identity}
-          opponent={replay.b.identity}
-          voice={voice}
-          activeRound={frame.round}
-          onSelectRound={(round) => {
-            // A round with a missing pick is skipped by buildReplay, so the
-            // round number is not the index — look it up rather than assume.
-            const target = replay.frames.findIndex((f) => f.round === round);
-            if (target >= 0) playback.jumpTo(target);
-          }}
-        />
-      </div>
+      {!over && (
+        <div className="replay__rounds">
+          <RoundStrip
+            results={shown.map((f) => f.result)}
+            mySeatKey={replay.a.seatKey}
+            myPlayerId={replay.a.playerId}
+            you={replay.a.identity}
+            opponent={replay.b.identity}
+            voice={voice}
+            activeRound={frame.round}
+            onSelectRound={jumpToRound}
+          />
+        </div>
+      )}
     </div>
   );
 }

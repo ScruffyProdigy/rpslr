@@ -134,6 +134,24 @@ describe('buildReplay cooldown arithmetic', () => {
 });
 
 describe('buildReplay scoring', () => {
+  it('also reports the score as it stood entering the round', () => {
+    // A replay withholds a round's verdict for a beat; a running score that
+    // already counts the round gives it away over the top of the card.
+    const frames = buildReplay(
+      state([
+        round(1, 'rock', 'scissors', 'a'),
+        round(2, 'paper', 'paper', 'draw'),
+        round(3, 'scissors', 'rock', 'b'),
+      ]),
+    ).frames;
+
+    expect(frames.map((f) => [f.a.scoreBefore, f.b.scoreBefore])).toEqual([
+      [0, 0],
+      [1, 0],
+      [1, 0],
+    ]);
+  });
+
   it('carries a running score that ignores draws', () => {
     const frames = buildReplay(
       state([

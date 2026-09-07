@@ -50,6 +50,8 @@ export interface ReplaySide {
   safeMoves: Move[];
   /** Rounds won so far, including this one. */
   score: number;
+  /** Rounds won before this one — the scoreboard while the verdict waits. */
+  scoreBefore: number;
   /** Picks before this round, most recent first — explains the cooldowns. */
   recentMoves: Move[];
   /** The server chose this move because the player ran out of time. */
@@ -125,6 +127,8 @@ export function buildReplay(state: MatchState): Replay {
     // it keeps the cooldown chain honest rather than inventing a move.
     if (!moveA || !moveB) continue;
 
+    const beforeA = scoreA;
+    const beforeB = scoreB;
     if (result.outcome === seatA.seatKey) scoreA += 1;
     else if (result.outcome === seatB.seatKey) scoreB += 1;
 
@@ -141,6 +145,7 @@ export function buildReplay(state: MatchState): Replay {
         delaysBefore: delaysA,
         safeMoves: ALL_MOVES.filter((m) => threatsTo(m, delaysB).safe),
         score: scoreA,
+        scoreBefore: beforeA,
         recentMoves: [...playedA].reverse(),
         autoPicked: autoPicked.includes(idA),
       },
@@ -151,6 +156,7 @@ export function buildReplay(state: MatchState): Replay {
         delaysBefore: delaysB,
         safeMoves: ALL_MOVES.filter((m) => threatsTo(m, delaysA).safe),
         score: scoreB,
+        scoreBefore: beforeB,
         recentMoves: [...playedB].reverse(),
         autoPicked: autoPicked.includes(idB),
       },

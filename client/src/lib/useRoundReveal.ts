@@ -6,7 +6,12 @@ export const REVEAL_HOLD_MS = 2600;
 /** The dissolve, during which the winning arrow lights on the graph beneath. */
 export const REVEAL_OUTRO_MS = 600;
 
-export type RevealPhase = 'card' | 'outro';
+/**
+ * 'picks' shows what was thrown without saying who won — a replay holds there
+ * for a beat so the watcher can read the board. A live match never uses it:
+ * the player already knows their own pick, so there is nothing to withhold.
+ */
+export type RevealPhase = 'picks' | 'card' | 'outro';
 
 export interface Reveal {
   result: RoundResult;

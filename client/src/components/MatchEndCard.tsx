@@ -26,6 +26,8 @@ export function MatchEndCard({
   lobbyReturnUrl,
   endReason,
   voice = PLAYER_VOICE,
+  activeRound = null,
+  onSelectRound,
 }: {
   iWon: boolean;
   /** No winner seat — the match ended without one (abandoned, or all draws). */
@@ -42,6 +44,10 @@ export function MatchEndCard({
   endReason?: MatchEndReason | null;
   /** How to refer to the you-side: second person, or by name on a replay. */
   voice?: Voice;
+  /** Round the strip should mark, when it is a replay's scrubber. */
+  activeRound?: number | null;
+  /** When set, the strip jumps the replay rather than expanding a chip. */
+  onSelectRound?: (round: number) => void;
 }) {
   const winner = drawn ? null : iWon ? you : opponent;
   const verdict = drawn
@@ -106,6 +112,8 @@ export function MatchEndCard({
           you={you}
           opponent={opponent}
           voice={voice}
+          activeRound={activeRound}
+          onSelectRound={onSelectRound}
         />
       </div>
 

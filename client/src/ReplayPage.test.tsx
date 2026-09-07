@@ -105,6 +105,20 @@ describe('<ReplayPage>', () => {
     );
   });
 
+  it('plays the deciding round out before it declares the winner', async () => {
+    // The last round is the one worth watching. Ending the moment the final
+    // frame is reached shows its result on a scoreboard and never on the board.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+
+    expect(screen.getByText('Ana takes round 3')).toBeInTheDocument();
+    expect(screen.queryByText('Ana wins the match.')).not.toBeInTheDocument();
+  });
+
   it('ends on the final score with the winner named', async () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     render(<ReplayPage matchRef="ext-1" />);

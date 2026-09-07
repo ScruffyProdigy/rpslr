@@ -8,10 +8,22 @@ import { prefersReducedMotion } from './reducedMotion';
  */
 export const ROUND_MS = 3000;
 
+/**
+ * How much of a round is spent on the picks alone, before the verdict lands.
+ * The drama of a round is seeing what was thrown and working out who won a
+ * beat before being told, so the showdown withholds its verdict for this long.
+ */
+export const PICKS_MS = 1100;
+
 export type PlaybackSpeed = 1 | 2;
+
+/** Where a round is in its own little arc: picks thrown, then verdict. */
+export type RoundBeat = 'picks' | 'reveal';
 
 export interface Playback {
   index: number;
+  /** Whether the round on screen has given its verdict yet. */
+  beat: RoundBeat;
   playing: boolean;
   speed: PlaybackSpeed;
   atEnd: boolean;
@@ -40,11 +52,34 @@ export function useReplayPlayback(frameCount: number): Playback {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(!stepping && frameCount > 1);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
+  const [revealed, setRevealed] = useState(false);
 
   const last = Math.max(0, frameCount - 1);
   const atEnd = index >= last;
 
   const clamp = useCallback((next: number) => Math.min(last, Math.max(0, next)), [last]);
+
+  // The page mounts before the match has loaded, so the hook's first call knows
+  // of no frames at all. Auto-play has to begin when the frames arrive rather
+  // than at mount — otherwise a replay opened from a link never plays.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || stepping || frameCount <= 1) return;
+    autoStarted.current = true;
+    setPlaying(true);
+  }, [stepping, frameCount]);
+
+  // A round only holds its verdict back while it is running past on its own. A
+  // watcher who paused or stepped here is reading, not watching, and should not
+  // have to wait out a beat for the answer.
+  const inPicks = playing && !stepping && !revealed;
+
+  useEffect(() => {
+    if (!playing || stepping) return;
+    setRevealed(false);
+    const timer = setTimeout(() => setRevealed(true), PICKS_MS / speed);
+    return () => clearTimeout(timer);
+  }, [playing, stepping, index, speed]);
 
   useEffect(() => {
     if (stepping || !playing) return;
@@ -86,6 +121,7 @@ export function useReplayPlayback(frameCount: number): Playback {
 
   return {
     index,
+    beat: inPicks ? 'picks' : 'reveal',
     playing,
     speed,
     atEnd,

@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ROUND_MS, useReplayPlayback } from './useReplayPlayback';
+import { PICKS_MS, ROUND_MS, useReplayPlayback } from './useReplayPlayback';
 
 function setReducedMotion(reduce: boolean) {
   Object.defineProperty(window, 'matchMedia', {
@@ -109,5 +109,79 @@ describe('useReplayPlayback', () => {
 
     act(() => result.current.next());
     expect(result.current.index).toBe(1);
+  });
+});
+
+describe('useReplayPlayback arriving after the match loads', () => {
+  it('starts playing once the frames turn up, not only if they were there at mount', () => {
+    // The page mounts before `api.getState` resolves, so the hook is first
+    // called with 0 frames. A replay that only auto-plays when the count was
+    // known at mount never auto-plays at all.
+    const { result, rerender } = renderHook(({ count }) => useReplayPlayback(count), {
+      initialProps: { count: 0 },
+    });
+    expect(result.current.playing).toBe(false);
+
+    rerender({ count: 5 });
+    expect(result.current.playing).toBe(true);
+
+    act(() => void vi.advanceTimersByTime(ROUND_MS));
+    expect(result.current.index).toBe(1);
+  });
+
+  it('does not restart itself after the watcher pauses', () => {
+    const { result, rerender } = renderHook(({ count }) => useReplayPlayback(count), {
+      initialProps: { count: 0 },
+    });
+    rerender({ count: 5 });
+    act(() => result.current.pause());
+    rerender({ count: 5 });
+    expect(result.current.playing).toBe(false);
+  });
+
+  it('stays still when the frames arrive and motion is unwelcome', () => {
+    setReducedMotion(true);
+    const { result, rerender } = renderHook(({ count }) => useReplayPlayback(count), {
+      initialProps: { count: 0 },
+    });
+    rerender({ count: 5 });
+    expect(result.current.playing).toBe(false);
+  });
+});
+
+describe('useReplayPlayback round beats', () => {
+  it('shows the picks before it shows who won', () => {
+    const { result } = renderHook(() => useReplayPlayback(3));
+    expect(result.current.beat).toBe('picks');
+
+    act(() => void vi.advanceTimersByTime(PICKS_MS));
+    expect(result.current.beat).toBe('reveal');
+    expect(result.current.index).toBe(0);
+
+    act(() => void vi.advanceTimersByTime(ROUND_MS - PICKS_MS));
+    expect(result.current.index).toBe(1);
+    expect(result.current.beat).toBe('picks');
+  });
+
+  it('halves the pick beat at 2x along with the rest of the round', () => {
+    const { result } = renderHook(() => useReplayPlayback(3));
+    act(() => result.current.setSpeed(2));
+    act(() => void vi.advanceTimersByTime(PICKS_MS / 2));
+    expect(result.current.beat).toBe('reveal');
+  });
+
+  it('shows a paused or stepped round whole, with nothing held back', () => {
+    const { result } = renderHook(() => useReplayPlayback(3));
+    act(() => result.current.pause());
+    expect(result.current.beat).toBe('reveal');
+
+    act(() => result.current.next());
+    expect(result.current.beat).toBe('reveal');
+  });
+
+  it('holds nothing back under prefers-reduced-motion', () => {
+    setReducedMotion(true);
+    const { result } = renderHook(() => useReplayPlayback(3));
+    expect(result.current.beat).toBe('reveal');
   });
 });
