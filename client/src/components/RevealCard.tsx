@@ -9,6 +9,11 @@ import MoveIcon from './MoveIcon';
  * The showdown. Takes over the pentagon's centre slot for a beat when a round
  * resolves: both picks, what beat what, and who took the round. Avatars stand
  * in for the words "You" and "Opponent".
+ *
+ * The slot it lands in is already the board's live region, so the card brings
+ * no `role="status"` of its own: it used to, and the round result was then
+ * announced by a region that had only just been mounted — the case screen
+ * readers are least reliable about (JQ-157).
  */
 export function RevealCard({
   result,
@@ -56,7 +61,6 @@ export function RevealCard({
       ]
         .filter(Boolean)
         .join(' ')}
-      role="status"
     >
       <div className="reveal-card__picks">
         <span className="reveal-card__side reveal-card__side--you">
