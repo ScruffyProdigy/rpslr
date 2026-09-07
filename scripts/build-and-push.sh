@@ -6,6 +6,10 @@
 #
 #   ./scripts/build-and-push.sh           # build only
 #   ./scripts/build-and-push.sh --push    # build + push (requires registry login)
+#
+# Builds use the working tree as the Docker build context, so the tree must be
+# clean: whatever is sitting in this checkout is what ships. Override with
+# ALLOW_DIRTY_TREE=true for a deliberate dirty build.
 
 set -euo pipefail
 
@@ -36,6 +40,42 @@ TAG="${TAG:-rpsls}"
 if [ "$TAG" = "latest" ] && [ "${ALLOW_LATEST_TAG:-false}" != "true" ]; then
   echo "Refusing to build :latest — use TAG=rpsls (or ALLOW_LATEST_TAG=true)." >&2
   exit 1
+fi
+
+# `docker build ./api` takes the working tree as its build context, so an
+# uncommitted edit — including one another agent left in this clone — ends up
+# in the image with nothing in git recording it. Refuse by default.
+command -v git >/dev/null 2>&1 || { echo "git not found — cannot verify the tree is clean." >&2; exit 1; }
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "${REPO_ROOT} is not a git checkout — refusing to build." >&2; exit 1; }
+
+DIRTY="$(git status --porcelain)"
+if [ -n "$DIRTY" ]; then
+  if [ "${ALLOW_DIRTY_TREE:-false}" != "true" ]; then
+    echo "Refusing to build from a dirty tree — the image would ship uncommitted work." >&2
+    echo "Uncommitted paths in ${REPO_ROOT}:" >&2
+    printf '%s\n' "$DIRTY" | sed 's/^/  /' >&2
+    echo "Commit or stash them, or re-run with ALLOW_DIRTY_TREE=true." >&2
+    exit 1
+  fi
+  echo "Warning: ALLOW_DIRTY_TREE=true — building from a dirty tree." >&2
+fi
+
+GIT_SHA="$(git rev-parse HEAD)"
+
+# org.opencontainers.image.revision is meant to be resolvable as-is, so the
+# dirtiness rides on its own label rather than as a "-dirty" suffix that no
+# lookup would find.
+LABEL_ARGS=(--label "org.opencontainers.image.revision=${GIT_SHA}")
+DIRTY_NOTE=""
+if [ -n "$DIRTY" ]; then
+  LABEL_ARGS+=(--label "com.joinquest.image.dirty-tree=true")
+  DIRTY_NOTE=" (dirty tree)"
+fi
+
+# A commit only this machine has is not traceable by anyone else. Warn rather
+# than refuse: building before pushing is legitimate.
+if [ -z "$(git branch -r --contains HEAD 2>/dev/null)" ]; then
+  echo "Warning: ${GIT_SHA} is on no remote — push it, or nobody else can resolve what shipped." >&2
 fi
 
 command -v docker >/dev/null 2>&1 || { echo "docker not found" >&2; exit 1; }
@@ -69,11 +109,13 @@ if [ "$PUSH" = true ]; then
   esac
 fi
 
+echo "Building from commit ${GIT_SHA}${DIRTY_NOTE}"
+
 echo "Building API image..."
-docker build -t "${API_IMAGE}:${TAG}" ./api
+docker build "${LABEL_ARGS[@]}" -t "${API_IMAGE}:${TAG}" ./api
 
 echo "Building client image..."
-docker build -t "${CLIENT_IMAGE}:${TAG}" ./client
+docker build "${LABEL_ARGS[@]}" -t "${CLIENT_IMAGE}:${TAG}" ./client
 
 if [ "$PUSH" = true ]; then
   echo "Pushing images..."
@@ -85,3 +127,4 @@ fi
 
 echo "API:    ${API_IMAGE}:${TAG}"
 echo "Client: ${CLIENT_IMAGE}:${TAG}"
+echo "Commit: ${GIT_SHA}${DIRTY_NOTE}"
