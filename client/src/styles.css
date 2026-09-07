@@ -2253,3 +2253,67 @@ input:focus-visible {
   margin: 0;
   color: var(--muted);
 }
+
+/* ---------------------------------------------------------------------------
+   Share replay + Play-on-JoinQuest (JQ-119)
+   --------------------------------------------------------------------------- */
+
+.share-replay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+}
+.share-replay__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 22px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.share-replay__status {
+  min-height: 1.1em;
+  font-size: 0.82rem;
+  color: var(--ok);
+}
+/* The http fallback: a link with nothing to copy it, so it has to be legible
+   and selectable rather than merely present. */
+.share-replay__manual {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+.share-replay__url {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: var(--text);
+}
+
+.match-end__cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.match-end__cta-line {
+  margin: 0;
+  color: var(--muted);
+}
+
+.replay__cta {
+  display: flex;
+  justify-content: center;
+  margin: 22px 0 0;
+}

@@ -20,6 +20,7 @@ import { seatIdentity } from './lib/seatProfile';
 import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
+import { buildReplayUrl, replayRef } from './lib/replayLink';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
@@ -557,6 +558,11 @@ export function Board({
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
       : null;
+  // The one share action that belongs inside the game: the match these two
+  // just played. Only once it is over — a replay of a live match would hand
+  // the other player's picks to anyone with the link.
+  const shareRef = finished ? replayRef(match) : null;
+  const replayUrl = shareRef ? buildReplayUrl(shareRef) : null;
   // The deciding round plays out before the match-end banner takes the screen.
   const revealingNow = reveal != null;
   // As the card dissolves, the graph asserts the same fact: the edge the round
@@ -582,6 +588,7 @@ export function Board({
           myPlayerId={myPlayerId}
           lobbyReturnUrl={lobbyReturnUrl}
           endReason={match.endReason}
+          replayUrl={replayUrl}
         />
       </div>
     );

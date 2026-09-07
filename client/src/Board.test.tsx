@@ -412,6 +412,22 @@ describe('<Board> match end (JQ-114)', () => {
     expect(score).toHaveAccessibleName('Final score: you 3, Grace 1');
   });
 
+  // JQ-119: a match that just ended is the one thing a player has to share,
+  // and until this there was no way to get at it from the screen that says so.
+  it('offers the replay of the match that just ended', () => {
+    const { container } = endedBoard();
+    const share = within(container.querySelector('.match-end') as HTMLElement).getByRole(
+      'button',
+      { name: /share replay/i },
+    );
+    expect(share).toBeInTheDocument();
+  });
+
+  it('does not offer a replay of a match still being played', () => {
+    const { container } = renderBoard(state({ currentRound: 2, results: [ROUND_1] }));
+    expect(container.querySelector('.share-replay')).not.toBeInTheDocument();
+  });
+
   // Phase 4: the end card takes the whole board, so the ending reads as an
   // ending rather than a board with a banner on it.
   it('takes the board away — no scoreboard, no picker, no history below', () => {

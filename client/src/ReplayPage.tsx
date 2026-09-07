@@ -8,6 +8,7 @@ import { ReplayControls } from './components/ReplayControls';
 import { RevealCard } from './components/RevealCard';
 import { RoundStrip } from './components/RoundStrip';
 import { useReplayPlayback } from './lib/useReplayPlayback';
+import { withReplayAttribution } from './lib/replayLink';
 import { spectatorVoice } from './lib/voice';
 import { winningEdgeOf } from './moves';
 import { buildReplay, replayBlockedReason } from './replay';
@@ -65,6 +66,13 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   const frame = replay.frames[frameIndex];
   const shown = replay.frames.slice(0, frameIndex + 1);
   const voice = spectatorVoice(replay.a.identity.name);
+  // A replay's job is to turn a watcher into a player, so the way to JoinQuest
+  // is on screen the whole time rather than only once the match runs out. The
+  // marker lets Lobby tell a sign-up that came from a replay from one that
+  // didn't.
+  const playCtaUrl = state.match.lobbyReturnUrl
+    ? withReplayAttribution(state.match.lobbyReturnUrl)
+    : null;
   const oppName = replay.b.identity.name;
   // While the verdict is withheld, so is everything that would give it away:
   // the arrow it was won on, and the scoreboard that has already counted it.
@@ -121,6 +129,7 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           voice={voice}
           activeRound={null}
           onSelectRound={jumpToRound}
+          playCtaUrl={playCtaUrl}
         />
       ) : (
         <MovePicker
@@ -176,6 +185,14 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
             onSelectRound={jumpToRound}
           />
         </div>
+      )}
+
+      {playCtaUrl && !over && (
+        <p className="replay__cta">
+          <a className="lobby-return-btn" href={playCtaUrl}>
+            Play RPSLR on JoinQuest
+          </a>
+        </p>
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import type { MatchEndReason, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
 import { PLAYER_VOICE, winsMatch, youLabel, type Voice } from '../lib/voice';
 import { LobbyReturnButton } from './LobbyReturnButton';
+import { ShareReplayButton } from './ShareReplayButton';
 import { PlayerAvatar } from './PlayerAvatar';
 import { RoundStrip } from './RoundStrip';
 
@@ -28,6 +29,8 @@ export function MatchEndCard({
   voice = PLAYER_VOICE,
   activeRound = null,
   onSelectRound,
+  replayUrl = null,
+  playCtaUrl = null,
 }: {
   iWon: boolean;
   /** No winner seat — the match ended without one (abandoned, or all draws). */
@@ -48,6 +51,10 @@ export function MatchEndCard({
   activeRound?: number | null;
   /** When set, the strip jumps the replay rather than expanding a chip. */
   onSelectRound?: (round: number) => void;
+  /** Link to this match's replay — offered to the players who just played it. */
+  replayUrl?: string | null;
+  /** Link to JoinQuest — offered to whoever is watching the replay. */
+  playCtaUrl?: string | null;
 }) {
   const winner = drawn ? null : iWon ? you : opponent;
   const verdict = drawn
@@ -116,6 +123,19 @@ export function MatchEndCard({
           onSelectRound={onSelectRound}
         />
       </div>
+
+      {replayUrl && <ShareReplayButton url={replayUrl} />}
+
+      {playCtaUrl && (
+        <div className="match-end__cta">
+          <p className="match-end__cta-line">
+            {winner ? `Think you could beat ${winner.name}?` : 'Think you could do better?'}
+          </p>
+          <a className="lobby-return-btn" href={playCtaUrl}>
+            Play RPSLR on JoinQuest
+          </a>
+        </div>
+      )}
 
       {lobbyReturnUrl && <LobbyReturnButton href={lobbyReturnUrl} />}
     </div>
