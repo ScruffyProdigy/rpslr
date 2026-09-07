@@ -1,6 +1,6 @@
 /**
  * Game-mode manifest for GET /api/v1/game-modes.
- * Field names match the PlayHub Lobby catalog fetcher (`gameclient.Manifest`).
+ * Field names match the JoinQuest Lobby catalog fetcher (`gameclient.Manifest`).
  * Match length (`bestOf`) is not part of the catalog — Lobby passes it on provision
  * when needed, or the game applies its own default.
  *

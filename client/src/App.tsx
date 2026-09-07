@@ -116,12 +116,12 @@ export default function App() {
       {debug &&
         (lobbyLinked ? (
           <div className="banner banner--lobby" role="status">
-            <strong>Connected via PlayHub Lobby.</strong> You'll be seated in your assigned slot.
+            <strong>Connected via JoinQuest Lobby.</strong> You'll be seated in your assigned slot.
           </div>
         ) : (
           status?.standalone && (
             <div className="banner banner--standalone" role="status">
-              <strong>Standalone mode.</strong> Not signed in through PlayHub Lobby.
+              <strong>Standalone mode.</strong> Not signed in through JoinQuest Lobby.
               {lobbyLink.lobbyUser && <> Playing as <strong>{lobbyLink.lobbyUser}</strong>.</>}
             </div>
           )

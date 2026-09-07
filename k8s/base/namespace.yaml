@@ -3,6 +3,6 @@ kind: Namespace
 metadata:
   name: rpsls-duel
   labels:
-    app.kubernetes.io/part-of: playhub-demo-game
-    playhub.io/game-id: rock-paper-scissors-lizard-robot
-    playhub.io/production-host: rpsls-duel.win
+    app.kubernetes.io/part-of: joinquest-demo-game
+    joinquest.io/game-id: rock-paper-scissors-lizard-robot
+    joinquest.io/production-host: rpsls-duel.win

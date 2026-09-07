@@ -2,7 +2,7 @@
 # Build (and optionally push) RPS game Docker images.
 #
 # Defaults match k8s/base manifests (Docker Hub). Override for GHCR:
-#   REGISTRY=ghcr.io IMAGE_OWNER=playhub ./scripts/build-and-push.sh --push
+#   REGISTRY=ghcr.io IMAGE_OWNER=joinquest ./scripts/build-and-push.sh --push
 #
 #   ./scripts/build-and-push.sh           # build only
 #   ./scripts/build-and-push.sh --push    # build + push (requires registry login)
