@@ -200,3 +200,24 @@ describe('describeBeatsGraph (JQ-157)', () => {
     expect(describeBeatsGraph({ rock: 0, lizard: 2 }).opponent).not.toContain('Rock');
   });
 });
+
+describe('describeBeatsGraph naming', () => {
+  it('says "The opponent" when there is a you to be opposite', () => {
+    expect(describeBeatsGraph({}).opponent).toBe(
+      'The opponent can play every move this round, so every arrow is live.',
+    );
+  });
+
+  it('names the other player on a replay, where nobody is "you"', () => {
+    expect(describeBeatsGraph({}, 'Ben').opponent).toBe(
+      'Ben can play every move this round, so every arrow is live.',
+    );
+    expect(describeBeatsGraph({ robot: 2 }, 'Ben').opponent).toBe(
+      "Ben can't play Robot this round, so those attacks are drawn faded.",
+    );
+  });
+
+  it('falls back to the anonymous form for a blank name', () => {
+    expect(describeBeatsGraph({}, '  ').opponent).toMatch(/^The opponent/);
+  });
+});

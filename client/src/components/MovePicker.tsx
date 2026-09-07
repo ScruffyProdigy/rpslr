@@ -180,7 +180,7 @@ export function MovePicker({
     else setPicked(move);
   }
 
-  const graphText = describeBeatsGraph(oppDelays);
+  const graphText = describeBeatsGraph(oppDelays, oppName);
   const myCooldowns = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
