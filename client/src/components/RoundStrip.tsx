@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
+import { PLAYER_VOICE, type Voice } from '../lib/voice';
 import { MOVE_META, describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
 import MoveIcon from './MoveIcon';
@@ -17,12 +18,21 @@ export function RoundStrip({
   myPlayerId,
   you,
   opponent,
+  voice = PLAYER_VOICE,
+  activeRound = null,
+  onSelectRound,
 }: {
   results: RoundResult[];
   mySeatKey: string;
   myPlayerId: string;
   you: Identity;
   opponent: Identity;
+  /** How to refer to the you-side: second person, or by name on a replay. */
+  voice?: Voice;
+  /** Round the strip should mark as the one on screen, if any. */
+  activeRound?: number | null;
+  /** When set, a chip jumps the replay to that round instead of expanding. */
+  onSelectRound?: (round: number) => void;
 }) {
   const [openRound, setOpenRound] = useState<number | null>(null);
 
@@ -43,14 +53,31 @@ export function RoundStrip({
               ? `${MOVE_META[myMove].label} vs ${MOVE_META[oppMove].label}`
               : 'no picks recorded';
           const said =
-            verdict === 'draw' ? 'draw' : verdict === 'win' ? 'you won' : `${opponent.name} won`;
+            verdict === 'draw'
+              ? 'draw'
+              : verdict === 'win'
+                ? voice.you
+                  ? `${voice.you} won`
+                  : 'you won'
+                : `${opponent.name} won`;
           return (
             <li key={r.round}>
               <button
-                className={`history-chip history-chip--${verdict}`}
+                className={[
+                  'history-chip',
+                  `history-chip--${verdict}`,
+                  activeRound === r.round ? 'history-chip--active' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 aria-label={`Round ${r.round}: ${picks} — ${said}`}
-                aria-expanded={openRound === r.round}
-                onClick={() => setOpenRound(openRound === r.round ? null : r.round)}
+                aria-expanded={onSelectRound ? undefined : openRound === r.round}
+                aria-current={activeRound === r.round ? 'true' : undefined}
+                onClick={() =>
+                  onSelectRound
+                    ? onSelectRound(r.round)
+                    : setOpenRound(openRound === r.round ? null : r.round)
+                }
               >
                 <span className="history-chip__round" aria-hidden="true">
                   R{r.round}

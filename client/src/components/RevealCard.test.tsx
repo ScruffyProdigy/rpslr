@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RevealCard } from './RevealCard';
+import { spectatorVoice } from '../lib/voice';
 import type { RoundResult } from '../api';
 
 const MY_PLAYER = 'player-a';
@@ -85,5 +86,40 @@ describe('<RevealCard> (JQ 3.1)', () => {
     // one arriving mid-round is how the result got double-announced or lost.
     const { container } = renderCard();
     expect(container.querySelector('[role="status"], [aria-live]')).toBeNull();
+  });
+});
+
+describe('<RevealCard> in a replay', () => {
+  it('names the blue side instead of calling it "You"', () => {
+    render(
+      <RevealCard
+        result={result({ round: 2, outcome: 'a' })}
+        phase="card"
+        mySeatKey="a"
+        myPlayerId={MY_PLAYER}
+        you={YOU}
+        opponent={OPP}
+        voice={spectatorVoice('Ada')}
+        onSkip={() => {}}
+      />,
+    );
+    expect(screen.getByText('Ada takes round 2')).toBeInTheDocument();
+    expect(screen.queryByText(/\bYou\b/)).not.toBeInTheDocument();
+  });
+
+  it('names whoever ran out of time, on either side', () => {
+    render(
+      <RevealCard
+        result={result({ round: 1, outcome: 'b', autoPicked: [MY_PLAYER] })}
+        phase="card"
+        mySeatKey="a"
+        myPlayerId={MY_PLAYER}
+        you={YOU}
+        opponent={OPP}
+        voice={spectatorVoice('Ada')}
+        onSkip={() => {}}
+      />,
+    );
+    expect(screen.getByText('Ada ran out of time — a move was picked for them')).toBeInTheDocument();
   });
 });
