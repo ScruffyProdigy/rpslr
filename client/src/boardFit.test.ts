@@ -116,9 +116,14 @@ describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
     expect(declaration('.move-btn--cooldown', 'border-style')).toBe('dashed');
   });
 
-  it('takes the colour out of the glyph rather than only dimming it', () => {
-    const filter = declaration('.move-btn--cooldown .move-btn__emoji', 'filter');
-    expect(filter).toContain('grayscale');
+  it('dims the glyph only slightly, and leaves its colour to the button', () => {
+    // While the moves were emoji this was grayscale(): a multicolour glyph had
+    // its hue taken out. The drawn icons are one colour and inherit the
+    // button's, so the non-colour signals (the dashed border above, and the
+    // cooldown pill) carry the state, and the glyph only steps back — never as
+    // far as the 28% opacity Phase 2 rejected for failing contrast.
+    const opacity = Number(declaration('.move-btn--cooldown .move-btn__emoji', 'opacity'));
+    expect(opacity).toBeGreaterThanOrEqual(0.7);
   });
 
   it('keeps the label readable rather than fading it out', () => {

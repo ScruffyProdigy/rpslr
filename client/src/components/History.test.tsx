@@ -47,8 +47,8 @@ describe('<History> compact strip (JQ 3.4)', () => {
     const chips = within(strip).getAllByRole('button');
     expect(chips).toHaveLength(3);
     expect(chips[0]).toHaveTextContent('R1');
-    expect(chips[0]).toHaveTextContent('📄');
-    expect(chips[0]).toHaveTextContent('🤖');
+    expect(chips[0].querySelector('svg[data-move="paper"]')).toBeInTheDocument();
+    expect(chips[0].querySelector('svg[data-move="robot"]')).toBeInTheDocument();
   });
 
   it('names the round, the picks and the winner for assistive tech', () => {

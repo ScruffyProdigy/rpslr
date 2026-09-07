@@ -572,7 +572,7 @@ button.ghost {
     opacity 0.15s ease;
 }
 .move-btn__emoji {
-  font-size: clamp(1.25rem, 8.5cqw, 2rem);
+  font-size: clamp(1.75rem, 12.05cqw, 2.86rem);
   line-height: 1;
 }
 .move-btn__name {
@@ -606,8 +606,11 @@ button.ghost {
   color: var(--muted);
 }
 .move-btn--cooldown .move-btn__emoji {
+  /* grayscale() did this job while the moves were emoji. A one-colour icon has
+     no saturation to remove — it draws in currentColor, so it already steps
+     back to --muted with the rest of the button. All that is left is a slight
+     dim, kept well above the 28% that failed contrast in Phase 2. */
   opacity: 0.75;
-  filter: grayscale(1);
 }
 /* Preview: the move you are considering, plus the two it beats. */
 .move-btn--preview {
@@ -1340,6 +1343,16 @@ ul.history-strip {
   font-size: 0.75rem;
   font-weight: 700;
 }
+.history-row__icon,
+.picker-center__pick-icon {
+  vertical-align: -0.14em;
+}
+.history-row__icon {
+  font-size: 1.15em;
+}
+.history-chip__icon {
+  font-size: 1.05rem;
+}
 .history-chip__picks {
   display: flex;
   align-items: center;
@@ -1530,8 +1543,11 @@ ul.history-strip {
   stroke: var(--line-3);
   stroke-width: 2;
 }
-.htp-graph__node text {
-  font-size: 34px;
+.htp-graph__node svg {
+  color: var(--text);
+}
+.htp-graph__node--idle svg {
+  color: var(--muted);
 }
 .htp-graph__node--active circle {
   stroke: var(--you);

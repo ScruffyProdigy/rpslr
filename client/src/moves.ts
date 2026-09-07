@@ -1,12 +1,18 @@
 import type { Move } from './api';
 
-/** Presentation helpers for the five moves. Pure -> easy to unit test. */
-export const MOVE_META: Record<Move, { emoji: string; label: string }> = {
-  rock: { emoji: '🪨', label: 'Rock' },
-  paper: { emoji: '📄', label: 'Paper' },
-  scissors: { emoji: '✂️', label: 'Scissors' },
-  lizard: { emoji: '🦎', label: 'Lizard' },
-  robot: { emoji: '🤖', label: 'Robot' },
+/**
+ * Presentation helpers for the five moves. Pure -> easy to unit test.
+ *
+ * The emoji that used to live here are gone: every surface draws the move with
+ * <MoveIcon> now, and an unused "fallback" field is one more thing to keep in
+ * step with nothing.
+ */
+export const MOVE_META: Record<Move, { label: string }> = {
+  rock: { label: 'Rock' },
+  paper: { label: 'Paper' },
+  scissors: { label: 'Scissors' },
+  lizard: { label: 'Lizard' },
+  robot: { label: 'Robot' },
 };
 
 export const ALL_MOVES: Move[] = ['rock', 'paper', 'scissors', 'lizard', 'robot'];

@@ -37,8 +37,8 @@ describe('<RevealCard> (JQ 3.1)', () => {
   it('shows both picks, the verb line and the verdict', () => {
     const { container } = renderCard();
     const card = container.querySelector('.reveal-card') as HTMLElement;
-    expect(within(card).getByText('📄')).toBeInTheDocument();
-    expect(within(card).getByText('🤖')).toBeInTheDocument();
+    expect(card.querySelector('svg[data-move="paper"]')).toBeInTheDocument();
+    expect(card.querySelector('svg[data-move="robot"]')).toBeInTheDocument();
     expect(within(card).getByText('Paper disproves Robot')).toBeInTheDocument();
     expect(within(card).getByText('You take round 2')).toBeInTheDocument();
   });

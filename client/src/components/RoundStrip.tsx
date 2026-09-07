@@ -3,6 +3,7 @@ import type { RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
 import { MOVE_META, describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
+import MoveIcon from './MoveIcon';
 
 /**
  * The rounds so far as a chip strip — `R1 📄 vs 🤖 [winner]` — with the verb
@@ -55,9 +56,9 @@ export function RoundStrip({
                   R{r.round}
                 </span>
                 <span className="history-chip__picks" aria-hidden="true">
-                  {myMove && MOVE_META[myMove].emoji}
+                  {myMove && <MoveIcon move={myMove} className="history-chip__icon" />}
                   <span className="history-chip__vs">vs</span>
-                  {oppMove && MOVE_META[oppMove].emoji}
+                  {oppMove && <MoveIcon move={oppMove} className="history-chip__icon" />}
                 </span>
                 {winner && (
                   <PlayerAvatar

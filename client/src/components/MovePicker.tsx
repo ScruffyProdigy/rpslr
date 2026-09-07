@@ -18,6 +18,7 @@ import {
   opponentCooldownPhrase,
   type WinningEdge,
 } from '../moves';
+import MoveIcon from './MoveIcon';
 
 /** Remembers a one-time note's dismissal across reloads. */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
@@ -281,9 +282,7 @@ export function MovePicker({
                   ✓
                 </span>
               )}
-              <span className="move-btn__emoji" aria-hidden="true">
-                {MOVE_META[m].emoji}
-              </span>
+              <MoveIcon move={m} className="move-btn__emoji" />
               <span className="move-btn__name">{MOVE_META[m].label}</span>
               {onCooldown && (
                 <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
@@ -375,7 +374,7 @@ function PickerCenter({
     return (
       <div className="picker-center picker-center--waiting" role="status">
         <span className="picker-center__pick">
-          <span aria-hidden="true">{MOVE_META[myChosenMove].emoji}</span>{' '}
+          <MoveIcon move={myChosenMove} className="picker-center__pick-icon" />{' '}
           {MOVE_META[myChosenMove].label}
         </span>
         <p className="picker-center__caption">{describeBeatsOf(myChosenMove)}</p>
