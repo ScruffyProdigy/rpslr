@@ -100,7 +100,7 @@ body {
 .app {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding-top: 24px;
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
   padding-bottom: calc(64px + env(safe-area-inset-bottom));
@@ -255,7 +255,8 @@ button.ghost {
   background: var(--card);
   border: 1px solid var(--line-1);
   border-radius: 14px;
-  padding: 20px;
+  padding-block: 20px;
+  padding-inline: 20px;
 }
 .match-head {
   display: flex;
@@ -281,13 +282,14 @@ button.ghost {
   align-items: center;
   justify-content: center;
   gap: 24px;
-  margin: 20px 0;
+  margin-block: 20px;
 }
 .player {
   background: var(--surface-2);
   border: 1px solid var(--line-1);
   border-radius: 16px;
-  padding: 18px 22px;
+  padding-block: 18px;
+  padding-inline: 22px;
   text-align: center;
   min-width: 168px;
   display: flex;
@@ -448,13 +450,16 @@ button.ghost {
   width: 100%;
   text-align: center;
   color: var(--muted);
-  margin: 0 0 4px;
+  margin-top: 0;
+  margin-bottom: 4px;
 }
 
 /* ---- Round timer ---------------------------------------------------------
-   Stacked with "vs" between the two seat cards. Those are already 201px tall
-   and the row is centred, so the ring costs no page height — which matters,
-   because the board overflows a 390x844 phone (JQ-165).
+   Stacked with "vs" between the two seat cards. Those are 163px tall on a
+   phone and the row is centred, so the ring costs no page height — which
+   matters, because the board is on a height budget there (JQ-165). Keep the
+   column shorter than a seat card or it starts setting the row's height and
+   the budget has to pay for it.
 
    A ring rather than a bare numeral: the player is looking at the pentagon, so
    the clock has to register in peripheral vision without demanding they stop
@@ -559,7 +564,8 @@ button.ghost {
   width: min(100%, 380px);
   aspect-ratio: 1;
   container-type: inline-size;
-  margin: 8px 0 2px;
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 /* A soft light behind the pentagon. It is the only thing on the board that
    says "the round is waiting on you" without using words or taking a corner of
@@ -920,7 +926,8 @@ button.ghost {
   font-size: 0.72rem;
   line-height: 1.7;
   color: var(--muted);
-  margin: 2px 0 0;
+  margin-top: 2px;
+  margin-bottom: 0;
 }
 
 /* One-time teaching notes (tap-to-preview, first cooldown). */
@@ -953,7 +960,8 @@ button.ghost {
 }
 .rule-note--board {
   text-align: center;
-  margin: 4px 0 0;
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
 .dev-caption {
@@ -1139,22 +1147,60 @@ button.ghost {
   text-align: center;
 }
 
+/* Below this width the board is on a height budget as well as a width one: a
+   390x844 phone has to show the scoreboard, the pentagon and the centre slot
+   in round 1 without scrolling, with both seats filled and both transient
+   lines — the round-1 rule note and the one-time tap hint — still showing
+   (JQ-165). The scoreboard is what gives. The pentagon is sized by the width
+   it has (JQ-108) and is not allowed to pay for vertical space, so everything
+   below comes out of the seat cards and the gaps around them.
+
+   `boardFit.test.ts` sums this ledger against the viewport, so a value moved
+   here without a matching change in the budget will fail there. */
 @media (max-width: 560px) {
   .grid {
     grid-template-columns: 1fr;
   }
+  .app {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
   .board {
+    padding-block: 12px;
     padding-inline: 12px;
     overflow-x: clip;
   }
   .scoreboard {
     gap: 10px;
+    margin-block: 12px;
   }
   .player {
     min-width: 0;
     flex: 1 1 120px;
     max-width: 148px;
-    padding: 12px 8px;
+    padding-block: 10px;
+    padding-inline: 8px;
+    gap: 6px;
+  }
+  /* The seat card's avatar is smaller than the `--lg` it shares a class with.
+     The match-end winner keeps the full 96px — that card has a screen to
+     itself — but in the scoreboard the avatar is the largest thing that is not
+     load-bearing, and at 72px it is still the widest element in a 124px card. */
+  .player .player-avatar--lg {
+    width: 72px;
+    height: 72px;
+  }
+  .win-pips {
+    margin-top: 0;
+  }
+  .round-label {
+    margin-bottom: 0;
+  }
+  .moves {
+    gap: 10px;
+  }
+  .move-board {
+    margin-top: 4px;
+    margin-bottom: 0;
   }
 }
 
