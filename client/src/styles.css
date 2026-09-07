@@ -100,7 +100,7 @@ body {
 .app {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding-top: 24px;
   padding-left: max(16px, env(safe-area-inset-left));
   padding-right: max(16px, env(safe-area-inset-right));
   padding-bottom: calc(64px + env(safe-area-inset-bottom));
@@ -152,6 +152,10 @@ body {
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
+}
+.lobby-link__short {
+  display: none;
 }
 .lobby-link:hover {
   text-decoration: underline;
@@ -255,7 +259,8 @@ button.ghost {
   background: var(--card);
   border: 1px solid var(--line-1);
   border-radius: 14px;
-  padding: 20px;
+  padding-block: 20px;
+  padding-inline: 20px;
 }
 .match-head {
   display: flex;
@@ -281,13 +286,14 @@ button.ghost {
   align-items: center;
   justify-content: center;
   gap: 24px;
-  margin: 20px 0;
+  margin-block: 20px;
 }
 .player {
   background: var(--surface-2);
   border: 1px solid var(--line-1);
   border-radius: 16px;
-  padding: 18px 22px;
+  padding-block: 18px;
+  padding-inline: 22px;
   text-align: center;
   min-width: 168px;
   display: flex;
@@ -448,13 +454,16 @@ button.ghost {
   width: 100%;
   text-align: center;
   color: var(--muted);
-  margin: 0 0 4px;
+  margin-top: 0;
+  margin-bottom: 4px;
 }
 
 /* ---- Round timer ---------------------------------------------------------
-   Stacked with "vs" between the two seat cards. Those are already 201px tall
-   and the row is centred, so the ring costs no page height — which matters,
-   because the board overflows a 390x844 phone (JQ-165).
+   Stacked with "vs" between the two seat cards. Those are 163px tall on a
+   phone and the row is centred, so the ring costs no page height — which
+   matters, because the board is on a height budget there (JQ-165). Keep the
+   column shorter than a seat card or it starts setting the row's height and
+   the budget has to pay for it.
 
    A ring rather than a bare numeral: the player is looking at the pentagon, so
    the clock has to register in peripheral vision without demanding they stop
@@ -559,7 +568,8 @@ button.ghost {
   width: min(100%, 380px);
   aspect-ratio: 1;
   container-type: inline-size;
-  margin: 8px 0 2px;
+  margin-top: 8px;
+  margin-bottom: 2px;
 }
 /* A soft light behind the pentagon. It is the only thing on the board that
    says "the round is waiting on you" without using words or taking a corner of
@@ -810,12 +820,24 @@ button.ghost {
   background: var(--line-1);
   border: 1px solid var(--line-3);
 }
+/* Clear of the move's name, which is the thing it would otherwise sit on.
+   The name's font has a floor (`clamp` bottoms out at 0.66rem) but the button
+   keeps shrinking with the board, so below a ~320px board the name grows into
+   the bottom of the circle — exactly where this pill hangs. Once the board
+   started sizing itself to the viewport (JQ-165) that stopped being a corner
+   case and became what a phone renders: at a 270px board the two were 1.3px
+   apart, and under 245px they overlapped outright.
+
+   Hung further out and set tighter, the pill clears the name by 6.2px at a
+   270px board and 10px at the full 380px, without moving the name or shrinking
+   it past legibility. */
 .move-btn .cooldown-pill {
   position: absolute;
-  bottom: -7px;
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
   font-size: clamp(0.6rem, 3cqw, 0.72rem);
+  line-height: 1.2;
 }
 .cooldown-pill--legend {
   font-size: 0.68rem;
@@ -920,7 +942,8 @@ button.ghost {
   font-size: 0.72rem;
   line-height: 1.7;
   color: var(--muted);
-  margin: 2px 0 0;
+  margin-top: 2px;
+  margin-bottom: 0;
 }
 
 /* One-time teaching notes (tap-to-preview, first cooldown). */
@@ -953,7 +976,8 @@ button.ghost {
 }
 .rule-note--board {
   text-align: center;
-  margin: 4px 0 0;
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
 .dev-caption {
@@ -1139,22 +1163,95 @@ button.ghost {
   text-align: center;
 }
 
+/* Below this width the board is on a height budget as well as a width one: a
+   390x844 phone has to show the scoreboard, the pentagon and the centre slot
+   in round 1 without scrolling, with both seats filled and both transient
+   lines — the round-1 rule note and the one-time tap hint — still showing
+   (JQ-165). The scoreboard is what gives. The pentagon is sized by the width
+   it has (JQ-108) and is not allowed to pay for vertical space, so everything
+   below comes out of the seat cards and the gaps around them.
+
+   `boardFit.test.ts` sums this ledger against the viewport, so a value moved
+   here without a matching change in the budget will fail there. */
 @media (max-width: 560px) {
   .grid {
     grid-template-columns: 1fr;
   }
+  /* "Lobby", not "Back to Lobby": the full label left the topbar row 7.7px of
+     slack at 390px, so any larger text setting wrapped it and cost the board a
+     line. The arrow and the spoken name are unchanged. */
+  .lobby-link__full {
+    display: none;
+  }
+  .lobby-link__short {
+    display: inline;
+  }
+  .app {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  :root {
+    /* Everything on the page that is not the pentagon, measured. The safe-area
+       inset is part of it — `svh` includes that strip, and `.app` pads for it.
+       `boardFit.test.ts` recomputes this from the stylesheet and fails if the
+       two drift, so change it there and here together. */
+    --board-furniture: calc(490px + env(safe-area-inset-bottom));
+  }
   .board {
+    padding-block: 12px;
     padding-inline: 12px;
     overflow-x: clip;
   }
   .scoreboard {
     gap: 10px;
+    margin-block: 12px;
   }
   .player {
     min-width: 0;
     flex: 1 1 120px;
     max-width: 148px;
-    padding: 12px 8px;
+    padding-block: 10px;
+    padding-inline: 8px;
+    gap: 6px;
+  }
+  /* The seat card's avatar is smaller than the `--lg` it shares a class with.
+     The match-end winner keeps the full 96px — that card has a screen to
+     itself — but in the scoreboard the avatar is the largest thing that is not
+     load-bearing, and at 72px it is still the widest element in a 124px card. */
+  .player .player-avatar--lg {
+    width: 72px;
+    height: 72px;
+  }
+  .win-pips {
+    margin-top: 0;
+  }
+  .round-label {
+    margin-bottom: 0;
+  }
+  .moves {
+    gap: 10px;
+  }
+  .move-board {
+    margin-top: 4px;
+    margin-bottom: 0;
+    /* The pentagon takes the height that is actually left, rather than a width
+       the page then fails to fit around. Everything else on the board is fixed
+       furniture — measured constant whatever the pentagon does — so subtracting
+       it from the small viewport gives the largest square that still leaves the
+       legend and the one-time note above the fold. The constant is the worst
+       case — the taller of the two one-time notes, which is the one a player
+       sees on every match after their first — so the pentagon gives up a few px
+       it could sometimes keep rather than the page overflowing whenever a
+       player is in the more expensive state.
+
+       `svh`, not `vh`: on iOS Safari `vh` is the viewport with the toolbars
+       *collapsed*, which is the state the page is not in when it first paints.
+       `svh` is the toolbars-expanded height, so this is sized for the worst
+       case and grows into the rest. It is also what makes this correct without
+       knowing any device's chrome height — the browser reports it.
+
+       The floor keeps a move button at 56px (JQ-108) on viewports too short
+       for both; below it the board scrolls, which AC2 already allows. */
+    width: min(100%, 380px, max(205px, calc(100svh - var(--board-furniture))));
   }
 }
 
