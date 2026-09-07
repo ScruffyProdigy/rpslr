@@ -35,3 +35,6 @@ playwright-report/
 # K8s real secrets (commit only *.example.yaml)
 k8s/secrets/*.yaml
 !k8s/secrets/*.example.yaml
+
+# Agent worktrees (one per task; never committed)
+.claude/worktrees/

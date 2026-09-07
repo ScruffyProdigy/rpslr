@@ -1,6 +1,15 @@
 import type { Move } from './game.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
-import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer, SeatReservation } from './types.js';
+import type { Phase } from './roundPolicy.js';
+import type {
+  Match,
+  MatchEndReason,
+  MatchStatus,
+  RoundResult,
+  Seat,
+  SeatPlayer,
+  SeatReservation,
+} from './types.js';
 
 export interface CreateMatchInput {
   code: string;
@@ -40,6 +49,19 @@ export interface GameRepository {
   claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }>;
   setMatchStatus(matchId: string, status: MatchStatus): Promise<void>;
   setMatchProgress(matchId: string, currentRound: number, status: MatchStatus): Promise<void>;
+  /** Put a phase on the clock, or clear it by passing nulls. */
+  setPhase(matchId: string, phase: Phase | null, deadlineIso: string | null): Promise<void>;
+  /** Consecutive expiries for one player; 0 clears the run. */
+  setExpiryStrikes(matchId: string, playerId: string, strikes: number): Promise<void>;
+  /**
+   * End a match without anyone reaching the winning score. `winnerSeatKey` is
+   * null when both players went silent and nobody earned it.
+   */
+  endMatch(
+    matchId: string,
+    winnerSeatKey: string | null,
+    endReason: MatchEndReason,
+  ): Promise<void>;
   recordMove(input: {
     matchId: string;
     round: number;

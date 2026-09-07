@@ -3,13 +3,19 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { MatchHub } from './matchHub.js';
 import { PgGameRepository } from './pgRepository.js';
+import { PresenceTracker } from './presence.js';
 import { GameService } from './service.js';
 import { attachWebsocketServer } from './ws.js';
 
 const config = loadConfig();
 const repo = PgGameRepository.fromUrl(config.databaseUrl);
 const hub = new MatchHub();
-const service = new GameService(repo, { bannedLobbyUsers: config.bannedLobbyUsers, hub });
+const presence = new PresenceTracker();
+const service = new GameService(repo, {
+  bannedLobbyUsers: config.bannedLobbyUsers,
+  hub,
+  presence,
+});
 
 const app = createApp(service, config);
 const server = createServer(app);
