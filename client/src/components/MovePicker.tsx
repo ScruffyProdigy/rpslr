@@ -19,6 +19,7 @@ import {
   type WinningEdge,
 } from '../moves';
 import MoveIcon from './MoveIcon';
+import UiIcon from './UiIcon';
 
 /** Remembers a one-time note's dismissal across reloads. */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
@@ -290,20 +291,18 @@ export function MovePicker({
               aria-pressed={selected}
             >
               {selected && (
-                <span className="move-btn__check" aria-hidden="true">
-                  ✓
-                </span>
+                <UiIcon name="check" className="move-btn__check" />
               )}
               <MoveIcon move={m} className="move-btn__emoji" />
               <span className="move-btn__name">{MOVE_META[m].label}</span>
               {onCooldown && (
                 <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
-                  ⏳ {myDelay}
+                  <UiIcon name="hourglass" /> {myDelay}
                 </span>
               )}
               {oppDelay > 0 && (
                 <span className="opp-cooldown-mark" aria-hidden="true">
-                  ⏳
+                  <UiIcon name="hourglass" />
                 </span>
               )}
             </button>
@@ -327,11 +326,11 @@ export function MovePicker({
 
       <p className="graph-legend">
         <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
-          ⏳ N
+          <UiIcon name="hourglass" /> N
         </span>{' '}
         your cooldown ·{' '}
         <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
-          ⏳
+          <UiIcon name="hourglass" />
         </span>{' '}
         opponent cooldown (faded arrows = attacks they can&rsquo;t make)
       </p>
@@ -451,7 +450,7 @@ function OneTimeNoteBar({
     <p className="picker-note">
       <span>{children}</span>
       <button className="picker-note__dismiss" onClick={onDismiss} aria-label="Dismiss">
-        ✕
+        <UiIcon name="close" />
       </button>
     </p>
   );

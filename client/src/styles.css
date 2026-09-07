@@ -69,7 +69,14 @@
      structure, and colour on this board means role or state — never
      structure. Amber arrows would read as the opponent's. */
   --graph: #7c8699;
-  /* The gold the arrows used to wear, kept for the one thing it means. */
+  /* The gold the arrows used to wear, kept for the one thing it means.
+
+     Two pairs below share a value today and are meant to: --trophy with
+     --warn, and --graph with --muted-2. They are not duplicates to be tidied
+     into one. A trophy is not a warning and an arrow is not a caption, so each
+     has to be able to move without dragging the other with it — the whole
+     point of the ladder work was that a colour used twice for two reasons is
+     the thing that drifts. If you are here to consolidate them, don't. */
   --trophy: #f5c518;
   /* Archivo speaks for the match — state, numbers, verdicts. Atkinson speaks
      to the player — anything whose job is to be understood. Assign by role. */
@@ -690,7 +697,6 @@ button.ghost {
   top: 6px;
   right: 8px;
   font-size: clamp(0.7rem, 3.4cqw, 0.9rem);
-  font-weight: 800;
   color: var(--you);
   line-height: 1;
 }
@@ -738,6 +744,7 @@ button.ghost {
   line-height: 1;
   background: color-mix(in srgb, var(--opp) 22%, var(--surface-2));
   border: 1px solid color-mix(in srgb, var(--opp) 65%, transparent);
+  color: var(--opp);
 }
 .opp-cooldown-mark--legend {
   position: static;
@@ -1772,6 +1779,7 @@ ul.history-strip {
   bottom: 2px;
   font-size: 1.4rem;
   line-height: 1;
+  color: var(--trophy);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
 }
 .player-avatar--sm .player-avatar__trophy,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LobbyPlayerProfile } from '../api';
+import UiIcon from './UiIcon';
 
 type AvatarSize = 'xs' | 'sm' | 'md' | 'lg';
 /** Seat role, not identity: you are blue and the opponent amber every match. */
@@ -61,7 +62,11 @@ export function PlayerAvatar({
         <span className="player-avatar__initial">{initial}</span>
       )}
       {ready && <span className="player-avatar__ready-dot" title="Locked in" />}
-      {winner && <span className="player-avatar__trophy">🏆</span>}
+      {winner && (
+        <span className="player-avatar__trophy">
+          <UiIcon name="trophy" />
+        </span>
+      )}
     </div>
   );
 }
