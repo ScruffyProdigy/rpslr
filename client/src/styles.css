@@ -152,6 +152,10 @@ body {
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
+}
+.lobby-link__short {
+  display: none;
 }
 .lobby-link:hover {
   text-decoration: underline;
@@ -1161,8 +1165,24 @@ button.ghost {
   .grid {
     grid-template-columns: 1fr;
   }
+  /* "Lobby", not "Back to Lobby": the full label left the topbar row 7.7px of
+     slack at 390px, so any larger text setting wrapped it and cost the board a
+     line. The arrow and the spoken name are unchanged. */
+  .lobby-link__full {
+    display: none;
+  }
+  .lobby-link__short {
+    display: inline;
+  }
   .app {
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  :root {
+    /* Everything on the page that is not the pentagon, measured. The safe-area
+       inset is part of it — `svh` includes that strip, and `.app` pads for it.
+       `boardFit.test.ts` recomputes this from the stylesheet and fails if the
+       two drift, so change it there and here together. */
+    --board-furniture: calc(490px + env(safe-area-inset-bottom));
   }
   .board {
     padding-block: 12px;
@@ -1201,6 +1221,25 @@ button.ghost {
   .move-board {
     margin-top: 4px;
     margin-bottom: 0;
+    /* The pentagon takes the height that is actually left, rather than a width
+       the page then fails to fit around. Everything else on the board is fixed
+       furniture — measured constant whatever the pentagon does — so subtracting
+       it from the small viewport gives the largest square that still leaves the
+       legend and the one-time note above the fold. The constant is the worst
+       case — the taller of the two one-time notes, which is the one a player
+       sees on every match after their first — so the pentagon gives up a few px
+       it could sometimes keep rather than the page overflowing whenever a
+       player is in the more expensive state.
+
+       `svh`, not `vh`: on iOS Safari `vh` is the viewport with the toolbars
+       *collapsed*, which is the state the page is not in when it first paints.
+       `svh` is the toolbars-expanded height, so this is sized for the worst
+       case and grows into the rest. It is also what makes this correct without
+       knowing any device's chrome height — the browser reports it.
+
+       The floor keeps a move button at 56px (JQ-108) on viewports too short
+       for both; below it the board scrolls, which AC2 already allows. */
+    width: min(100%, 380px, max(205px, calc(100svh - var(--board-furniture))));
   }
 }
 

@@ -172,13 +172,55 @@ function boardInnerWidth(viewport: number): number {
   return inner - 2 * pad - 2 * borderPx('.board', viewport);
 }
 
-function boardWidth(viewport: number): number {
-  return resolvePx(declaration('.move-board', 'width', viewport), boardInnerWidth(viewport));
+/**
+ * The pentagon's declared width, with the two things `resolvePx` cannot see
+ * substituted first: `svh` (the viewport with browser toolbars expanded) and
+ * the `--board-furniture` custom property.
+ *
+ * `viewportHeight` defaults to Infinity, which makes the `svh` term drop out of
+ * the `min()` — that isolates the width behaviour JQ-108 cares about. Pass a
+ * real height to model a phone.
+ */
+function boardWidth(viewport: number, viewportHeight = Infinity): number {
+  // Looked up only when the width actually references it: above 560px the
+  // pentagon is sized by width alone and the property is not declared at all.
+  const declared = declaration('.move-board', 'width', viewport)
+    .replace(/var\(--board-furniture\)/g, () =>
+      `${resolvePx(declaration(':root', '--board-furniture', viewport), 0)}px`,
+    )
+    .replace(/([\d.]+)svh/g, (_, n) =>
+      Number.isFinite(viewportHeight) ? `${(Number(n) / 100) * viewportHeight}px` : '100000px',
+    );
+  return resolvePx(declared, boardInnerWidth(viewport));
 }
 
-function buttonSize(viewport: number): number {
-  return resolvePx(declaration('.move-btn', 'width', viewport), boardWidth(viewport));
+function buttonSize(viewport: number, viewportHeight = Infinity): number {
+  return resolvePx(declaration('.move-btn', 'width', viewport), boardWidth(viewport, viewportHeight));
 }
+
+/**
+ * Everything on the page that is not the pentagon. Measured constant at 489.1px
+ * across every pentagon size, which is what makes the pentagon able to absorb
+ * whatever height is left over.
+ */
+function furnitureHeight(viewport: number): number {
+  return pageHeight(viewport) - boardWidth(viewport);
+}
+
+/**
+ * The height a phone actually gives a web page, which is not its screen height:
+ * iOS Safari spends roughly 100px on the status bar and the toolbars, and that
+ * is the state the page is in when it first paints. JQ-165 was first "fixed"
+ * against the screen height and still overflowed on a real iPhone.
+ *
+ * The fix does not depend on this number — `svh` makes the browser report it —
+ * so this only sets how strict the test is. Re-measure with `innerHeight` on a
+ * device if it needs to be exact.
+ */
+const SAFARI_CHROME = 100;
+
+/** Smallest square that still keeps a move button at JQ-108's 56px floor. */
+const MIN_PENTAGON = 205;
 
 describe('resolvePx', () => {
   it('resolves px, percentages and container units', () => {
@@ -222,14 +264,21 @@ describe('the board fits a phone (JQ-108)', () => {
  * these if the type scale moves.
  */
 const TEXT = {
-  topbar: 34, // .topbar — the wordmark h1 at 1.5rem
+  // One line. The Lobby link shortens to "← Lobby" below 560px, which leaves
+  // the row 71.3px of slack at 390px rather than 7.7px, so it holds to roughly
+  // a 1.24x text scale. Past that it wraps and the pentagon absorbs the extra
+  // line through the `svh` cap — smaller board, still no scrolling.
+  topbar: 34, // .topbar
   ruleNote: 15.5, // .rule-note--board, one line at 0.78rem
   seatLabel: 13.5, // .player-label at 0.7rem
   seatName: 19.5, // .player-name at 1rem
   winPips: 18.4, // .win-pip is 1.15rem across
   roundLabel: 18, // .round-label at 1rem
   legend: 39.2, // .graph-legend, two lines at 0.72rem / 1.7
-  pickerNote: 41.1, // .picker-note — a line plus its padding, border and dismiss button
+  // The cooldown explainer, not the tap hint: they are mutually exclusive, and
+  // a player who has already dismissed the tap hint — everyone after their
+  // first match — gets this one, which is two lines rather than one.
+  pickerNote: 49, // .picker-note, cooldown explainer
 } as const;
 
 /**
@@ -299,19 +348,45 @@ function pageHeight(viewport: number): number {
 }
 
 describe('the board does not scroll on a phone (JQ-165)', () => {
-  // The ledger reproduces what Chromium lays out: 813.2px at 390x844 and
-  // 798.2px at 375x812, Lobby-seated, round 1, both transient lines showing.
+  // The first fix budgeted against the screen height and still overflowed on a
+  // real iPhone, because a phone does not give a page its screen height. These
+  // hold the layout to what Safari actually leaves.
   it.each([
     [390, 844],
     [375, 812],
-  ])('round 1 fits %ix%i with both seats filled', (viewport, height) => {
-    expect(pageHeight(viewport)).toBeLessThanOrEqual(height);
+  ])('leaves the pentagon a usable size on a %ix%i phone', (viewport, screen) => {
+    const usable = screen - SAFARI_CHROME;
+    expect(furnitureHeight(viewport) + MIN_PENTAGON).toBeLessThanOrEqual(usable);
   });
 
-  it('spends the space on the scoreboard, not the pentagon', () => {
-    // JQ-108 sized the pentagon off the width it has. Height pressure must not
-    // start eating it — the seat cards compress first, and the board never
-    // gives up more than the width already asks of it.
+  it.each([
+    [390, 844],
+    [375, 812],
+  ])('fits everything, legend and note included, on a %ix%i phone', (viewport, screen) => {
+    const usable = screen - SAFARI_CHROME;
+    expect(furnitureHeight(viewport) + boardWidth(viewport, usable)).toBeLessThanOrEqual(usable);
+  });
+
+  it('keeps the declared furniture constant honest', () => {
+    // `.move-board` subtracts --board-furniture from the viewport, so if that
+    // number drifts from what the rest of the page actually costs, the pentagon
+    // is sized against a lie and the page overflows again. Recomputed here from
+    // the same stylesheet, so the two cannot separate silently.
+    const declared = resolvePx(declaration(':root', '--board-furniture', 390), 0);
+    expect(declared).toBeGreaterThanOrEqual(furnitureHeight(390));
+    expect(declared - furnitureHeight(390)).toBeLessThan(2);
+  });
+
+  it('never shrinks the pentagon below a 56px tap target', () => {
+    // The floor in the width `max()` is what protects JQ-108 once height, not
+    // width, is the binding constraint. 240px is shorter than any phone.
+    expect(buttonSize(390, 240)).toBeGreaterThanOrEqual(56);
+    expect(boardWidth(390, 240)).toBe(MIN_PENTAGON);
+  });
+
+  it('spends the space on the scoreboard before the pentagon', () => {
+    // The seat cards compress first: on a viewport with room, the pentagon is
+    // still sized by the width it has, exactly as JQ-108 left it.
     expect(boardWidth(390)).toBe(boardInnerWidth(390));
     expect(seatAvatar(390)).toBeLessThan(
       resolvePx(declaration('.player-avatar--lg', 'width'), 0),

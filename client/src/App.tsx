@@ -93,7 +93,19 @@ export default function App() {
                 label. The rules button is last, and says what it does. */}
             {lobbyReturnUrl && (
               <a className="lobby-link" href={lobbyReturnUrl}>
-                ← Back to Lobby
+                {/* Same short/full swap as the wordmark, for the same reason:
+                    at 390px the full label leaves the topbar row 7.7px of
+                    slack, so a slightly larger text setting wrapped it to two
+                    lines. The spoken name stays "Back to Lobby" at every
+                    width. */}
+                <span aria-hidden="true">←</span>{' '}
+                <span className="lobby-link__full" aria-hidden="true">
+                  Back to Lobby
+                </span>
+                <span className="lobby-link__short" aria-hidden="true">
+                  Lobby
+                </span>
+                <span className="sr-only">Back to Lobby</span>
               </a>
             )}
             <button
