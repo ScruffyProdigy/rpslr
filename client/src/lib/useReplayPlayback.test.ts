@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PICKS_MS, ROUND_MS, useReplayPlayback } from './useReplayPlayback';
+import { CARD_MS, OUTRO_MS, ROUND_MS, useReplayPlayback } from './useReplayPlayback';
 
 function setReducedMotion(reduce: boolean) {
   Object.defineProperty(window, 'matchMedia', {
@@ -150,38 +150,58 @@ describe('useReplayPlayback arriving after the match loads', () => {
 });
 
 describe('useReplayPlayback round beats', () => {
-  it('shows the picks before it shows who won', () => {
+  it('plays the card, dissolves it, then leaves the arrow on its own', () => {
+    // The stylesheet already stages the card — clash, verb, verdict at 1150ms
+    // — off one mount, so playback leaves it alone and then takes it away. The
+    // beat after that is the whole reason a replay has beats: the winning edge
+    // alone on the graph, saying why the round went the way it did.
     const { result } = renderHook(() => useReplayPlayback(3));
-    expect(result.current.beat).toBe('picks');
-
-    act(() => void vi.advanceTimersByTime(PICKS_MS));
     expect(result.current.beat).toBe('reveal');
+
+    act(() => void vi.advanceTimersByTime(CARD_MS));
+    expect(result.current.beat).toBe('outro');
+
+    act(() => void vi.advanceTimersByTime(OUTRO_MS));
+    expect(result.current.beat).toBe('strike');
     expect(result.current.index).toBe(0);
 
-    act(() => void vi.advanceTimersByTime(ROUND_MS - PICKS_MS));
+    act(() => void vi.advanceTimersByTime(ROUND_MS - CARD_MS - OUTRO_MS));
     expect(result.current.index).toBe(1);
-    expect(result.current.beat).toBe('picks');
+    expect(result.current.beat).toBe('reveal');
   });
 
-  it('halves the pick beat at 2x along with the rest of the round', () => {
+  it('scales every beat with the speed, not just the round', () => {
     const { result } = renderHook(() => useReplayPlayback(3));
     act(() => result.current.setSpeed(2));
-    act(() => void vi.advanceTimersByTime(PICKS_MS / 2));
+
+    act(() => void vi.advanceTimersByTime(CARD_MS / 2));
+    expect(result.current.beat).toBe('outro');
+    act(() => void vi.advanceTimersByTime(OUTRO_MS / 2));
+    expect(result.current.beat).toBe('strike');
+  });
+
+  it('starts a jumped-to round at the top of its arc, not partway through', () => {
+    const { result } = renderHook(() => useReplayPlayback(4));
+    act(() => void vi.advanceTimersByTime(CARD_MS));
+    expect(result.current.beat).toBe('outro');
+
+    act(() => result.current.jumpTo(3));
+    act(() => result.current.play());
     expect(result.current.beat).toBe('reveal');
   });
 
-  it('shows a paused or stepped round whole, with nothing held back', () => {
+  it('holds a paused round whole — verdict read, nothing dissolving', () => {
     const { result } = renderHook(() => useReplayPlayback(3));
     act(() => result.current.pause());
-    expect(result.current.beat).toBe('reveal');
+    expect(result.current.beat).toBe('settled');
 
     act(() => result.current.next());
-    expect(result.current.beat).toBe('reveal');
+    expect(result.current.beat).toBe('settled');
   });
 
-  it('holds nothing back under prefers-reduced-motion', () => {
+  it('settles immediately under prefers-reduced-motion', () => {
     setReducedMotion(true);
     const { result } = renderHook(() => useReplayPlayback(3));
-    expect(result.current.beat).toBe('reveal');
+    expect(result.current.beat).toBe('settled');
   });
 });

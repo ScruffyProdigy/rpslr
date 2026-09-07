@@ -2225,12 +2225,6 @@ input:focus-visible {
   justify-content: center;
 }
 
-/* A round whose verdict is still withheld: the card is there, in the board's
-   own neutral line, so nothing about it hints at the result yet. */
-.reveal-card--undecided {
-  border-color: var(--line-2);
-}
-
 /* The round on screen, marked the way an expanded chip already is — the strip
    means the same thing in both places, so it should not learn a second look. */
 .history-chip--active {

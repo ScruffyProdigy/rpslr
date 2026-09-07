@@ -27,10 +27,7 @@ export function RevealCard({
   onSkip,
 }: {
   result: RoundResult;
-  /**
-   * 'picks' shows the throws with the verdict still withheld; 'outro'
-   * dissolves the card onto the winning arrow underneath.
-   */
+  /** 'outro' dissolves the card onto the winning arrow underneath. */
   phase: RevealPhase;
   mySeatKey: string;
   myPlayerId: string;
@@ -63,9 +60,7 @@ export function RevealCard({
         'picker-center',
         'picker-center--reveal',
         'reveal-card',
-        // An undecided card is not yet a win or a loss, so it takes no verdict
-        // colour — the border would announce the result the copy withholds.
-        phase === 'picks' ? 'reveal-card--undecided' : `reveal-card--${verdict}`,
+        `reveal-card--${verdict}`,
         phase === 'outro' ? 'reveal-card--exiting' : '',
       ]
         .filter(Boolean)
@@ -98,15 +93,11 @@ export function RevealCard({
           />
         </span>
       </div>
-      {phase !== 'picks' && (
-        <>
-          {myMove && oppMove && (
-            <p className="reveal-card__verb">{describeRoundMatchup(myMove, oppMove)}</p>
-          )}
-          <p className="reveal-card__verdict">{verdictLine}</p>
-          {timedOut && <p className="reveal-card__timeout">{timedOut}</p>}
-        </>
+      {myMove && oppMove && (
+        <p className="reveal-card__verb">{describeRoundMatchup(myMove, oppMove)}</p>
       )}
+      <p className="reveal-card__verdict">{verdictLine}</p>
+      {timedOut && <p className="reveal-card__timeout">{timedOut}</p>}
       <button className="reveal-card__skip" onClick={onSkip} aria-label="Skip to the next round" />
     </div>
   );

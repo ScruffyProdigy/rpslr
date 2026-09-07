@@ -74,10 +74,12 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
     ? withReplayAttribution(state.match.lobbyReturnUrl)
     : null;
   const oppName = replay.b.identity.name;
-  // While the verdict is withheld, so is everything that would give it away:
-  // the arrow it was won on, and the scoreboard that has already counted it.
-  const picksBeat = playback.beat === 'picks';
-  const edge = picksBeat ? null : winningEdgeOf(frame.a.move, frame.b.move);
+  // The card is mid-performance until it starts dissolving, and until then the
+  // round's result is its to give: the arrow it was won on stays dark, and the
+  // scoreboard still reads as it did going in. Both would otherwise announce
+  // the verdict over the top of a card that has not reached it yet.
+  const settled = playback.beat !== 'reveal';
+  const edge = settled ? winningEdgeOf(frame.a.move, frame.b.move) : null;
   // A round with a missing pick is skipped by buildReplay, so a round number is
   // not an index — look it up rather than assume they line up.
   const jumpToRound = (round: number) => {
@@ -99,8 +101,8 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           />
           <span className="replay__name">{replay.a.identity.name}</span>
           <span className="replay__score">
-            {picksBeat ? frame.a.scoreBefore : frame.a.score}&ndash;
-            {picksBeat ? frame.b.scoreBefore : frame.b.score}
+            {settled ? frame.a.score : frame.a.scoreBefore}&ndash;
+            {settled ? frame.b.score : frame.b.scoreBefore}
           </span>
           <span className="replay__name">{oppName}</span>
           <PlayerAvatar
@@ -117,13 +119,13 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         <MatchEndCard
           iWon={replay.winnerSeatKey === replay.a.seatKey}
           drawn={replay.winnerSeatKey === null}
-            you={replay.a.identity}
-            opponent={replay.b.identity}
+          you={replay.a.identity}
+          opponent={replay.b.identity}
           myScore={replay.finalScore.a}
           oppScore={replay.finalScore.b}
           results={replay.frames.map((f) => f.result)}
-            mySeatKey={replay.a.seatKey}
-            myPlayerId={replay.a.playerId}
+          mySeatKey={replay.a.seatKey}
+          myPlayerId={replay.a.playerId}
           lobbyReturnUrl={null}
           endReason={replay.endReason}
           voice={voice}
@@ -146,16 +148,28 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           oppName={oppName}
           winningEdge={edge}
           centerSlot={
-            <RevealCard
-              result={frame.result}
-              phase={picksBeat ? 'picks' : 'card'}
+            // An empty element, not nothing: MovePicker reads a centre slot as
+            // "a round is being shown" and falls back to its own picker centre
+            // without one — which speaks to a player, and there isn't one here.
+            playback.beat === 'strike' ? (
+              <></>
+            ) : (
+              <RevealCard
+                // Keyed by round so the card is a new one every time. The whole
+                // showdown is CSS animation-delays hanging off a single mount,
+                // and a card React reuses across rounds never mounts again —
+                // round one would animate and nothing after it would.
+                key={frame.round}
+                result={frame.result}
+                phase={playback.beat === 'outro' ? 'outro' : 'card'}
                 mySeatKey={replay.a.seatKey}
                 myPlayerId={replay.a.playerId}
                 you={replay.a.identity}
                 opponent={replay.b.identity}
-              voice={voice}
-              onSkip={playback.next}
-            />
+                voice={voice}
+                onSkip={playback.next}
+              />
+            )
           }
         />
       )}
@@ -178,7 +192,7 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
             results={shown.map((f) => f.result)}
             mySeatKey={replay.a.seatKey}
             myPlayerId={replay.a.playerId}
-            you={replay.a.identity}
+          you={replay.a.identity}
             opponent={replay.b.identity}
             voice={voice}
             activeRound={frame.round}

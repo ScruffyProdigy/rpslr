@@ -105,6 +105,23 @@ describe('<ReplayPage>', () => {
     );
   });
 
+  it('gives every round a card of its own, not one that carries over', async () => {
+    // The showdown is CSS animation-delays hanging off a single mount. A card
+    // React reuses from one round to the next never mounts again, so round one
+    // would animate and nothing after it would.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    const first = container.querySelector('.reveal-card');
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    const second = container.querySelector('.reveal-card');
+
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+  });
+
   it('plays the deciding round out before it declares the winner', async () => {
     // The last round is the one worth watching. Ending the moment the final
     // frame is reached shows its result on a scoreboard and never on the board.

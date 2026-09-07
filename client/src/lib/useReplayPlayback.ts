@@ -2,27 +2,48 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { prefersReducedMotion } from './reducedMotion';
 
 /**
- * How long one round holds on screen at 1x: both picks, the showdown, and a
- * beat to read it. Roughly the live match's reveal hold, so a replay feels
- * like the game rather than a slideshow of it.
+ * How long the showdown card holds before it starts to go. Its own
+ * choreography finishes around 1470ms — the verdict lands at 1150 and takes
+ * 320 to arrive — so the rest is time to read it.
  */
-export const ROUND_MS = 3000;
+export const CARD_MS = 2400;
 
 /**
- * How much of a round is spent on the picks alone, before the verdict lands.
- * The drama of a round is seeing what was thrown and working out who won a
- * beat before being told, so the showdown withholds its verdict for this long.
+ * The dissolve, matching `REVEAL_OUTRO_MS` in `useRoundReveal`: the card fades
+ * and the pentagon edge the round was won on lights up underneath it.
  */
-export const PICKS_MS = 1100;
+export const OUTRO_MS = 600;
+
+/**
+ * The beat after the card has gone, with the lit edge alone on the graph.
+ *
+ * A live match does not need this — the player watched the round happen and is
+ * already thinking about the next one. A watcher did not, and the arrow is the
+ * one thing on screen that says *why* the round went the way it did, in the
+ * game's own vocabulary rather than in a sentence. Under the card it is
+ * competing with a verdict; on its own it is the point.
+ */
+export const STRIKE_MS = 900;
+
+/** A whole round: the card, the dissolve, then the arrow on its own. */
+export const ROUND_MS = CARD_MS + OUTRO_MS + STRIKE_MS;
 
 export type PlaybackSpeed = 1 | 2;
 
-/** Where a round is in its own little arc: picks thrown, then verdict. */
-export type RoundBeat = 'picks' | 'reveal';
+/**
+ * Where a round is in its own little arc.
+ *
+ * 'reveal' is the card playing itself out, 'outro' is it dissolving onto the
+ * winning arrow, and 'strike' is that arrow held alone once the card has gone.
+ * 'settled' is a round nobody is watching go past — paused, stepped to, or
+ * read under reduced motion — which shows everything at once because there is
+ * no motion left to carry it.
+ */
+export type RoundBeat = 'reveal' | 'outro' | 'strike' | 'settled';
 
 export interface Playback {
   index: number;
-  /** Whether the round on screen has given its verdict yet. */
+  /** How far through its own arc the round on screen is. */
   beat: RoundBeat;
   playing: boolean;
   speed: PlaybackSpeed;
@@ -52,7 +73,7 @@ export function useReplayPlayback(frameCount: number): Playback {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(!stepping && frameCount > 1);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
-  const [revealed, setRevealed] = useState(false);
+  const [elapsed, setElapsed] = useState<Exclude<RoundBeat, 'settled'>>('reveal');
 
   const last = Math.max(0, frameCount - 1);
   const atEnd = index >= last;
@@ -69,17 +90,25 @@ export function useReplayPlayback(frameCount: number): Playback {
     setPlaying(true);
   }, [stepping, frameCount]);
 
-  // A round only holds its verdict back while it is running past on its own. A
-  // watcher who paused or stepped here is reading, not watching, and should not
-  // have to wait out a beat for the answer.
-  const inPicks = playing && !stepping && !revealed;
+  // A round is only an arc while it is going past on its own. A watcher who
+  // paused or stepped here is reading, not watching, and gets the whole round
+  // at once rather than a frame of an animation they stopped.
+  const moving = playing && !stepping;
+  const beat: RoundBeat = !moving ? 'settled' : elapsed;
 
+  // Two hand-offs inside a round: the card starts dissolving, then it is gone
+  // and the arrow has the graph to itself. Both are reset by `index`, so a
+  // jump or a step lands at the start of the arc rather than partway through.
   useEffect(() => {
-    if (!playing || stepping) return;
-    setRevealed(false);
-    const timer = setTimeout(() => setRevealed(true), PICKS_MS / speed);
-    return () => clearTimeout(timer);
-  }, [playing, stepping, index, speed]);
+    if (!moving) return;
+    setElapsed('reveal');
+    const toOutro = setTimeout(() => setElapsed('outro'), CARD_MS / speed);
+    const toStrike = setTimeout(() => setElapsed('strike'), (CARD_MS + OUTRO_MS) / speed);
+    return () => {
+      clearTimeout(toOutro);
+      clearTimeout(toStrike);
+    };
+  }, [moving, index, speed]);
 
   useEffect(() => {
     if (stepping || !playing) return;
@@ -121,7 +150,7 @@ export function useReplayPlayback(frameCount: number): Playback {
 
   return {
     index,
-    beat: inPicks ? 'picks' : 'reveal',
+    beat,
     playing,
     speed,
     atEnd,
