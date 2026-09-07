@@ -469,7 +469,7 @@ button.ghost {
 .round-timer {
   /* Digits change in place, so they must be tabular or the number twitches. */
   font-variant-numeric: tabular-nums;
-  font-family: var(--font-display, inherit);
+  font-family: var(--font-display);
   font-weight: 700;
   color: var(--muted);
   transition: color 200ms ease;
@@ -478,9 +478,9 @@ button.ghost {
    reserved for errors, and neither --you nor --opp belongs here: those are
    fixed role colours, and tinting a shared clock with either would say it
    belonged to that player. --warn is the amber the "opponent has locked in"
-   pill already uses; the fallback is that same value pre-Phase-5. */
+   pill already wears. */
 .round-timer--urgent {
-  color: var(--warn, #f5a524);
+  color: var(--warn);
 }
 /* ---- Move picker (pentagon) ----------------------------------------------
    The board is a fixed 380-unit square scaled by its container width, so the

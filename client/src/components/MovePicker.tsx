@@ -83,6 +83,18 @@ export function MovePicker({
   const tapHint = useOneTimeNote('tapHint');
   const cooldownNote = useOneTimeNote('cooldownExplainer');
 
+
+  /* What the board is doing, for the glow behind the pentagon. The board is
+     the hero surface, so it lights up in your colour while the round is
+     actually waiting on you, and steps back to neutral once it isn't. */
+  const boardState = centerSlot
+    ? 'reveal'
+    : lockedIn
+      ? 'waiting'
+      : disabled
+        ? 'idle'
+        : 'picking';
+
   // A new round is a new decision.
   useEffect(() => {
     setPicked(null);
@@ -139,12 +151,15 @@ export function MovePicker({
   // fires again on every tick in between.
   useEffect(() => {
     if (secondsLeft === null || secondsLeft > AUTO_COMMIT_AT_S) return;
-    if (!picked || lockedIn || disabled || autoCommitted.current) return;
+    // 'picking' is precisely "the board is yours to act on" — not revealing,
+    // not already locked in, not disabled. Reusing it keeps the auto-commit
+    // from carrying a second, drifting notion of the same thing.
+    if (boardState !== 'picking' || !picked || autoCommitted.current) return;
     // A tapped move on cooldown was a "why can't I play this?", not a choice.
     if ((myDelays[picked] ?? 0) > 0) return;
     autoCommitted.current = true;
     commit(picked);
-  }, [secondsLeft, picked, lockedIn, disabled, myDelays, commit]);
+  }, [secondsLeft, boardState, picked, myDelays, commit]);
 
   function handleClick(move: Move) {
     // A move on cooldown can be inspected but never committed: tapping it asks
@@ -164,16 +179,6 @@ export function MovePicker({
   const showCooldownNote =
     !showTapHint && cooldownNote.show && !lockedIn && myCooldowns.length > 0;
 
-  /* What the board is doing, for the glow behind the pentagon. The board is
-     the hero surface, so it lights up in your colour while the round is
-     actually waiting on you, and steps back to neutral once it isn't. */
-  const boardState = centerSlot
-    ? 'reveal'
-    : lockedIn
-      ? 'waiting'
-      : disabled
-        ? 'idle'
-        : 'picking';
 
   return (
     <div className="move-picker">

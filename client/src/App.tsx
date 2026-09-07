@@ -635,7 +635,7 @@ export function Board({
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             onPlay={onPlay}
-            secondsLeft={revealingNow ? null : roundDeadline.secondsLeft}
+            secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}
             centerSlot={
               reveal ? (
