@@ -8,12 +8,15 @@ import {
   type StatusResponse,
 } from './api';
 import { History } from './components/History';
+import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
+import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
+import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
@@ -47,6 +50,11 @@ export default function App() {
   const [lobbyReturnBase, setLobbyReturnBase] = useState<string | null>(null);
   const [externalMatchId, setExternalMatchId] = useState<string | null>(null);
   const lobbyLinked = Boolean(lobbyLink.matchId && lobbyLink.token);
+  // The rules are reachable for the whole match, not just the wait before it,
+  // and open themselves once on a player's very first match.
+  const [bestOf, setBestOf] = useState(5);
+  const [allSeated, setAllSeated] = useState(false);
+  const rules = useFirstMatchRules(allSeated);
   // The claim screen owns the whole viewport, so the app header steps aside.
   const [claiming, setClaiming] = useState(lobbyLinked);
   const lobbyReturnUrl =
@@ -77,13 +85,33 @@ export default function App() {
           <h1>
             <Wordmark />
           </h1>
-          {lobbyReturnUrl && (
-            <a className="lobby-link" href={lobbyReturnUrl}>
-              ← Back to Lobby
-            </a>
-          )}
+          <div className="topbar__actions">
+            {/* Back to Lobby comes first: its ← used to sit directly right of
+                the ? and point at it, so the arrow read as that button's
+                label. The rules button is last, and says what it does. */}
+            {lobbyReturnUrl && (
+              <a className="lobby-link" href={lobbyReturnUrl}>
+                ← Back to Lobby
+              </a>
+            )}
+            <button
+              type="button"
+              className="rules-btn"
+              aria-label="How to play"
+              onClick={() => rules.setOpen(true)}
+            >
+              <span className="rules-btn__mark" aria-hidden="true">
+                ?
+              </span>
+              <span className="rules-btn__label" aria-hidden="true">
+                How to play
+              </span>
+            </button>
+          </div>
         </header>
       )}
+
+      <HowToPlayDialog bestOf={bestOf} open={rules.open} onClose={rules.dismiss} />
 
       {debug &&
         (lobbyLinked ? (
@@ -116,6 +144,8 @@ export default function App() {
       <Game
         lobbyReturnUrl={lobbyReturnUrl}
         onClaimingChange={setClaiming}
+        onBestOf={setBestOf}
+        onAllSeated={setAllSeated}
         onLobbyReturn={(base, matchId) => {
           if (base) setLobbyReturnBase(base);
           if (matchId) setExternalMatchId(matchId);
@@ -137,10 +167,16 @@ type Phase = 'lobby' | 'playing';
 function Game({
   lobbyReturnUrl,
   onClaimingChange,
+  onBestOf,
+  onAllSeated,
   onLobbyReturn,
 }: {
   lobbyReturnUrl: string | null;
   onClaimingChange: (claiming: boolean) => void;
+  /** So the header's how-to-play panel can say "first to 3" and mean it. */
+  onBestOf: (bestOf: number) => void;
+  /** Both seats filled — the cue for the first-match rules to open themselves. */
+  onAllSeated: (allSeated: boolean) => void;
   onLobbyReturn?: (returnUrl: string | null, externalMatchId: string | null) => void;
 }) {
   const [phase, setPhase] = useState<Phase>('lobby');
@@ -220,6 +256,16 @@ function Game({
       onLobbyReturn?.(state.match.lobbyReturnUrl, state.match.externalMatchId);
     }
   }, [state?.match.lobbyReturnUrl, state?.match.externalMatchId, onLobbyReturn]);
+
+  const matchBestOf = state?.match.bestOf;
+  useEffect(() => {
+    if (matchBestOf) onBestOf(matchBestOf);
+  }, [matchBestOf, onBestOf]);
+
+  const everySeatFilled = Boolean(state?.seats.every((s) => s.player));
+  useEffect(() => {
+    onAllSeated(everySeatFilled);
+  }, [everySeatFilled, onAllSeated]);
 
   const currentRound = state?.match.currentRound;
   useEffect(() => {
@@ -460,8 +506,9 @@ export function Board({
     state.submittedPlayerIds ?? Object.keys(state.currentRoundMoves ?? {});
   const opponentLockedIn = submitted.some((id) => id !== myPlayerId);
   // Lobby players never see the create card, so round 1 is the only chance to
-  // tell them the rules.
-  const showRules = !finished && (!allSeated || match.currentRound <= 1);
+  // tell them the rules. Before the opponent arrives the how-to-play panels
+  // say all of this and more, so the one-liner would only repeat them.
+  const showRules = !finished && allSeated && match.currentRound <= 1;
   const myDelays = mySeat?.delays ?? {};
   const oppDelays = oppSeat?.delays ?? {};
   // Your last two picks, most recent first: explains exactly why each of your
@@ -477,7 +524,6 @@ export function Board({
       : null;
   // The deciding round plays out before the match-end banner takes the screen.
   const revealingNow = reveal != null;
-  const winner = state.matchWinnerSeatKey == null ? null : iWon ? you : opponent;
   // As the card dissolves, the graph asserts the same fact: the edge the round
   // was won on lights up underneath it. A drawn round has no edge.
   const revealPicks = reveal ? opponentMoveFromResult(reveal.result.moves, myPlayerId) : null;
@@ -485,6 +531,25 @@ export function Board({
     reveal?.phase === 'outro' && revealPicks?.myMove && revealPicks.oppMove
       ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove)
       : null;
+
+  if (finished && !revealingNow) {
+    return (
+      <div className="board">
+        <MatchEndCard
+          iWon={iWon}
+          drawn={state.matchWinnerSeatKey == null}
+          you={you}
+          opponent={opponent}
+          myScore={mySeat?.player?.score ?? 0}
+          oppScore={oppSeat?.player?.score ?? 0}
+          results={results}
+          mySeatKey={mySeatKey}
+          myPlayerId={myPlayerId}
+          lobbyReturnUrl={lobbyReturnUrl}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="board">
@@ -511,28 +576,12 @@ export function Board({
         pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
       />
 
-      {!allSeated && !finished && !revealingNow && (
-        <p className="hint">Waiting for all seats to be filled…</p>
-      )}
-
-      {finished && !revealingNow ? (
-        <div className="match-results">
-          {winner && (
-            <div className="match-results__winner">
-              <PlayerAvatar
-                profile={winner.profile}
-                displayName={winner.name}
-                placeholder={winner.placeholder}
-                role={iWon ? 'you' : 'opp'}
-                size="lg"
-              />
-              <span className="match-results__winner-name">{winner.name}</span>
-            </div>
-          )}
-          <div className={`result-banner ${iWon ? 'win' : 'loss'}`}>
-            {iWon ? '🏆 You win the match!' : 'You lost the match.'}
-          </div>
-          {lobbyReturnUrl && <LobbyReturnButton href={lobbyReturnUrl} />}
+      {!allSeated && !revealingNow ? (
+        <div className="pre-match">
+          <p className="hint" role="status">
+            While you wait — here's how it works.
+          </p>
+          <HowToPlay bestOf={match.bestOf} />
         </div>
       ) : (
         <div className="moves">
@@ -576,10 +625,13 @@ export function Board({
               ) : undefined
             }
           />
+          {error && (
+            <p className="error error--picker" role="alert">
+              {error}
+            </p>
+          )}
         </div>
       )}
-
-      {error && <p className="error">{error}</p>}
 
       <History
         results={results}
@@ -587,7 +639,6 @@ export function Board({
         myPlayerId={myPlayerId}
         you={you}
         opponent={opponent}
-        lobbyReturnUrl={finished && !revealingNow ? lobbyReturnUrl : null}
       />
     </div>
   );

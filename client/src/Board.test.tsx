@@ -108,9 +108,12 @@ const ROUND_1: RoundResult = {
 };
 
 describe('<Board> rules note (JQ-101)', () => {
-  it('shows the rules while waiting for the opponent', () => {
+  // Phase 4: the wait is filled by the how-to-play panels, which say all of
+  // this and more, so the one-line note would only repeat them.
+  it('leaves the rules to the how-to-play panels while waiting', () => {
     renderBoard(state({ bothSeated: false }));
-    expect(screen.getByText(/First to 3 round wins/)).toBeInTheDocument();
+    expect(screen.queryByText(/First to 3 round wins/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'First to 3' })).toBeInTheDocument();
   });
 
   it('shows the rules during round 1', () => {
@@ -340,14 +343,71 @@ describe('<Board> stable layout above the pentagon', () => {
 });
 
 describe('<Board> match end (JQ-114)', () => {
-  it('crowns the winner with their avatar above the banner', () => {
-    const { container } = renderBoard(
+  function endedBoard() {
+    return renderBoard(
       state({ currentRound: 3, scores: [3, 1], results: [ROUND_1], finished: true }),
     );
-    const results = container.querySelector('.match-results') as HTMLElement;
-    expect(results.querySelector('.player-avatar--lg')).toBeInTheDocument();
-    expect(results.querySelector('.match-results__winner')).toBeInTheDocument();
-    expect(within(results).getByText('Ada')).toBeInTheDocument();
+  }
+
+  it('crowns the winner with their avatar', () => {
+    const { container } = endedBoard();
+    const end = container.querySelector('.match-end') as HTMLElement;
+    expect(end.querySelector('.player-avatar--lg')).toBeInTheDocument();
+    expect(end.querySelector('.player-avatar--winner')).toBeInTheDocument();
+    expect(within(end).getByText('Ada')).toBeInTheDocument();
+  });
+
+  it('states the final score', () => {
+    const { container } = endedBoard();
+    const score = container.querySelector('.match-end__score') as HTMLElement;
+    expect(score).toHaveAccessibleName('Final score: you 3, Grace 1');
+  });
+
+  // Phase 4: the end card takes the whole board, so the ending reads as an
+  // ending rather than a board with a banner on it.
+  it('takes the board away — no scoreboard, no picker, no history below', () => {
+    const { container } = endedBoard();
+    expect(container.querySelector('.move-picker')).not.toBeInTheDocument();
+    expect(container.querySelector('.scoreboard')).not.toBeInTheDocument();
+    expect(container.querySelector('.history')).not.toBeInTheDocument();
+    // The rounds are still there — inside the card.
+    expect(container.querySelectorAll('.match-end .history-chip')).toHaveLength(1);
+  });
+});
+
+describe('<Board> pre-match (JQ 4.1)', () => {
+  it('fills the wait with how-to-play instead of a waiting line', () => {
+    const { container } = renderBoard(state({ bothSeated: false }));
+    expect(screen.queryByText(/Waiting for all seats/)).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.htp-panel')).toHaveLength(3);
+    expect(screen.getByRole('heading', { name: 'What beats what' })).toBeInTheDocument();
+  });
+
+  it('puts the picker away while there is nobody to play against', () => {
+    const { container } = renderBoard(state({ bothSeated: false }));
+    expect(container.querySelector('.move-picker')).not.toBeInTheDocument();
+  });
+});
+
+describe('<Board> errors (JQ 4.3)', () => {
+  it('renders an error under the picker, not above it', () => {
+    const { container } = render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={state()}
+        connected
+        error="Seat already taken"
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    const err = screen.getByRole('alert');
+    expect(err).toHaveTextContent('Seat already taken');
+    const picker = container.querySelector('.move-picker') as HTMLElement;
+    // An error appearing above would shift the pentagon under a thumb that is
+    // mid-decision — the thing .board-status exists to prevent.
+    expect(picker.compareDocumentPosition(err) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

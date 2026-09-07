@@ -106,6 +106,13 @@ describe('<History> compact strip (JQ 3.4)', () => {
     expect(within(full).getByText('You lost')).toBeInTheDocument();
   });
 
+  // Phase 4: the match-end card owns the way back to the Lobby, so History
+  // adding a second button was a duplicate on the only screen showing both.
+  it('leaves the way back to the Lobby to the match-end card', () => {
+    renderHistory();
+    expect(screen.queryByRole('link', { name: /Lobby/ })).not.toBeInTheDocument();
+  });
+
   it('renders nothing when there are no results', () => {
     const { container } = renderHistory({ results: [] });
     expect(container).toBeEmptyDOMElement();
