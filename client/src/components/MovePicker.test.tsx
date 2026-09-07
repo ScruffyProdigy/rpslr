@@ -17,6 +17,7 @@ function renderPicker(
     myRecentMoves?: Move[];
     onPlay?: (m: Move) => void;
     winningEdge?: { from: Move; to: Move; role: 'you' | 'opp' } | null;
+    secondsLeft?: number | null;
   } = {},
 ) {
   const onPlay = over.onPlay ?? vi.fn();
@@ -30,6 +31,7 @@ function renderPicker(
       round={over.round ?? 3}
       myRecentMoves={over.myRecentMoves ?? []}
       onPlay={onPlay}
+      secondsLeft={over.secondsLeft ?? null}
       winningEdge={over.winningEdge ?? null}
     />,
   );
@@ -396,5 +398,104 @@ describe('<MovePicker> clearing a preview to see the board (JQ-95 follow-up)', (
     const { container } = renderPicker({ lockedIn: true, disabled: true, myChosenMove: 'lizard' });
     await user.click(container.querySelector('.move-arrows') as unknown as Element);
     expect(container.querySelector('.picker-center--waiting')).toBeInTheDocument();
+  });
+});
+
+
+describe('<MovePicker> auto-commit at the deadline (JQ-156)', () => {
+  /** Re-render with a new clock reading, keeping everything else identical. */
+  function tickTo(
+    rerender: (ui: React.ReactElement) => void,
+    secondsLeft: number | null,
+    props: { onPlay: (m: Move) => void; myDelays?: Record<string, number> },
+  ) {
+    rerender(
+      <MovePicker
+        myDelays={props.myDelays ?? {}}
+        oppDelays={{}}
+        myChosenMove={null}
+        lockedIn={false}
+        disabled={false}
+        round={3}
+        myRecentMoves={[]}
+        onPlay={props.onPlay}
+        secondsLeft={secondsLeft}
+        winningEdge={null}
+      />,
+    );
+  }
+
+  it('plays the move you tapped rather than letting the server pick at random', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10 });
+
+    await user.click(screen.getByRole('button', { name: /rock/i }));
+    expect(onPlay).not.toHaveBeenCalled(); // one tap is still not a commit
+
+    tickTo(rerender, 2, { onPlay });
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('leaves you the decision for nearly the whole round', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10 });
+
+    await user.click(screen.getByRole('button', { name: /rock/i }));
+    tickTo(rerender, 3, { onPlay });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('never commits a move you only hovered', async () => {
+    // `preview` falls back to `hovered`, which is mouse-over and keyboard
+    // focus. Committing that would be worse than random: a cursor resting on
+    // the board would silently decide the round.
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10 });
+
+    await user.hover(screen.getByRole('button', { name: /rock/i }));
+    tickTo(rerender, 1, { onPlay });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('commits nothing when you never tapped', () => {
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10 });
+    tickTo(rerender, 1, { onPlay });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('does not commit a move you tapped to ask why it is on cooldown', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10, myDelays: { rock: 2 } });
+
+    await user.click(screen.getByRole('button', { name: /rock/i }));
+    tickTo(rerender, 1, { onPlay, myDelays: { rock: 2 } });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('does not fire when there is no clock running', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: null });
+
+    await user.click(screen.getByRole('button', { name: /rock/i }));
+    tickTo(rerender, null, { onPlay });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('commits once, not on every tick past the threshold', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10 });
+
+    await user.click(screen.getByRole('button', { name: /rock/i }));
+    tickTo(rerender, 2, { onPlay });
+    tickTo(rerender, 1, { onPlay });
+    tickTo(rerender, 0, { onPlay });
+    expect(onPlay).toHaveBeenCalledTimes(1);
   });
 });

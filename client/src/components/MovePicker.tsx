@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Move } from '../api';
 import {
   ARROW_INSET,
@@ -31,6 +31,13 @@ function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void
   return { show: !seen, dismiss };
 }
 
+/**
+ * Seconds before the deadline at which a tapped-but-unlocked move is committed
+ * for you. Far enough out to beat a slow round-trip; close enough that you keep
+ * the decision for nearly the whole round and can still switch or clear.
+ */
+const AUTO_COMMIT_AT_S = 2;
+
 export function MovePicker({
   myDelays,
   oppDelays,
@@ -41,6 +48,7 @@ export function MovePicker({
   round,
   myRecentMoves,
   onPlay,
+  secondsLeft = null,
   centerSlot,
   winningEdge = null,
 }: {
@@ -54,6 +62,11 @@ export function MovePicker({
   /** Your last two picks, most recent first — explains your cooldowns. */
   myRecentMoves: Move[];
   onPlay: (move: Move) => void;
+  /**
+   * Seconds left in the round, or null when no clock is running. Used only to
+   * commit a tapped move before the deadline — see `AUTO_COMMIT_AT_S`.
+   */
+  secondsLeft?: number | null;
   /** Takes over the centre slot — the round reveal, while it holds. */
   centerSlot?: React.ReactNode;
   /** The edge the round was just won on, lit as the reveal card dissolves. */
@@ -64,6 +77,7 @@ export function MovePicker({
   // also fires pointerenter can never lock a move by accident.
   const [picked, setPicked] = useState<Move | null>(null);
   const [hovered, setHovered] = useState<Move | null>(null);
+  const autoCommitted = useRef(false);
   const preview = hovered ?? picked;
 
   const tapHint = useOneTimeNote('tapHint');
@@ -73,6 +87,7 @@ export function MovePicker({
   useEffect(() => {
     setPicked(null);
     setHovered(null);
+    autoCommitted.current = false;
   }, [round]);
 
   // The preview's caption and Lock-in button sit on top of the graph, so there
@@ -100,6 +115,36 @@ export function MovePicker({
     },
     [onPlay, tapHint],
   );
+
+  // Last chance to speak before the server picks for you.
+  //
+  // When the round expires the server plays a random live move. If you had
+  // deliberately tapped one and simply ran out of time, having something else
+  // played instead reads as the game taking the decision away from you — so we
+  // commit the tapped move just before the deadline, through the ordinary play
+  // path. The server stays authoritative: it still owns when the round ends and
+  // still auto-picks when nothing arrives. This only gets a word in first.
+  //
+  // If it loses the race (backgrounded tab, slow network) the server has
+  // already recorded its pick, and `recordMove` rejects the duplicate — first
+  // write wins in both repositories, so there is no overwrite path and no
+  // protocol change needed. App swallows that specific conflict.
+  //
+  // `picked` and never `preview`: `preview` falls back to `hovered`, which is
+  // desktop mouse-over and keyboard focus. Auto-committing a hover would be
+  // worse than random — a mouse resting anywhere on the board would silently
+  // decide the round. A tap is evidence of intent; a cursor is not.
+  // Once per round: the clock keeps ticking past the threshold, and `lockedIn`
+  // only becomes true after the server round-trips, so without this the effect
+  // fires again on every tick in between.
+  useEffect(() => {
+    if (secondsLeft === null || secondsLeft > AUTO_COMMIT_AT_S) return;
+    if (!picked || lockedIn || disabled || autoCommitted.current) return;
+    // A tapped move on cooldown was a "why can't I play this?", not a choice.
+    if ((myDelays[picked] ?? 0) > 0) return;
+    autoCommitted.current = true;
+    commit(picked);
+  }, [secondsLeft, picked, lockedIn, disabled, myDelays, commit]);
 
   function handleClick(move: Move) {
     // A move on cooldown can be inspected but never committed: tapping it asks

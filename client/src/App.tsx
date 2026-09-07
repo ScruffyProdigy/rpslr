@@ -229,7 +229,9 @@ function Game({
       onState: setState,
       onError: (message) => {
         setPendingMove(null);
-        setError(message);
+        // Losing the race to the deadline is the expected outcome of the
+        // auto-commit, not something to shout about in red.
+        if (!isLateMoveConflict(message)) setError(message);
       },
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
@@ -348,7 +350,7 @@ function Game({
       setPendingMove(null);
     } catch (err) {
       setPendingMove(null);
-      setError((err as Error).message);
+      if (!isLateMoveConflict((err as Error).message)) setError((err as Error).message);
     }
   }
 
@@ -473,6 +475,22 @@ function Lobby({
 
 /** Stable empty list so the reveal hook can run before the loading return. */
 const NO_RESULTS: RoundResult[] = [];
+
+/**
+ * The move we auto-committed arrived after the server had already picked for
+ * us. Both repositories reject the duplicate with this message and the server's
+ * pick stands, which is the designed outcome — surfacing it as a red error at
+ * the exact moment the round resolves would be alarming and useless.
+ *
+ * Matched on the message because that is all the transport carries; the string
+ * is fixed in `api/src/repository.ts` callers and asserted in the API tests.
+ */
+function isLateMoveConflict(message: string): boolean {
+  return (
+    message.includes('move already submitted for this round') ||
+    message.includes('match is already finished')
+  );
+}
 
 export function Board({
   myPlayerId,
@@ -615,6 +633,7 @@ export function Board({
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             onPlay={onPlay}
+            secondsLeft={revealingNow ? null : roundDeadline.secondsLeft}
             winningEdge={winningEdge}
             centerSlot={
               reveal ? (

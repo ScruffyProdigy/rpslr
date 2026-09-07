@@ -209,19 +209,46 @@ has to be unpicked.
 Also for `duel-helpers`: Quarantine and Sacrifice are per-round pre-pick inputs.
 They must fit inside the same allowance, not extend it.
 
-## Known gap: the two-tap commit
+### 7. The tapped move gets the last word
 
-A move is previewed, then locked. If a player has previewed a move but not
-locked it when the deadline passes, the policy auto-picks at random and may pick
-something else — which will read as theft rather than as a timeout.
+A move is tapped, then locked. If you tapped one and ran out of time, having the
+server play something else at random reads as the game taking the decision away
+from you.
 
-Not fixed here, because the preview is client-only state: the server has no idea
-what is on screen. Honouring it needs a new client→server "preview" message plus
-the invariant that a preview never reaches the opponent's snapshot (the same
-treatment `publicView` already gives `currentRoundMoves`). That is a real design
-question — two-tap exists precisely so that one tap is not a commit, and
-auto-committing a preview at the buzzer partly undoes it — so it wants its own
-ticket rather than a guess here.
+So two seconds before the deadline the client commits the tapped move through the
+ordinary play path. No protocol change and no new state: **first write wins.**
+`recordMove` rejects a duplicate in both repositories — Postgres on the unique
+constraint, memory explicitly — so if the auto-commit loses the race (backgrounded
+tab, slow network, dead client) the server's pick simply stands and the duplicate
+is refused. `App.isLateMoveConflict` swallows that one message; surfacing "move
+already submitted for this round" in red at the moment the round resolves would
+be alarming and useless.
+
+**It commits `picked`, never `preview`.** `preview` falls back to `hovered`,
+which is desktop mouse-over and keyboard focus — auto-committing that would be
+*worse* than random, since a cursor resting anywhere on the board would silently
+decide the round. A tap is evidence of intent; a cursor is not. On touch there is
+no `hovered` at all.
+
+A move tapped only to ask "why can't I play this?" — one on cooldown — is not
+committed either.
+
+This does not weaken server authority the way deferring the deadline would have.
+The server still owns when the round ends and still auto-picks when nothing
+arrives; the client is given a last chance to speak, not trusted with the clock.
+
+Nor does it undo two-tap: one tap is still not a commit. It commits at expiry,
+where the alternative is not "nothing" but "a move chosen at random", and the
+player can switch or clear right up to the threshold.
+
+Because it arrives as an ordinary on-time move, it resets the strike run — the
+player did choose. That does not reopen the idle hole: `picked` resets each
+round, so someone who taps once and leaves auto-commits that round and then takes
+strikes normally.
+
+**Product call:** a player who tapped and walked away is treated as having
+chosen. Ryan's decision, on the reading that a deliberate tap is the closest
+available evidence of intent.
 
 ## Testing
 
