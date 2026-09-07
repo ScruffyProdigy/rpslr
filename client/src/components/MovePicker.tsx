@@ -18,6 +18,8 @@ import {
   opponentCooldownPhrase,
   type WinningEdge,
 } from '../moves';
+import MoveIcon from './MoveIcon';
+import UiIcon from './UiIcon';
 
 /** Remembers a one-time note's dismissal across reloads. */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
@@ -117,10 +119,22 @@ export function MovePicker({
   const showCooldownNote =
     !showTapHint && cooldownNote.show && !lockedIn && myCooldowns.length > 0;
 
+  /* What the board is doing, for the glow behind the pentagon. The board is
+     the hero surface, so it lights up in your colour while the round is
+     actually waiting on you, and steps back to neutral once it isn't. */
+  const boardState = centerSlot
+    ? 'reveal'
+    : lockedIn
+      ? 'waiting'
+      : disabled
+        ? 'idle'
+        : 'picking';
+
   return (
     <div className="move-picker">
       <div
         className="move-board"
+        data-state={boardState}
         onClick={(e) => {
           // A move button or the commit button owns its own click.
           if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
@@ -277,22 +291,18 @@ export function MovePicker({
               aria-pressed={selected}
             >
               {selected && (
-                <span className="move-btn__check" aria-hidden="true">
-                  ✓
-                </span>
+                <UiIcon name="check" className="move-btn__check" />
               )}
-              <span className="move-btn__emoji" aria-hidden="true">
-                {MOVE_META[m].emoji}
-              </span>
+              <MoveIcon move={m} className="move-btn__emoji" />
               <span className="move-btn__name">{MOVE_META[m].label}</span>
               {onCooldown && (
                 <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
-                  ⏳ {myDelay}
+                  <UiIcon name="hourglass" /> {myDelay}
                 </span>
               )}
               {oppDelay > 0 && (
                 <span className="opp-cooldown-mark" aria-hidden="true">
-                  ⏳
+                  <UiIcon name="hourglass" />
                 </span>
               )}
             </button>
@@ -316,11 +326,11 @@ export function MovePicker({
 
       <p className="graph-legend">
         <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
-          ⏳ N
+          <UiIcon name="hourglass" /> N
         </span>{' '}
         your cooldown ·{' '}
         <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
-          ⏳
+          <UiIcon name="hourglass" />
         </span>{' '}
         opponent cooldown (faded arrows = attacks they can&rsquo;t make)
       </p>
@@ -375,7 +385,7 @@ function PickerCenter({
     return (
       <div className="picker-center picker-center--waiting" role="status">
         <span className="picker-center__pick">
-          <span aria-hidden="true">{MOVE_META[myChosenMove].emoji}</span>{' '}
+          <MoveIcon move={myChosenMove} className="picker-center__pick-icon" />{' '}
           {MOVE_META[myChosenMove].label}
         </span>
         <p className="picker-center__caption">{describeBeatsOf(myChosenMove)}</p>
@@ -440,7 +450,7 @@ function OneTimeNoteBar({
     <p className="picker-note">
       <span>{children}</span>
       <button className="picker-note__dismiss" onClick={onDismiss} aria-label="Dismiss">
-        ✕
+        <UiIcon name="close" />
       </button>
     </p>
   );

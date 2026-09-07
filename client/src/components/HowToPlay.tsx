@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { winsNeeded } from '../moves';
 import { HowToPlayGraph } from './HowToPlayGraph';
+import UiIcon from './UiIcon';
 
 /**
  * The rules, in three panels. Mounted bare while the match waits for the
@@ -20,7 +21,9 @@ export function HowToPlay({ bestOf }: { bestOf: number }) {
       <section className="htp-panel">
         <h3 className="htp-panel__title">Cooldowns</h3>
         <p className="htp-panel__lead">
-          <span className="cooldown-pill">⏳ 2</span>
+          <span className="cooldown-pill">
+            <UiIcon name="hourglass" /> 2
+          </span>
         </p>
         <p className="htp-panel__body">
           Play a move and it rests for two rounds — you can't throw the same thing twice in a row.

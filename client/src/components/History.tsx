@@ -2,6 +2,7 @@ import type { MatchState, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
 import { MOVE_META, describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { RoundStrip } from './RoundStrip';
+import MoveIcon from './MoveIcon';
 
 /**
  * Rounds so far, as a chip strip: `R1 📄 vs 🤖 [winner]`. Tapping a chip says
@@ -67,11 +68,13 @@ function HistoryRow({
         <>
           <p className="history-row__picks">
             <span>
-              You {MOVE_META[myMove].emoji} {MOVE_META[myMove].label}
+              You <MoveIcon move={myMove} className="history-row__icon" />{' '}
+              {MOVE_META[myMove].label}
             </span>
             <span className="history-row__sep">·</span>
             <span>
-              Opponent {MOVE_META[oppMove].emoji} {MOVE_META[oppMove].label}
+              Opponent <MoveIcon move={oppMove} className="history-row__icon" />{' '}
+              {MOVE_META[oppMove].label}
             </span>
           </p>
           <p className="history-row__matchup">{describeRoundMatchup(myMove, oppMove)}</p>

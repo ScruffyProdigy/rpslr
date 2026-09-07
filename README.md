@@ -1,6 +1,6 @@
-# Rock Paper Scissors Lizard Robot — PlayHub Demo Game
+# Rock Paper Scissors Lizard Robot — JoinQuest Demo Game
 
-A minimal but production-shaped **third-party game** for the [PlayHub Lobby](#) platform.
+A minimal but production-shaped **third-party game** for the [JoinQuest Lobby](#) platform.
 It is a multi-round **Rock Paper Scissors Lizard Robot** match (with a "delay mark"
 cooldown twist) you can play standalone today, and that the Lobby will later link
 to via a `playUrl`.
@@ -14,7 +14,7 @@ to via a `playUrl`.
 
 ```
 ┌──────────────────────────┐         ┌──────────────────────────────────────┐
-│      PlayHub Lobby        │         │        RPS Demo Game (this repo)       │
+│      JoinQuest Lobby        │         │        RPS Demo Game (this repo)       │
 │      (separate repo)      │         │                                        │
 │                           │         │   ┌────────────┐     ┌─────────────┐  │
 │  React UI    :5173        │  link   │   │  Client     │ →  │  Game API    │  │
@@ -30,7 +30,7 @@ to via a `playUrl`.
 ```
 
 The game owns its client, API, and database. Lobby owns auth, the game catalog,
-and (later) matchmaking. See [`docs/playhub-integration.md`](docs/playhub-integration.md).
+and (later) matchmaking. See [`docs/joinquest-integration.md`](docs/joinquest-integration.md).
 
 ---
 
@@ -105,7 +105,7 @@ Stop with `Ctrl+C` (Postgres keeps running — stop it with `./scripts/db.sh dow
 │   ├── env/                  # local / staging / production ConfigMap overlays
 │   └── secrets/              # *.example.yaml committed; real *.yaml gitignored
 ├── docs/
-│   ├── playhub-integration.md      # step-by-step Lobby integration
+│   ├── joinquest-integration.md      # step-by-step Lobby integration
 │   ├── lobby-protocol-handoff.md   # contract + rationale + scaling (read first)
 │   └── development.md
 └── .github/workflows/        # api-tests, client-tests, environment-config-test
@@ -151,7 +151,7 @@ fan-out via Redis/NATS/Postgres LISTEN-NOTIFY is documented as future work.)
 A match is a set of **seats** (`seatKey`, optional `team`/`role`), each
 optionally **reserved for a Lobby user**. RPS ships the 2-seat `duel` mode, but
 the same model describes chess (`white`/`black`) or a MOBA (two teams of five) —
-see `GET /api/v1/game-modes` and [`docs/playhub-integration.md`](docs/playhub-integration.md).
+see `GET /api/v1/game-modes` and [`docs/joinquest-integration.md`](docs/joinquest-integration.md).
 
 ---
 
@@ -166,7 +166,7 @@ e.g. a banned player returns `403 { bannedLobbyUserIds }` so Lobby can correct.
 For v1, `REQUIRE_LOBBY_AUTH=false` keeps the game fully playable **standalone**
 (self-serve room codes, "standalone mode" banner). Full contract, seat token
 claims, and the exact Lobby steps are in
-[`docs/playhub-integration.md`](docs/playhub-integration.md). For the **why**
+[`docs/joinquest-integration.md`](docs/joinquest-integration.md). For the **why**
 behind each contract decision (and how it scales to larger games / a server
 fleet), see [`docs/lobby-protocol-handoff.md`](docs/lobby-protocol-handoff.md).
 
@@ -186,7 +186,7 @@ fleet), see [`docs/lobby-protocol-handoff.md`](docs/lobby-protocol-handoff.md).
 
 **Production URL:** `https://rpsls-duel.win` (GKE). The ingress serves the React
 client at `/` and the API at `/api`. See `k8s/env/production.yaml` and
-[`docs/playhub-integration.md`](docs/playhub-integration.md) for Lobby catalog
+[`docs/joinquest-integration.md`](docs/joinquest-integration.md) for Lobby catalog
 values (`playUrl`, `apiBaseUrl`, JWT `aud`).
 
 ---

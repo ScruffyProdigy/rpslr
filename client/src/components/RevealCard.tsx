@@ -1,8 +1,9 @@
 import type { RoundResult } from '../api';
 import type { RevealPhase } from '../lib/useRoundReveal';
 import type { Identity } from '../lib/seatProfile';
-import { MOVE_META, describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
+import { describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
+import MoveIcon from './MoveIcon';
 
 /**
  * The showdown. Takes over the pentagon's centre slot for a beat when a round
@@ -60,15 +61,11 @@ export function RevealCard({
           />
         </span>
         {myMove && (
-          <span className="reveal-card__move reveal-card__move--you" aria-hidden="true">
-            {MOVE_META[myMove].emoji}
-          </span>
+          <MoveIcon move={myMove} className="reveal-card__move reveal-card__move--you" />
         )}
         <span className="reveal-card__impact" aria-hidden="true" />
         {oppMove && (
-          <span className="reveal-card__move reveal-card__move--opp" aria-hidden="true">
-            {MOVE_META[oppMove].emoji}
-          </span>
+          <MoveIcon move={oppMove} className="reveal-card__move reveal-card__move--opp" />
         )}
         <span className="reveal-card__side reveal-card__side--opp">
           <PlayerAvatar

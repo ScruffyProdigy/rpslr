@@ -3,7 +3,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rock Paper Scissors Lizard Robot — PlayHub Demo Game</title>
+    <title>Rock Paper Scissors Lizard Robot</title>
+    <meta
+      name="description"
+      content="Five moves on a pentagon. Play one and it rests for two rounds, so you can never throw the same thing twice. First to three wins."
+    />
+    <!--
+      Tints the browser chrome on Android and iOS to the page's own background,
+      so the game does not sit in a strip of someone else's colour. Matches
+      --surface-1 in styles.css; the two have to be changed together.
+    -->
+    <meta name="theme-color" content="#0f1117" />
+
+    <!--
+      The mark is the board: five moves on a pentagon, joined by the beat
+      graph. SVG covers every current browser tab; the PNG is what iOS uses
+      when the game is added to a home screen.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      Without these the browser only learns the fonts exist after the CSS has
+      loaded and parsed — HTML, then CSS, then font, three round trips deep —
+      and `font-display: swap` spends that time rendering the wordmark in
+      system-ui before jumping to Archivo. The wordmark is the largest thing on
+      first paint, so that jump is the most visible moment the game has.
+
+      Only the two faces that are actually on first paint. Atkinson 700 is not
+      here on purpose: it is 11KB that would compete with these for the same
+      bandwidth, and bold body copy swapping late is a jump nobody watches.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/archivo-var-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/atkinson-400-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <!--
+      Absolute URLs, because crawlers resolve these without a page context.
+      They necessarily name production — staging and local serve the same
+      build, and only production is ever linked anywhere a crawler reads.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JoinQuest" />
+    <meta property="og:title" content="Rock Paper Scissors Lizard Robot" />
+    <meta
+      property="og:description"
+      content="Five moves on a pentagon. Play one and it rests for two rounds, so you can never throw the same thing twice. First to three wins."
+    />
+    <meta property="og:url" content="https://rpsls-duel.win" />
+    <meta property="og:image" content="https://rpsls-duel.win/apple-touch-icon.png" />
+    <meta name="twitter:card" content="summary" />
+
     <!--
       Runtime config (same pattern as the Lobby frontend): /env.js sets
       window.env BEFORE the bundle loads, so the same build artifact works in

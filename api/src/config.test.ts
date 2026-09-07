@@ -13,9 +13,9 @@ describe('loadConfig CORS', () => {
 
   it('strips trailing /api from base URL when used as JWT audience', () => {
     const cfg = loadConfig({
-      GAME_API_BASE_URL: 'https://rps.staging.playhub.example/api',
+      GAME_API_BASE_URL: 'https://rps.staging.joinquest.example/api',
     });
-    expect(cfg.tokenAudiences).toEqual(['https://rps.staging.playhub.example']);
+    expect(cfg.tokenAudiences).toEqual(['https://rps.staging.joinquest.example']);
   });
 
   it('merges explicit CORS with audience without duplicates', () => {

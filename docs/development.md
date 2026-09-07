@@ -1,6 +1,6 @@
 # Development
 
-Running the RPS demo game, and running it side-by-side with the PlayHub Lobby.
+Running the RPS demo game, and running it side-by-side with the JoinQuest Lobby.
 
 ## Prerequisites
 
@@ -85,7 +85,7 @@ Typical local flow:
 ```
 
 Open the Lobby at `http://localhost:5173`. Once the Lobby maintainer adds the
-catalog row + Play button (see `playhub-integration.md`), clicking **Play**
+catalog row + Play button (see `joinquest-integration.md`), clicking **Play**
 pushes the match to the game and opens
 `http://localhost:5174/?match=<id>&seat=<seat>&token=<jwt>` (game-minted base + Lobby JWT), seating you in your assigned
 slot. You can also open the game directly and play standalone with room codes.

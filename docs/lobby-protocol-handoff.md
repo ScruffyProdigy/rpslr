@@ -5,7 +5,7 @@ the wire contract, **why each part of the contract is shaped the way it is**, an
 how the same contract scales to bigger games and a fleet of game servers.
 
 For the step-by-step "do this, then that" version with full request/response
-bodies, see [`playhub-integration.md`](./playhub-integration.md). This doc is the
+bodies, see [`joinquest-integration.md`](./joinquest-integration.md). This doc is the
 *reasoning* companion — read it so contract decisions don't look arbitrary.
 
 ---

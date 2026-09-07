@@ -1,6 +1,6 @@
-# PlayHub Lobby Integration
+# JoinQuest Lobby Integration
 
-How the PlayHub Lobby platform links to this game, and what each side owns.
+How the JoinQuest Lobby platform links to this game, and what each side owns.
 **This game stays independent** — Lobby never touches the game's database, and
 the game never touches Lobby's.
 

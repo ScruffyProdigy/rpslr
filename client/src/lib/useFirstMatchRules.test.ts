@@ -51,19 +51,11 @@ describe('useFirstMatchRules', () => {
   });
 });
 
-describe('useFirstMatchRules temporary always-show override', () => {
+describe('useFirstMatchRules always-show override', () => {
   it('opens even for a player who has already dismissed it', () => {
     const first = renderHook(() => useFirstMatchRules(true, true));
     act(() => first.result.current.dismiss());
     const second = renderHook(() => useFirstMatchRules(true, true));
     expect(second.result.current.open).toBe(true);
-  });
-
-  // Guards the revert: when ALWAYS_SHOW_RULES goes back to false this fails,
-  // which is the reminder to delete this block along with it.
-  it('is what the app currently ships, by default', () => {
-    window.localStorage.setItem('rpslr.seen.howToPlay', '1');
-    const { result } = renderHook(() => useFirstMatchRules(true));
-    expect(result.current.open).toBe(true);
   });
 });

@@ -3,10 +3,13 @@ import type { Move } from '../api';
 import { BOARD, CIRCLE_ORDER, circleNodePos } from '../lib/pentagon';
 import { prefersReducedMotion } from '../lib/reducedMotion';
 import { MOVE_META, beatsOf, describeBeatsOf } from '../moves';
+import MoveIcon from './MoveIcon';
 
 /** How long each move holds before the graph steps to the next one. */
 const STEP_MS = 2500;
 const NODE_R = 36;
+/** Half the node's diameter, matching the board's own icon-to-button ratio. */
+const ICON_SIZE = 36;
 /** Pull arrow ends off the node discs so the heads stay readable. */
 const INSET = NODE_R + 8;
 
@@ -82,9 +85,12 @@ export function HowToPlayGraph() {
           return (
             <g key={move} className={`htp-graph__node htp-graph__node--${role}`}>
               <circle cx={pos.x} cy={pos.y} r={NODE_R} />
-              <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="central">
-                {MOVE_META[move].emoji}
-              </text>
+              <MoveIcon
+                move={move}
+                size={ICON_SIZE}
+                x={pos.x - ICON_SIZE / 2}
+                y={pos.y - ICON_SIZE / 2}
+              />
             </g>
           );
         })}

@@ -4,7 +4,7 @@ metadata:
   name: rps-game-api
   labels:
     app: rps-game-api
-    playhub.io/game-id: rock-paper-scissors-lizard-robot
+    joinquest.io/game-id: rock-paper-scissors-lizard-robot
 spec:
   selector:
     app: rps-game-api
@@ -19,7 +19,7 @@ metadata:
   name: rps-game-api
   labels:
     app: rps-game-api
-    playhub.io/game-id: rock-paper-scissors-lizard-robot
+    joinquest.io/game-id: rock-paper-scissors-lizard-robot
 spec:
   replicas: 1
   strategy:
@@ -34,7 +34,7 @@ spec:
     metadata:
       labels:
         app: rps-game-api
-        playhub.io/game-id: rock-paper-scissors-lizard-robot
+        joinquest.io/game-id: rock-paper-scissors-lizard-robot
     spec:
       securityContext:
         runAsNonRoot: true
