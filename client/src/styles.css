@@ -460,6 +460,49 @@ button.ghost {
   container-type: inline-size;
   margin: 8px 0 2px;
 }
+/* A soft light behind the pentagon. It is the only thing on the board that
+   says "the round is waiting on you" without using words or taking a corner of
+   the layout, and it goes neutral the moment that stops being true. Painted
+   from ::before so it sits under the arrows and the buttons.
+
+   farthest-side over a box inset well past the pentagon, with a long low tail:
+   the light has to fall off outside the nodes, or it reads as a spotlight disc
+   competing with the buttons rather than as the surface they sit on. */
+.move-board::before {
+  content: '';
+  position: absolute;
+  inset: -22%;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    farthest-side,
+    color-mix(in srgb, var(--you) 26%, transparent),
+    color-mix(in srgb, var(--you) 13%, transparent) 48%,
+    color-mix(in srgb, var(--you) 4%, transparent) 72%,
+    transparent 100%
+  );
+  transition: opacity 260ms ease, background 260ms ease;
+}
+.move-board[data-state='picking']::before {
+  opacity: 1;
+}
+.move-board[data-state='waiting']::before,
+.move-board[data-state='reveal']::before {
+  opacity: 1;
+  background: radial-gradient(
+    farthest-side,
+    color-mix(in srgb, var(--muted) 15%, transparent),
+    color-mix(in srgb, var(--muted) 7%, transparent) 48%,
+    color-mix(in srgb, var(--muted) 2%, transparent) 72%,
+    transparent 100%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .move-board::before {
+    transition: none;
+  }
+}
 
 .move-arrows {
   position: absolute;
@@ -1390,6 +1433,14 @@ ul.history-strip {
   .beat-arrow--won,
   .picker-center__waiting,
   .win-pip--pulse {
+    animation: none;
+  }
+  /* A drawn round names its own animation from two classes, which outranks
+     the reset above. The shorthand has already zeroed the duration, so nothing
+     moves either way — but a guarantee that holds only because of a longhand
+     it does not mention is one refactor away from not holding. */
+  .reveal-card--draw .reveal-card__move--you,
+  .reveal-card--draw .reveal-card__move--opp {
     animation: none;
   }
   /* The ring is pure decoration — with no motion there is nothing to show. */

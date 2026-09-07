@@ -118,10 +118,22 @@ export function MovePicker({
   const showCooldownNote =
     !showTapHint && cooldownNote.show && !lockedIn && myCooldowns.length > 0;
 
+  /* What the board is doing, for the glow behind the pentagon. The board is
+     the hero surface, so it lights up in your colour while the round is
+     actually waiting on you, and steps back to neutral once it isn't. */
+  const boardState = centerSlot
+    ? 'reveal'
+    : lockedIn
+      ? 'waiting'
+      : disabled
+        ? 'idle'
+        : 'picking';
+
   return (
     <div className="move-picker">
       <div
         className="move-board"
+        data-state={boardState}
         onClick={(e) => {
           // A move button or the commit button owns its own click.
           if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
