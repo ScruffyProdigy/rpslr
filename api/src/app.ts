@@ -155,9 +155,9 @@ export function createApp(
   api.post(
     '/matches/:ref/move',
     asyncHandler(async (req: Request, res: Response) => {
-      const { playerId, move } = req.body ?? {};
+      const { playerId, move, round } = req.body ?? {};
       if (!playerId) return res.status(400).json({ error: 'playerId is required' });
-      res.json(await service.submitMove(req.params.ref, playerId, move));
+      res.json(await service.submitMove(req.params.ref, playerId, move, round));
     }),
   );
 

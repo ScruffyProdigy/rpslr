@@ -136,9 +136,11 @@ export const api = {
   claimSeatWithToken: (ref: string, token: string) =>
     request<ClaimResult>(`/api/v1/matches/${ref}/claim`, { method: 'POST', body: '{}' }, token),
 
-  submitMove: (ref: string, playerId: string, move: Move) =>
+  submitMove: (ref: string, playerId: string, move: Move, round: number) =>
     request<MatchState>(`/api/v1/matches/${ref}/move`, {
       method: 'POST',
-      body: JSON.stringify({ playerId, move }),
+      // `round` keeps a move that arrives after its round resolved from being
+      // recorded against the next one.
+      body: JSON.stringify({ playerId, move, round }),
     }),
 };

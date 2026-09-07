@@ -11,7 +11,7 @@ type ErrorHandler = (message: string) => void;
 
 export interface MatchSocket {
   /** Returns false if the socket is not connected (caller should use REST fallback). */
-  sendMove: (playerId: string, move: Move) => boolean;
+  sendMove: (playerId: string, move: Move, round: number) => boolean;
   close: () => void;
 }
 
@@ -70,9 +70,11 @@ export function connectMatchSocket(
   connect();
 
   return {
-    sendMove(playerId: string, move: Move) {
+    sendMove(playerId: string, move: Move, round: number) {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'move', playerId, move }));
+        // Naming the round keeps a move that arrives after its round resolved
+        // from landing on the next one.
+        ws.send(JSON.stringify({ type: 'move', playerId, move, round }));
         return true;
       }
       return false;

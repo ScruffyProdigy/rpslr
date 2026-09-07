@@ -83,4 +83,16 @@ describe('connectMatchSocket', () => {
     vi.advanceTimersByTime(5000);
     expect(FakeSocket.instances).toHaveLength(1);
   });
+
+  it('names the round on every move it sends', () => {
+    // A move that arrives after its round resolved would otherwise be recorded
+    // against the next one — a pick the player never made for it.
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {} });
+    FakeSocket.instances[0].open();
+    socket.sendMove('player-a', 'rock', 3);
+
+    expect(FakeSocket.instances[0].sent).toContain(
+      JSON.stringify({ type: 'move', playerId: 'player-a', move: 'rock', round: 3 }),
+    );
+  });
 });

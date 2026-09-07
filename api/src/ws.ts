@@ -18,7 +18,9 @@ import type { MatchState } from './types.js';
  *       encouraged: it is how the server knows this player is present, which is
  *       what separates "disconnected" from "slow" in the idle policy. A socket
  *       that omits it still receives state, it just never counts as presence.
- *   { "type": "move", "playerId": "...", "move": "rock" }   submit a move
+ *   { "type": "move", "playerId": "...", "move": "rock", "round": 3 }
+ *       submit a move. `round` is optional; when present a move whose round
+ *       has already resolved is refused rather than landing on the next one.
  *   { "type": "ping" }
  *
  * Server → client messages (JSON):
@@ -36,6 +38,8 @@ interface ClientMessage {
   ref?: string;
   playerId?: string;
   move?: string;
+  /** Round the client believed it was playing; a stale one is refused. */
+  round?: number;
 }
 
 export function attachWebsocketServer(
@@ -112,7 +116,7 @@ export function attachWebsocketServer(
             if (!ref) return send({ type: 'error', error: 'subscribe before moving' });
             if (!msg.playerId) return send({ type: 'error', error: 'playerId is required' });
             // The resulting state is broadcast via the hub to all subscribers.
-            await service.submitMove(ref, msg.playerId, msg.move);
+            await service.submitMove(ref, msg.playerId, msg.move, msg.round);
             return;
           }
           case 'ping':

@@ -259,6 +259,36 @@ describe('GameService — round deadlines and the idle policy', () => {
     });
   });
 
+  describe('a move that names its round', () => {
+    it('refuses a move whose round already resolved, rather than playing it in the next one', async () => {
+      const { code, hostId, challengerId } = await setupMatch();
+      await service.submitMove(code, hostId, 'rock');
+      now += 45_001;
+      await service.getState(code); // expiry resolves round 1 without Bob
+
+      // Bob's client fired its auto-commit for round 1 and lost the race. The
+      // move must not silently become his round 2 pick.
+      await expect(service.submitMove(code, challengerId, 'lizard', 1)).rejects.toThrow(
+        /round has already moved on/,
+      );
+      expect((await service.getState(code)).submittedPlayerIds).toEqual([]);
+    });
+
+    it('accepts a move that names the round actually in progress', async () => {
+      const { code, hostId } = await setupMatch();
+      const state = await service.submitMove(code, hostId, 'rock', 1);
+      expect(state.submittedPlayerIds).toEqual([hostId]);
+    });
+
+    it('still accepts a move that names no round at all', async () => {
+      // Optional on both the REST body and the WS message: a caller that does
+      // not know its round keeps the old behaviour.
+      const { code, hostId } = await setupMatch();
+      const state = await service.submitMove(code, hostId, 'rock');
+      expect(state.submittedPlayerIds).toEqual([hostId]);
+    });
+  });
+
   describe('a move racing the deadline', () => {
     it('rejects a move that arrives after the match was forfeited', async () => {
       const { code, hostId, challengerId } = await setupMatch();

@@ -305,7 +305,25 @@ export class GameService {
 
   // --- Gameplay -------------------------------------------------------------
 
-  async submitMove(idOrCode: string, playerId: string, move: unknown): Promise<MatchState> {
+  /**
+   * `expectedRound` is the round the caller believed it was playing. A move
+   * that arrives after its round has resolved would otherwise be recorded
+   * against the *next* one — a move the player never chose for it, committed
+   * silently when legal and rejected as a cooldown violation when not.
+   *
+   * Reachable without the client's auto-commit (a lock-in tapped as the round
+   * resolves does the same), but the auto-commit fires on a timer at exactly
+   * the moment expiry lands, so it turns a rare race into a systematic one.
+   *
+   * Optional, so a caller that does not know its round keeps the old behaviour
+   * rather than being locked out.
+   */
+  async submitMove(
+    idOrCode: string,
+    playerId: string,
+    move: unknown,
+    expectedRound?: number,
+  ): Promise<MatchState> {
     if (!isMove(move)) {
       throw new ValidationError('move must be one of rock, paper, scissors');
     }
@@ -316,6 +334,9 @@ export class GameService {
     await this.enforceDeadlines(found.id);
     const match = (await this.repo.getMatch(found.id))!;
     if (match.status === 'finished') throw new ConflictError('match is already finished');
+    if (expectedRound != null && expectedRound !== match.currentRound) {
+      throw new ConflictError('round has already moved on');
+    }
 
     const seats = await this.repo.listSeats(match.id);
     const occupied = seats.filter((s) => s.player);

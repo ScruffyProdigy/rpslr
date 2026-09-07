@@ -340,11 +340,12 @@ function Game({
     if (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove) return;
     setError(null);
     setPendingMove(move);
-    const sent = socketRef.current?.sendMove(myPlayerId, move);
+    const round = state.match.currentRound;
+    const sent = socketRef.current?.sendMove(myPlayerId, move, round);
     if (sent) return;
     // Socket not ready — REST still publishes to the opponent over the hub.
     try {
-      const next = await api.submitMove(ref, myPlayerId, move);
+      const next = await api.submitMove(ref, myPlayerId, move, round);
       setState(next);
       setLockedMove(next.currentRoundMoves[myPlayerId] ?? move);
       setPendingMove(null);
@@ -488,6 +489,7 @@ const NO_RESULTS: RoundResult[] = [];
 function isLateMoveConflict(message: string): boolean {
   return (
     message.includes('move already submitted for this round') ||
+    message.includes('round has already moved on') ||
     message.includes('match is already finished')
   );
 }

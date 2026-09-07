@@ -250,6 +250,23 @@ strikes normally.
 chosen. Ryan's decision, on the reading that a deliberate tap is the closest
 available evidence of intent.
 
+### 8. A move names the round it meant
+
+`submitMove` recorded against `match.currentRound` *as of arrival* — the client
+never said which round it was playing. A move that arrived after its round
+resolved therefore landed on the **next** one: a pick the player never made for
+it, committed silently when legal, and rejected as a cooldown violation when not
+(`ValidationError`, which is not one of the messages the client swallows).
+
+This predates the auto-commit — a lock-in tapped as the round resolves does the
+same — but the auto-commit fires on a timer at exactly the moment expiry lands,
+so it turns a rare race into a systematic one for every idle player.
+
+Both transports now carry the round, and a stale one is refused with
+`round has already moved on`, which `isLateMoveConflict` swallows. The parameter
+is optional, so a caller that does not know its round keeps the old behaviour
+rather than being locked out.
+
 ## Testing
 
 - `roundPolicy.test.ts` — allowances, escalation, grace, auto-pick distribution
