@@ -71,6 +71,7 @@ export class MemoryGameRepository implements GameRepository {
       bestOf: input.bestOf,
       currentRound: 1,
       phase: null,
+      phaseStartedAt: null,
       phaseDeadline: null,
       endReason: null,
       winnerSeatKey: null,
@@ -205,10 +206,16 @@ export class MemoryGameRepository implements GameRepository {
     }
   }
 
-  async setPhase(matchId: string, phase: Phase | null, deadlineIso: string | null): Promise<void> {
+  async setPhase(
+    matchId: string,
+    phase: Phase | null,
+    startedAtIso: string | null,
+    deadlineIso: string | null,
+  ): Promise<void> {
     const m = this.matches.get(matchId);
     if (m) {
       m.phase = phase;
+      m.phaseStartedAt = startedAtIso;
       m.phaseDeadline = deadlineIso;
     }
   }
@@ -229,6 +236,7 @@ export class MemoryGameRepository implements GameRepository {
       m.winnerSeatKey = winnerSeatKey;
       m.endReason = endReason;
       m.phase = null;
+      m.phaseStartedAt = null;
       m.phaseDeadline = null;
     }
   }

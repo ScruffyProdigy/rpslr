@@ -31,6 +31,12 @@ export interface Match {
   currentRound: number;
   /** Timed segment currently running, or null when nothing is on the clock. */
   phase: Phase | null;
+  /**
+   * ISO time `phase` began. Sent alongside the deadline so the client can draw
+   * elapsed-vs-total without inferring the allowance from whichever snapshot it
+   * happened to receive.
+   */
+  phaseStartedAt: string | null;
   /** ISO deadline for `phase`. The client renders it; the server owns it. */
   phaseDeadline: string | null;
   /** Set once the match is over. */

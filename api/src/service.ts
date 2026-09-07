@@ -420,8 +420,14 @@ export class GameService {
   /** Put the next phase on the clock. */
   private async startPhase(matchId: string, gameMode: string, round: number): Promise<void> {
     const phase: Phase = 'pick';
-    const deadline = deadlineFor(policyForMode(gameMode), phase, round, this.now());
-    await this.repo.setPhase(matchId, phase, new Date(deadline).toISOString());
+    const startedAt = this.now();
+    const deadline = deadlineFor(policyForMode(gameMode), phase, round, startedAt);
+    await this.repo.setPhase(
+      matchId,
+      phase,
+      new Date(startedAt).toISOString(),
+      new Date(deadline).toISOString(),
+    );
   }
 
   /**

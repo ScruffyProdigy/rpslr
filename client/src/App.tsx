@@ -12,10 +12,12 @@ import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
+import { RoundTimer } from './components/RoundTimer';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
+import { useRoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
@@ -223,7 +225,7 @@ function Game({
   // Live updates over WebSocket (replaces polling). Opens once we're in a match.
   useEffect(() => {
     if (phase !== 'playing' || !ref) return;
-    const socket = connectMatchSocket(ref, {
+    const socket = connectMatchSocket(ref, myPlayerId, {
       onState: setState,
       onError: (message) => {
         setPendingMove(null);
@@ -238,7 +240,7 @@ function Game({
       socket.close();
       socketRef.current = null;
     };
-  }, [phase, ref]);
+  }, [phase, ref, myPlayerId]);
 
   // Remember our pick for this round once the server lists us in submittedPlayerIds.
   useEffect(() => {
@@ -490,6 +492,7 @@ export function Board({
   onPlay: (move: Move) => void;
 }) {
   const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
+  const roundDeadline = useRoundDeadline(state);
 
   if (!state) return <p>Loading match…</p>;
 
@@ -546,6 +549,7 @@ export function Board({
           mySeatKey={mySeatKey}
           myPlayerId={myPlayerId}
           lobbyReturnUrl={lobbyReturnUrl}
+          endReason={match.endReason}
         />
       </div>
     );
@@ -586,9 +590,15 @@ export function Board({
       ) : (
         <div className="moves">
           <p className="round-label">
-            {`Round ${match.currentRound} · You ${mySeat?.player?.score ?? 0} – ${
-              oppSeat?.player?.score ?? 0
-            }`}
+            <span>
+              {`Round ${match.currentRound} · You ${mySeat?.player?.score ?? 0} – ${
+                oppSeat?.player?.score ?? 0
+              }`}
+            </span>
+            {/* Sits on the round label rather than in `board-status`, which is
+                directly above the tap surface — a number that changes every
+                second there would shift the board under the player's thumb. */}
+            {!revealingNow && <RoundTimer deadline={roundDeadline} />}
           </p>
           {/* The slot is always here even when empty. The pentagon is the tap
               surface, so anything that appears above it mid-decision would

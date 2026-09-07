@@ -50,7 +50,12 @@ export interface GameRepository {
   setMatchStatus(matchId: string, status: MatchStatus): Promise<void>;
   setMatchProgress(matchId: string, currentRound: number, status: MatchStatus): Promise<void>;
   /** Put a phase on the clock, or clear it by passing nulls. */
-  setPhase(matchId: string, phase: Phase | null, deadlineIso: string | null): Promise<void>;
+  setPhase(
+    matchId: string,
+    phase: Phase | null,
+    startedAtIso: string | null,
+    deadlineIso: string | null,
+  ): Promise<void>;
   /** Consecutive expiries for one player; 0 clears the run. */
   setExpiryStrikes(matchId: string, playerId: string, strikes: number): Promise<void>;
   /**

@@ -45,7 +45,7 @@ afterEach(() => {
 describe('connectMatchSocket', () => {
   it('reports the drop so callers can show a reconnecting state', () => {
     const onClose = vi.fn();
-    connectMatchSocket('RPS-1234', { onState: () => {}, onClose });
+    connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onClose });
 
     FakeSocket.instances[0].open();
     expect(onClose).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe('connectMatchSocket', () => {
 
   it('reconnects, re-subscribes, and reports the reopen', () => {
     const onOpen = vi.fn();
-    connectMatchSocket('RPS-1234', { onState: () => {}, onOpen });
+    connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onOpen });
 
     FakeSocket.instances[0].open();
     FakeSocket.instances[0].close();
@@ -66,13 +66,15 @@ describe('connectMatchSocket', () => {
     FakeSocket.instances[1].open();
     expect(onOpen).toHaveBeenCalledTimes(2);
     expect(FakeSocket.instances[1].sent).toEqual([
-      JSON.stringify({ type: 'subscribe', ref: 'RPS-1234' }),
+      // Re-subscribing must carry the player id too, or a reconnect would look
+      // to the server like the player never came back.
+      JSON.stringify({ type: 'subscribe', ref: 'RPS-1234', playerId: 'player-a' }),
     ]);
   });
 
   it('stays quiet once the caller closes it', () => {
     const onClose = vi.fn();
-    const socket = connectMatchSocket('RPS-1234', { onState: () => {}, onClose });
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onClose });
 
     FakeSocket.instances[0].open();
     socket.close();

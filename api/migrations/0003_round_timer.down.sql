@@ -4,4 +4,5 @@ ALTER TABLE matches
   DROP COLUMN IF EXISTS winner_seat_key,
   DROP COLUMN IF EXISTS end_reason,
   DROP COLUMN IF EXISTS phase_deadline,
+  DROP COLUMN IF EXISTS phase_started_at,
   DROP COLUMN IF EXISTS phase;

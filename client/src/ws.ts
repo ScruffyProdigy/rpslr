@@ -17,6 +17,12 @@ export interface MatchSocket {
 
 export function connectMatchSocket(
   ref: string,
+  /**
+   * Who this socket belongs to. The server counts it as presence, which is what
+   * tells the idle policy that a silent player is thinking rather than gone.
+   * Null before a seat is claimed; the socket still receives state.
+   */
+  playerId: string | null,
   handlers: {
     onState: StateHandler;
     onError?: ErrorHandler;
@@ -34,7 +40,7 @@ export function connectMatchSocket(
 
     ws.onopen = () => {
       retry = 0;
-      ws?.send(JSON.stringify({ type: 'subscribe', ref }));
+      ws?.send(JSON.stringify({ type: 'subscribe', ref, playerId }));
       handlers.onOpen?.();
     };
 

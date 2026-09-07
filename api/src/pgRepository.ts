@@ -46,6 +46,10 @@ function mapMatch(row: any): Match {
     bestOf: row.best_of,
     currentRound: row.current_round,
     phase: row.phase ?? null,
+    phaseStartedAt:
+      row.phase_started_at instanceof Date
+        ? row.phase_started_at.toISOString()
+        : (row.phase_started_at ?? null),
     phaseDeadline:
       row.phase_deadline instanceof Date
         ? row.phase_deadline.toISOString()
@@ -283,10 +287,15 @@ export class PgGameRepository implements GameRepository {
     ]);
   }
 
-  async setPhase(matchId: string, phase: Phase | null, deadlineIso: string | null): Promise<void> {
+  async setPhase(
+    matchId: string,
+    phase: Phase | null,
+    startedAtIso: string | null,
+    deadlineIso: string | null,
+  ): Promise<void> {
     await this.pool.query(
-      'UPDATE matches SET phase = $1, phase_deadline = $2 WHERE id = $3',
-      [phase, deadlineIso, matchId],
+      'UPDATE matches SET phase = $1, phase_started_at = $2, phase_deadline = $3 WHERE id = $4',
+      [phase, startedAtIso, deadlineIso, matchId],
     );
   }
 
@@ -305,7 +314,7 @@ export class PgGameRepository implements GameRepository {
     await this.pool.query(
       `UPDATE matches
        SET status = 'finished', winner_seat_key = $1, end_reason = $2,
-           phase = NULL, phase_deadline = NULL
+           phase = NULL, phase_started_at = NULL, phase_deadline = NULL
        WHERE id = $3`,
       [winnerSeatKey, endReason, matchId],
     );

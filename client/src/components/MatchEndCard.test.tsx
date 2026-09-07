@@ -9,10 +9,10 @@ const YOU = { profile: null, name: 'Ada', placeholder: false };
 const OPP = { profile: null, name: 'Grace', placeholder: false };
 
 const RESULTS: RoundResult[] = [
-  { round: 1, outcome: 'a', moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' } },
-  { round: 2, outcome: 'b', moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'paper' } },
-  { round: 3, outcome: 'a', moves: { [MY_PLAYER]: 'lizard', [OPP_PLAYER]: 'paper' } },
-  { round: 4, outcome: 'a', moves: { [MY_PLAYER]: 'robot', [OPP_PLAYER]: 'scissors' } },
+  { round: 1, outcome: 'a', moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' }, autoPicked: [] },
+  { round: 2, outcome: 'b', moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'paper' }, autoPicked: [] },
+  { round: 3, outcome: 'a', moves: { [MY_PLAYER]: 'lizard', [OPP_PLAYER]: 'paper' }, autoPicked: [] },
+  { round: 4, outcome: 'a', moves: { [MY_PLAYER]: 'robot', [OPP_PLAYER]: 'scissors' }, autoPicked: [] },
 ];
 
 function renderCard(over: Partial<Parameters<typeof MatchEndCard>[0]> = {}) {
@@ -32,6 +32,33 @@ function renderCard(over: Partial<Parameters<typeof MatchEndCard>[0]> = {}) {
     />,
   );
 }
+
+describe('<MatchEndCard> how the match ended (JQ-156)', () => {
+  it('says nothing extra when the match was simply played out', () => {
+    const { container } = renderCard({ endReason: 'played' });
+    expect(container.querySelector('.match-end__how')).toBeNull();
+  });
+
+  it('tells the winner why they won when the opponent ran out of time', () => {
+    renderCard({ endReason: 'forfeit-strikes', iWon: true });
+    expect(screen.getByText('Grace ran out of time twice in a row.')).toBeInTheDocument();
+  });
+
+  it('tells the loser it was the clock, not the board', () => {
+    renderCard({ endReason: 'forfeit-strikes', iWon: false });
+    expect(screen.getByText('You ran out of time twice in a row.')).toBeInTheDocument();
+  });
+
+  it('distinguishes a disconnect from merely being slow', () => {
+    renderCard({ endReason: 'forfeit-disconnect', iWon: true });
+    expect(screen.getByText('Grace disconnected and did not come back.')).toBeInTheDocument();
+  });
+
+  it('explains a match nobody stayed for', () => {
+    renderCard({ endReason: 'abandoned', drawn: true });
+    expect(screen.getByText('Neither player was still here.')).toBeInTheDocument();
+  });
+});
 
 describe('<MatchEndCard>', () => {
   it('states the final score, which no screen used to show at all', () => {

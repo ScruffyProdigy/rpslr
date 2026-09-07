@@ -446,9 +446,31 @@ button.ghost {
 }
 .round-label {
   width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   color: var(--muted);
   margin: 0 0 4px;
+}
+
+/* ---- Round timer ---------------------------------------------------------
+   One shared clock. It renders identically whether or not either player has
+   locked in, which is deliberate: a clock that reacted to lock-in would leak
+   it, and the planned Helpers mode has a card (Poker Face) whose whole effect
+   is hiding exactly that. Tabular figures so the number does not jitter as it
+   counts down. */
+.round-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--muted);
+  transition: color 200ms ease;
+}
+/* Amber, not red: running low is not an error, and --danger means something
+   went wrong. */
+.round-timer--urgent {
+  color: var(--opp);
 }
 /* ---- Move picker (pentagon) ----------------------------------------------
    The board is a fixed 380-unit square scaled by its container width, so the
@@ -1216,6 +1238,14 @@ button.ghost {
 .reveal-card--draw .reveal-card__verdict {
   color: var(--muted);
 }
+/* Why a move appeared that nobody chose. Quiet — it explains the round, it is
+   not the result of it. */
+.reveal-card__timeout {
+  margin: 4px 0 0;
+  font-size: clamp(0.7rem, 3.2cqw, 0.85rem);
+  line-height: 1.3;
+  color: var(--muted);
+}
 /* Tap anywhere on the card to move on; a real button so it is reachable and
    announced rather than being a click-handler on a div. */
 .reveal-card__skip {
@@ -1778,6 +1808,15 @@ input:focus-visible {
 .match-end__verdict.loss,
 .match-end__verdict.draw {
   color: var(--text);
+}
+
+/* A match that ended on the clock says so, or the loser sees a defeat they
+   never played and the winner a win they did not earn on the board. */
+.match-end__how {
+  margin: 4px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 .match-end__score {
   display: flex;
