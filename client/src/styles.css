@@ -820,12 +820,24 @@ button.ghost {
   background: var(--line-1);
   border: 1px solid var(--line-3);
 }
+/* Clear of the move's name, which is the thing it would otherwise sit on.
+   The name's font has a floor (`clamp` bottoms out at 0.66rem) but the button
+   keeps shrinking with the board, so below a ~320px board the name grows into
+   the bottom of the circle — exactly where this pill hangs. Once the board
+   started sizing itself to the viewport (JQ-165) that stopped being a corner
+   case and became what a phone renders: at a 270px board the two were 1.3px
+   apart, and under 245px they overlapped outright.
+
+   Hung further out and set tighter, the pill clears the name by 6.2px at a
+   270px board and 10px at the full 380px, without moving the name or shrinking
+   it past legibility. */
 .move-btn .cooldown-pill {
   position: absolute;
-  bottom: -7px;
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
   font-size: clamp(0.6rem, 3cqw, 0.72rem);
+  line-height: 1.2;
 }
 .cooldown-pill--legend {
   font-size: 0.68rem;

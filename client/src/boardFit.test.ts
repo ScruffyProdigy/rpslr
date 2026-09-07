@@ -384,6 +384,17 @@ describe('the board does not scroll on a phone (JQ-165)', () => {
     expect(boardWidth(390, 240)).toBe(MIN_PENTAGON);
   });
 
+  it('keeps the cooldown pill clear of the move name on a shrunken board', () => {
+    // Measured in a browser, since the clearance depends on line boxes jsdom
+    // cannot compute: 6.2px at a 270px board (what a 390x760 Safari viewport
+    // gives) and 10px at the full 380px. What is checkable from here is the
+    // two values that produce it. Before this, the pill hung at -7px with a
+    // 1.4 line-height and overlapped the name on any board under 245px.
+    const pill = '.move-btn .cooldown-pill';
+    expect(resolvePx(declaration(pill, 'bottom', 390), 0)).toBeLessThanOrEqual(-10);
+    expect(Number(declaration(pill, 'line-height', 390))).toBeLessThanOrEqual(1.2);
+  });
+
   it('spends the space on the scoreboard before the pentagon', () => {
     // The seat cards compress first: on a viewport with room, the pentagon is
     // still sized by the width it has, exactly as JQ-108 left it.
