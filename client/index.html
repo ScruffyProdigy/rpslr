@@ -24,6 +24,32 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!--
+      Without these the browser only learns the fonts exist after the CSS has
+      loaded and parsed — HTML, then CSS, then font, three round trips deep —
+      and `font-display: swap` spends that time rendering the wordmark in
+      system-ui before jumping to Archivo. The wordmark is the largest thing on
+      first paint, so that jump is the most visible moment the game has.
+
+      Only the two faces that are actually on first paint. Atkinson 700 is not
+      here on purpose: it is 11KB that would compete with these for the same
+      bandwidth, and bold body copy swapping late is a jump nobody watches.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/archivo-var-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/atkinson-400-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <!--
       Absolute URLs, because crawlers resolve these without a page context.
       They necessarily name production — staging and local serve the same
       build, and only production is ever linked anywhere a crawler reads.
