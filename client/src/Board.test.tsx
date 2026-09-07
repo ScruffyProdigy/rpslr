@@ -199,6 +199,17 @@ describe('<Board> round header (JQ 3.2)', () => {
     expect(screen.getByLabelText('12 seconds left this round')).toBeInTheDocument();
   });
 
+  it('keeps the clock inside the scoreboard, which costs no page height', () => {
+    // The board already overflows a 390x844 phone (JQ-165); the seat-card row
+    // is centred and 201px tall, so the clock is free there and is not on the
+    // round label, which would add a row.
+    const { container } = renderBoard(
+      state({ currentRound: 4, scores: [2, 1], results: [ROUND_1], secondsLeft: 12 }),
+    );
+    expect(container.querySelector('.scoreboard .round-timer')).not.toBeNull();
+    expect(container.querySelector('.round-label .round-timer')).toBeNull();
+  });
+
   it('shows no clock before the match has started', () => {
     const { container } = renderBoard(state({ bothSeated: false }));
     expect(container.querySelector('.round-timer')).toBeNull();

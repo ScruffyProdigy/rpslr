@@ -50,7 +50,8 @@ describe('GameService — round deadlines and the idle policy', () => {
       await service.submitMove(code, challengerId, 'scissors');
       const state = await service.getState(code);
       expect(state.match.currentRound).toBe(2);
-      expect(Date.parse(state.match.phaseDeadline!)).toBe(now + 20_000);
+      // 20s of thinking time plus the 3.2s reveal the picker is inert for.
+      expect(Date.parse(state.match.phaseDeadline!)).toBe(now + 23_200);
     });
 
     it('ships the server clock so the client need not trust its own', async () => {
@@ -140,7 +141,7 @@ describe('GameService — round deadlines and the idle policy', () => {
       await service.getState(code);
 
       await service.submitMove(code, hostId, 'paper');
-      now += 20_001; // round 2 expires -> strike 2
+      now += 23_201; // round 2 expires -> strike 2
       const state = await service.getState(code);
 
       expect(state.match.status).toBe('finished');
@@ -164,7 +165,7 @@ describe('GameService — round deadlines and the idle policy', () => {
 
       // So a later miss is a first miss again: auto-pick, not forfeit.
       await service.submitMove(code, hostId, 'scissors');
-      now += 20_001;
+      now += 23_201;
       const state = await service.getState(code);
       expect(state.match.status).toBe('playing');
     });
@@ -265,7 +266,7 @@ describe('GameService — round deadlines and the idle policy', () => {
       now += 45_001;
       await service.getState(code); // strike 1
       await service.submitMove(code, hostId, 'paper');
-      now += 20_001;
+      now += 23_201;
       await service.getState(code); // strike 2 -> forfeit
 
       await expect(service.submitMove(code, challengerId, 'rock')).rejects.toThrow(

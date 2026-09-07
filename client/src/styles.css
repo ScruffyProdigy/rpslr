@@ -446,31 +446,41 @@ button.ghost {
 }
 .round-label {
   width: 100%;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 8px;
   text-align: center;
   color: var(--muted);
   margin: 0 0 4px;
 }
 
 /* ---- Round timer ---------------------------------------------------------
-   One shared clock. It renders identically whether or not either player has
-   locked in, which is deliberate: a clock that reacted to lock-in would leak
-   it, and the planned Helpers mode has a card (Poker Face) whose whole effect
-   is hiding exactly that. Tabular figures so the number does not jitter as it
-   counts down. */
+   Stacked with "vs" between the two seat cards. Those are already 201px tall
+   and the row is centred, so the clock costs no page height — which matters,
+   because the board overflows a 390x844 phone (JQ-165).
+
+   One shared clock, not one per player. It renders identically whether or not
+   either player has locked in, which is deliberate: a clock that reacted to
+   lock-in would leak it, and the planned Helpers mode has a card (Poker Face)
+   whose whole effect is hiding exactly that. */
+.vs-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
 .round-timer {
+  /* Digits change in place, so they must be tabular or the number twitches. */
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-display, inherit);
   font-weight: 700;
   color: var(--muted);
   transition: color 200ms ease;
 }
-/* Amber, not red: running low is not an error, and --danger means something
-   went wrong. */
+/* Amber, not red. A clock running low is a state, not an error — --danger is
+   reserved for errors, and neither --you nor --opp belongs here: those are
+   fixed role colours, and tinting a shared clock with either would say it
+   belonged to that player. --warn is the amber the "opponent has locked in"
+   pill already uses; the fallback is that same value pre-Phase-5. */
 .round-timer--urgent {
-  color: var(--opp);
+  color: var(--warn, #f5a524);
 }
 /* ---- Move picker (pentagon) ----------------------------------------------
    The board is a fixed 380-unit square scaled by its container width, so the

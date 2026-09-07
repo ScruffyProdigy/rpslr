@@ -30,8 +30,16 @@ describe('allowanceMs', () => {
   it('gives round 1 a longer allowance than later rounds', () => {
     const p = policyForMode('duel');
     expect(p.allowanceMs('pick', 1)).toBe(45_000);
-    expect(p.allowanceMs('pick', 2)).toBe(20_000);
-    expect(p.allowanceMs('pick', 5)).toBe(20_000);
+    expect(p.allowanceMs('pick', 2)).toBe(23_200);
+    expect(p.allowanceMs('pick', 5)).toBe(23_200);
+  });
+
+  it('buys back the reveal hold on every round that has one', () => {
+    // 20s of thinking time plus the 3.2s the client spends replaying the last
+    // round with the picker inert. Round 1 has no preceding round to replay.
+    const p = policyForMode('duel');
+    expect(p.allowanceMs('pick', 2) - p.allowanceMs('pick', 1)).toBe(-21_800);
+    expect(p.allowanceMs('pick', 2)).toBe(20_000 + 3_200);
   });
 
   it('treats every round after the first identically', () => {
@@ -45,7 +53,7 @@ describe('deadlineFor', () => {
   it('is the phase start plus that phase allowance', () => {
     const p = policyForMode('duel');
     expect(deadlineFor(p, 'pick', 1, 1_000)).toBe(46_000);
-    expect(deadlineFor(p, 'pick', 3, 1_000)).toBe(21_000);
+    expect(deadlineFor(p, 'pick', 3, 1_000)).toBe(24_200);
   });
 });
 

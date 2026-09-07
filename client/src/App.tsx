@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   api,
   type Move,
@@ -17,7 +17,7 @@ import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
-import { useRoundDeadline } from './lib/useRoundDeadline';
+import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
@@ -578,6 +578,7 @@ export function Board({
         submittedPlayerIds={submitted}
         bestOf={match.bestOf}
         pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
+        deadline={allSeated && !revealingNow ? roundDeadline : null}
       />
 
       {!allSeated && !revealingNow ? (
@@ -590,15 +591,9 @@ export function Board({
       ) : (
         <div className="moves">
           <p className="round-label">
-            <span>
-              {`Round ${match.currentRound} · You ${mySeat?.player?.score ?? 0} – ${
-                oppSeat?.player?.score ?? 0
-              }`}
-            </span>
-            {/* Sits on the round label rather than in `board-status`, which is
-                directly above the tap surface — a number that changes every
-                second there would shift the board under the player's thumb. */}
-            {!revealingNow && <RoundTimer deadline={roundDeadline} />}
+            {`Round ${match.currentRound} · You ${mySeat?.player?.score ?? 0} – ${
+              oppSeat?.player?.score ?? 0
+            }`}
           </p>
           {/* The slot is always here even when empty. The pentagon is the tap
               surface, so anything that appears above it mid-decision would
@@ -660,6 +655,7 @@ function Scoreboard({
   submittedPlayerIds,
   bestOf,
   pulseSeatKey,
+  deadline,
 }: {
   seats: Seat[];
   mySeatKey: string;
@@ -667,20 +663,32 @@ function Scoreboard({
   bestOf: number;
   /** Seat that just took a round — its newest pip pulses once. */
   pulseSeatKey: string | null;
+  /** Round clock, or null when none is running. */
+  deadline: RoundDeadline | null;
 }) {
   const needed = winsNeeded(bestOf);
   return (
     <div className="scoreboard">
       {seats.map((seat, i) => (
-        <SeatCard
-          key={seat.id}
-          seat={seat}
-          mine={seat.seatKey === mySeatKey}
-          winsNeeded={needed}
-          showVs={i < seats.length - 1}
-          lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
-          justWon={seat.seatKey === pulseSeatKey}
-        />
+        <Fragment key={seat.id}>
+          <SeatCard
+            seat={seat}
+            mine={seat.seatKey === mySeatKey}
+            winsNeeded={needed}
+            lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
+            justWon={seat.seatKey === pulseSeatKey}
+          />
+          {/* Between the two seat cards, which are already 201px tall — so the
+              clock costs no page height, and the board is 111px over on a
+              390x844 phone as it is (JQ-165). It also reads as what it is:
+              one clock belonging to the round, not to either player. */}
+          {i < seats.length - 1 && (
+            <span className="vs-slot">
+              <span className="vs">vs</span>
+              {deadline && <RoundTimer deadline={deadline} />}
+            </span>
+          )}
+        </Fragment>
       ))}
     </div>
   );
@@ -723,14 +731,12 @@ function SeatCard({
   seat,
   mine,
   winsNeeded: needed,
-  showVs,
   lockedIn,
   justWon,
 }: {
   seat: Seat;
   mine: boolean;
   winsNeeded: number;
-  showVs: boolean;
   lockedIn: boolean;
   justWon: boolean;
 }) {
@@ -769,7 +775,6 @@ function SeatCard({
         {waiting && <span className="player-status">on their way</span>}
         <WinProgress wins={wins} needed={needed} justWon={justWon} />
       </div>
-      {showVs && <span className="vs">vs</span>}
     </>
   );
 }

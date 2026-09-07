@@ -49,8 +49,28 @@ export interface RoundPolicy {
 const FIRST_ROUND_MS = 45_000;
 const LATER_ROUND_MS = 20_000;
 
+/**
+ * Dead time at the top of every round after the first: the client plays the
+ * previous round's showdown with the picker inert, and only hands the board
+ * back when it finishes. Charging that to the player's thinking time would
+ * spend ~16% of a 20s round on an animation they cannot act during.
+ *
+ * Added to the allowance rather than deferring the deadline until the client
+ * reports the reveal finished — that would put a client-reported event in
+ * charge of a server-authoritative deadline, which is the thing this design is
+ * avoiding. Round 1 has no preceding round, so it pays nothing.
+ *
+ * Mirrors REVEAL_HOLD_MS + REVEAL_OUTRO_MS in
+ * `client/src/lib/useRoundReveal.ts`. The coupling is deliberate but loose: the
+ * server is being generous, so the two drifting apart costs a second of extra
+ * thinking time, not a wrong forfeit. Skipping the reveal is likewise just
+ * generous.
+ */
+const REVEAL_DEAD_TIME_MS = 3_200;
+
 export const DUEL_POLICY: RoundPolicy = {
-  allowanceMs: (_phase, round) => (round <= 1 ? FIRST_ROUND_MS : LATER_ROUND_MS),
+  allowanceMs: (_phase, round) =>
+    round <= 1 ? FIRST_ROUND_MS : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,
   strikesToForfeit: 2,
   disconnectGraceMs: 45_000,
 };

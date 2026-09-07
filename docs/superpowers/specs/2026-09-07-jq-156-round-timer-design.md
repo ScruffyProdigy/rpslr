@@ -32,7 +32,7 @@ loses players.
 | Question | Decision |
 | --- | --- |
 | Expiry policy | Escalating: auto-pick first, forfeit on the second consecutive miss |
-| Round allowance | 20s, with 45s for round 1 |
+| Round allowance | 20s of thinking time, plus the 3.2s reveal hold on rounds 2+; 45s for round 1 |
 | Forfeit trigger | 2 consecutive expiries, **or** 45s disconnected |
 | Auto-picked move | Uniformly random among that player's live moves |
 
@@ -53,6 +53,19 @@ matched against a veteran** — at that point round 1's allowance needs revisiti
 and the sharper fix is to start the round-1 clock when the rules panel closes
 (with a ceiling), which was considered and rejected here for putting a
 client-reported event in charge of a server-authoritative deadline.
+
+**Why the reveal hold is added rather than charged.** The client replays the
+previous round's showdown for 3.2s (`REVEAL_HOLD_MS` + `REVEAL_OUTRO_MS`) with
+the picker inert. Starting the deadline when the round advances would spend ~16%
+of a 20s round on an animation the player cannot act during. The allowance for
+rounds 2+ is therefore 23.2s. Deferring the deadline until the client reported
+the reveal finished was rejected for the same reason as the round-1 variant: it
+puts a client-reported event in charge of a server-authoritative deadline.
+
+The constant is duplicated on the server, which is a real coupling — but a loose
+one in the safe direction. If the two drift apart the player gets a second of
+extra thinking time, never a wrong forfeit. Skipping the reveal is likewise just
+generous.
 
 **Why random, not safest.** A move chosen for you that happens to be the
 strongest available rewards walking away. Uniform is neutral, unpredictable by an
@@ -163,9 +176,23 @@ would never move.
 Under `prefers-reduced-motion` the per-second repaint is skipped; the value still
 updates on each snapshot.
 
-The timer renders on the round label rather than in `board-status`, which sits
-directly above the tap surface — a number changing every second there would shift
-the board under the player's thumb.
+The clock renders between the two seat cards, stacked under the "vs". That row
+is centred and already 201px tall, so it costs **no page height** — which matters
+because the board overflows a 390x844 phone by ~111px during play
+([JQ-165](https://linear.app/joinquest/issue/JQ-165)). It is also the honest
+placement: there is one deadline, so there is one clock, and it belongs to the
+round rather than to either player.
+
+The expiry announcement lives in the pentagon's centre slot (`RevealCard`), which
+overlays the graph and likewise costs no height. The `.hint.opponent-ready` pill
+would have been the matching precedent but renders above the board.
+
+Colour: urgency is `--warn`, never `--danger` (a clock running low is a state,
+not an error) and never `--you`/`--opp` (fixed role colours — tinting a shared
+clock with either would claim it belonged to that player). Type is
+`--font-display` with `tabular-nums`, since digits changing in place twitch
+otherwise. `--warn` and `--font-display` are Phase 5 tokens and carry fallbacks
+until that branch lands.
 
 ## Constraint for Phase 5 and for JQ-147
 
@@ -182,6 +209,20 @@ has to be unpicked.
 Also for `duel-helpers`: Quarantine and Sacrifice are per-round pre-pick inputs.
 They must fit inside the same allowance, not extend it.
 
+## Known gap: the two-tap commit
+
+A move is previewed, then locked. If a player has previewed a move but not
+locked it when the deadline passes, the policy auto-picks at random and may pick
+something else — which will read as theft rather than as a timeout.
+
+Not fixed here, because the preview is client-only state: the server has no idea
+what is on screen. Honouring it needs a new client→server "preview" message plus
+the invariant that a preview never reaches the opponent's snapshot (the same
+treatment `publicView` already gives `currentRoundMoves`). That is a real design
+question — two-tap exists precisely so that one tap is not a commit, and
+auto-committing a preview at the buzzer partly undoes it — so it wants its own
+ticket rather than a guess here.
+
 ## Testing
 
 - `roundPolicy.test.ts` — allowances, escalation, grace, auto-pick distribution
@@ -193,3 +234,10 @@ They must fit inside the same allowance, not extend it.
   and five minutes slow (8).
 - `RoundTimer.test.tsx` — urgency thresholds, screen-reader labelling, and that
   it does not announce every tick (9).
+- `Board.test.tsx` — the clock renders inside `.scoreboard` and not on the round
+  label, so a later refactor cannot quietly re-break the height budget.
+
+Beyond the suites, the whole policy was exercised against a real Postgres on a
+throwaway container: jsonb round-tripping for `auto_picked`, persisted strikes,
+both forfeit paths, and the down migration dropping cleanly. The in-memory
+repository never touches the hand-written SQL.
