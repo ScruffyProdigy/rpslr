@@ -13,8 +13,14 @@ import type { MatchState } from './types.js';
  * Endpoint: GET /api/v1/ws  (WebSocket upgrade)
  *
  * Client → server messages (JSON):
- *   { "type": "subscribe", "ref": "RPS-XXXX" }   subscribe to live match state
- *   { "type": "move", "playerId": "...", "move": "rock" }   submit a move
+ *   { "type": "subscribe", "ref": "RPS-XXXX", "playerId": "..." }
+ *       subscribe to live match state. `playerId` is optional but strongly
+ *       encouraged: it is how the server knows this player is present, which is
+ *       what separates "disconnected" from "slow" in the idle policy. A socket
+ *       that omits it still receives state, it just never counts as presence.
+ *   { "type": "move", "playerId": "...", "move": "rock", "round": 3 }
+ *       submit a move. `round` is optional; when present a move whose round
+ *       has already resolved is refused rather than landing on the next one.
  *   { "type": "ping" }
  *
  * Server → client messages (JSON):
@@ -32,6 +38,8 @@ interface ClientMessage {
   ref?: string;
   playerId?: string;
   move?: string;
+  /** Round the client believed it was playing; a stale one is refused. */
+  round?: number;
 }
 
 export function attachWebsocketServer(
@@ -60,6 +68,17 @@ export function attachWebsocketServer(
   wss.on('connection', (ws: WebSocket) => {
     let unsubscribe: (() => void) | null = null;
     let ref: string | null = null;
+    /** Whose presence this socket is holding, so we can release it on close. */
+    let presentAs: { ref: string; playerId: string } | null = null;
+
+    const releasePresence = () => {
+      if (!presentAs) return;
+      const { ref: r, playerId } = presentAs;
+      presentAs = null;
+      void service.markDisconnected(r, playerId).catch(() => {
+        /* presence is best-effort; a failure here must not kill the socket */
+      });
+    };
 
     const send = (msg: unknown) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -82,13 +101,22 @@ export function attachWebsocketServer(
             ref = msg.ref;
             unsubscribe?.();
             unsubscribe = hub.subscribe(state.match.id, sendState);
+            // Re-subscribing on the same socket (a new match, say) hands
+            // presence over rather than leaking the old registration.
+            if (msg.playerId !== presentAs?.playerId || msg.ref !== presentAs?.ref) {
+              releasePresence();
+              if (msg.playerId) {
+                presentAs = { ref: msg.ref, playerId: msg.playerId };
+                await service.markConnected(msg.ref, msg.playerId);
+              }
+            }
             return sendState(state); // immediate snapshot
           }
           case 'move': {
             if (!ref) return send({ type: 'error', error: 'subscribe before moving' });
             if (!msg.playerId) return send({ type: 'error', error: 'playerId is required' });
             // The resulting state is broadcast via the hub to all subscribers.
-            await service.submitMove(ref, msg.playerId, msg.move);
+            await service.submitMove(ref, msg.playerId, msg.move, msg.round);
             return;
           }
           case 'ping':
@@ -101,8 +129,14 @@ export function attachWebsocketServer(
       }
     });
 
-    ws.on('close', () => unsubscribe?.());
-    ws.on('error', () => unsubscribe?.());
+    ws.on('close', () => {
+      unsubscribe?.();
+      releasePresence();
+    });
+    ws.on('error', () => {
+      unsubscribe?.();
+      releasePresence();
+    });
   });
 
   return wss;

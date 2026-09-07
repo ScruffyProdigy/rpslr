@@ -2,6 +2,10 @@ import { getEnv } from './env';
 
 export type Move = 'rock' | 'paper' | 'scissors' | 'lizard' | 'robot';
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
+/** A timed segment of a match. Only 'pick' exists today. */
+export type Phase = 'pick';
+/** How a match ended; everything but 'played' comes from the idle policy. */
+export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
 
 export interface LobbyPlayerProfile {
   displayName?: string;
@@ -14,6 +18,8 @@ export interface SeatPlayer {
   lobbyUserId: string | null;
   score: number;
   profile: LobbyPlayerProfile | null;
+  /** Consecutive rounds this player let expire; any on-time move clears it. */
+  expiryStrikes: number;
 }
 
 export interface Seat {
@@ -43,6 +49,14 @@ export interface Match {
   status: MatchStatus;
   bestOf: number;
   currentRound: number;
+  /** Timed segment currently running, or null when nothing is on the clock. */
+  phase: Phase | null;
+  /** ISO time `phase` began; with the deadline this gives the full allowance. */
+  phaseStartedAt: string | null;
+  /** ISO deadline for `phase`. Server-owned; the client only renders it. */
+  phaseDeadline: string | null;
+  endReason: MatchEndReason | null;
+  winnerSeatKey: string | null;
   createdAt: string;
 }
 
@@ -50,6 +64,8 @@ export interface RoundResult {
   round: number;
   outcome: string; // winning seatKey, or 'draw'
   moves: Record<string, Move>;
+  /** Player ids whose move the server chose when the round ran out of time. */
+  autoPicked: string[];
 }
 
 export interface MatchState {
@@ -61,6 +77,11 @@ export interface MatchState {
   /** In-progress moves (your id only until the round resolves; opponent move hidden). */
   currentRoundMoves: Record<string, Move>;
   matchWinnerSeatKey: string | null;
+  /**
+   * The server's clock when this snapshot was built. The countdown is rendered
+   * as an offset from this, never from the device clock, which may be far off.
+   */
+  serverNow: string;
 }
 
 export interface ClaimResult {
@@ -115,9 +136,11 @@ export const api = {
   claimSeatWithToken: (ref: string, token: string) =>
     request<ClaimResult>(`/api/v1/matches/${ref}/claim`, { method: 'POST', body: '{}' }, token),
 
-  submitMove: (ref: string, playerId: string, move: Move) =>
+  submitMove: (ref: string, playerId: string, move: Move, round: number) =>
     request<MatchState>(`/api/v1/matches/${ref}/move`, {
       method: 'POST',
-      body: JSON.stringify({ playerId, move }),
+      // `round` keeps a move that arrives after its round resolved from being
+      // recorded against the next one.
+      body: JSON.stringify({ playerId, move, round }),
     }),
 };

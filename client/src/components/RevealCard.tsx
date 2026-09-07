@@ -30,6 +30,14 @@ export function RevealCard({
 }) {
   const { myMove, oppMove } = opponentMoveFromResult(result.moves, myPlayerId);
   const verdict = describeOutcome(result.outcome, mySeatKey);
+  // An expired round is never silent. Whoever ran out of time is told plainly
+  // that the server picked for them, and so is the player who waited.
+  const autoPicked = result.autoPicked ?? [];
+  const timedOut = autoPicked.includes(myPlayerId)
+    ? 'You ran out of time — a move was picked for you'
+    : autoPicked.length > 0
+      ? `${opponent.name} ran out of time — a move was picked for them`
+      : null;
   const verdictLine =
     verdict === 'draw'
       ? 'Draw'
@@ -81,6 +89,7 @@ export function RevealCard({
         <p className="reveal-card__verb">{describeRoundMatchup(myMove, oppMove)}</p>
       )}
       <p className="reveal-card__verdict">{verdictLine}</p>
+      {timedOut && <p className="reveal-card__timeout">{timedOut}</p>}
       <button className="reveal-card__skip" onClick={onSkip} aria-label="Skip to the next round" />
     </div>
   );

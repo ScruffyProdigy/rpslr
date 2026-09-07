@@ -9,7 +9,15 @@ import {
   type GameRepository,
 } from './repository.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
-import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer } from './types.js';
+import type { Phase } from './roundPolicy.js';
+import type {
+  Match,
+  MatchEndReason,
+  MatchStatus,
+  RoundResult,
+  Seat,
+  SeatPlayer,
+} from './types.js';
 
 interface SeatRow {
   id: string;
@@ -28,6 +36,7 @@ interface PlayerRow {
   name: string;
   lobbyUserId: string | null;
   score: number;
+  expiryStrikes: number;
 }
 
 interface MoveRow {
@@ -61,6 +70,11 @@ export class MemoryGameRepository implements GameRepository {
       status: 'waiting',
       bestOf: input.bestOf,
       currentRound: 1,
+      phase: null,
+      phaseStartedAt: null,
+      phaseDeadline: null,
+      endReason: null,
+      winnerSeatKey: null,
       createdAt: new Date().toISOString(),
     };
     this.matches.set(id, match);
@@ -136,6 +150,7 @@ export class MemoryGameRepository implements GameRepository {
       lobbyUserId: p.lobbyUserId,
       score: p.score,
       profile: lobbyProfile,
+      expiryStrikes: p.expiryStrikes,
     };
   }
 
@@ -171,6 +186,7 @@ export class MemoryGameRepository implements GameRepository {
       name: input.name,
       lobbyUserId: input.lobbyUserId ?? null,
       score: 0,
+      expiryStrikes: 0,
     };
     this.players.push(player);
     const claimedSeat = this.toSeat(seat);
@@ -187,6 +203,41 @@ export class MemoryGameRepository implements GameRepository {
     if (m) {
       m.currentRound = currentRound;
       m.status = status;
+    }
+  }
+
+  async setPhase(
+    matchId: string,
+    phase: Phase | null,
+    startedAtIso: string | null,
+    deadlineIso: string | null,
+  ): Promise<void> {
+    const m = this.matches.get(matchId);
+    if (m) {
+      m.phase = phase;
+      m.phaseStartedAt = startedAtIso;
+      m.phaseDeadline = deadlineIso;
+    }
+  }
+
+  async setExpiryStrikes(matchId: string, playerId: string, strikes: number): Promise<void> {
+    const p = this.players.find((row) => row.matchId === matchId && row.id === playerId);
+    if (p) p.expiryStrikes = strikes;
+  }
+
+  async endMatch(
+    matchId: string,
+    winnerSeatKey: string | null,
+    endReason: MatchEndReason,
+  ): Promise<void> {
+    const m = this.matches.get(matchId);
+    if (m) {
+      m.status = 'finished';
+      m.winnerSeatKey = winnerSeatKey;
+      m.endReason = endReason;
+      m.phase = null;
+      m.phaseStartedAt = null;
+      m.phaseDeadline = null;
     }
   }
 

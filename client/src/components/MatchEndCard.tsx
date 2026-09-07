@@ -1,4 +1,4 @@
-import type { RoundResult } from '../api';
+import type { MatchEndReason, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
 import { LobbyReturnButton } from './LobbyReturnButton';
 import { PlayerAvatar } from './PlayerAvatar';
@@ -23,6 +23,7 @@ export function MatchEndCard({
   mySeatKey,
   myPlayerId,
   lobbyReturnUrl,
+  endReason,
 }: {
   iWon: boolean;
   /** No winner seat — the match ended without one (abandoned, or all draws). */
@@ -35,6 +36,8 @@ export function MatchEndCard({
   mySeatKey: string;
   myPlayerId: string;
   lobbyReturnUrl: string | null;
+  /** How the match ended. Anything but 'played' needs saying out loud. */
+  endReason?: MatchEndReason | null;
 }) {
   const winner = drawn ? null : iWon ? you : opponent;
   const verdict = drawn
@@ -42,6 +45,22 @@ export function MatchEndCard({
     : iWon
       ? 'You win the match!'
       : `${opponent.name} wins the match.`;
+
+  // A match that ended on the clock rather than on the score has to say so —
+  // otherwise the loser sees a defeat they never played, and the winner sees a
+  // win they did not earn on the board.
+  const howItEnded =
+    endReason === 'abandoned'
+      ? 'Neither player was still here.'
+      : endReason === 'forfeit-disconnect'
+        ? iWon
+          ? `${opponent.name} disconnected and did not come back.`
+          : 'You were disconnected too long.'
+        : endReason === 'forfeit-strikes'
+          ? iWon
+            ? `${opponent.name} ran out of time twice in a row.`
+            : 'You ran out of time twice in a row.'
+          : null;
 
   return (
     <div className="match-end">
@@ -60,6 +79,8 @@ export function MatchEndCard({
       )}
 
       <p className={`match-end__verdict ${drawn ? 'draw' : iWon ? 'win' : 'loss'}`}>{verdict}</p>
+
+      {howItEnded && <p className="match-end__how">{howItEnded}</p>}
 
       <p className="match-end__score" aria-label={`Final score: you ${myScore}, ${opponent.name} ${oppScore}`}>
         <span className="match-end__score-you" aria-hidden="true">

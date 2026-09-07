@@ -9,7 +9,15 @@ import {
   type GameRepository,
 } from './repository.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
-import type { Match, MatchStatus, RoundResult, Seat, SeatPlayer } from './types.js';
+import type { Phase } from './roundPolicy.js';
+import type {
+  Match,
+  MatchEndReason,
+  MatchStatus,
+  RoundResult,
+  Seat,
+  SeatPlayer,
+} from './types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapMatch(row: any): Match {
@@ -37,6 +45,17 @@ function mapMatch(row: any): Match {
     status: row.status as MatchStatus,
     bestOf: row.best_of,
     currentRound: row.current_round,
+    phase: row.phase ?? null,
+    phaseStartedAt:
+      row.phase_started_at instanceof Date
+        ? row.phase_started_at.toISOString()
+        : (row.phase_started_at ?? null),
+    phaseDeadline:
+      row.phase_deadline instanceof Date
+        ? row.phase_deadline.toISOString()
+        : (row.phase_deadline ?? null),
+    endReason: row.end_reason ?? null,
+    winnerSeatKey: row.winner_seat_key ?? null,
     createdAt:
       row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
@@ -120,7 +139,8 @@ export class PgGameRepository implements GameRepository {
     const profiles = match?.lobbyPlayerProfiles ?? {};
     const res = await this.pool.query(
       `SELECT s.*, p.id AS player_id, p.name AS player_name,
-              p.lobby_user_id AS player_lobby_user_id, p.score AS player_score
+              p.lobby_user_id AS player_lobby_user_id, p.score AS player_score,
+              p.expiry_strikes AS player_expiry_strikes
        FROM seats s
        LEFT JOIN players p ON p.seat_id = s.id
        WHERE s.match_id = $1
@@ -148,6 +168,7 @@ export class PgGameRepository implements GameRepository {
               lobbyUserId: row.player_lobby_user_id,
               score: row.player_score,
               profile: lobbyProfile,
+              expiryStrikes: row.player_expiry_strikes ?? 0,
             }
           : null,
         delays: {}, // filled in by the service (derived from round history)
@@ -161,7 +182,7 @@ export class PgGameRepository implements GameRepository {
       // Idempotent: same Lobby user re-claiming returns their existing seat.
       if (input.lobbyUserId) {
         const existing = await client.query(
-          `SELECT p.id, p.name, p.lobby_user_id, p.score, p.seat_id
+          `SELECT p.id, p.name, p.lobby_user_id, p.score, p.expiry_strikes, p.seat_id
            FROM players p WHERE p.match_id = $1 AND p.lobby_user_id = $2`,
           [input.matchId, input.lobbyUserId],
         );
@@ -176,6 +197,7 @@ export class PgGameRepository implements GameRepository {
               lobbyUserId: pr.lobby_user_id,
               score: pr.score,
               profile: seat.lobbyProfile,
+              expiryStrikes: pr.expiry_strikes ?? 0,
             },
           };
         }
@@ -196,7 +218,7 @@ export class PgGameRepository implements GameRepository {
 
       const playerRes = await client.query(
         `INSERT INTO players (match_id, seat_id, name, lobby_user_id, score)
-         VALUES ($1, $2, $3, $4, 0) RETURNING id, name, lobby_user_id, score`,
+         VALUES ($1, $2, $3, $4, 0) RETURNING id, name, lobby_user_id, score, expiry_strikes`,
         [input.matchId, seatRow.id, input.name, input.lobbyUserId ?? null],
       );
       const pr = playerRes.rows[0];
@@ -209,6 +231,7 @@ export class PgGameRepository implements GameRepository {
           lobbyUserId: pr.lobby_user_id,
           score: pr.score,
           profile: seat.lobbyProfile,
+          expiryStrikes: pr.expiry_strikes ?? 0,
         },
       };
     });
@@ -218,7 +241,8 @@ export class PgGameRepository implements GameRepository {
   private async seatById(client: PoolClient, seatId: string): Promise<Seat> {
     const res = await client.query(
       `SELECT s.*, p.id AS player_id, p.name AS player_name,
-              p.lobby_user_id AS player_lobby_user_id, p.score AS player_score
+              p.lobby_user_id AS player_lobby_user_id, p.score AS player_score,
+              p.expiry_strikes AS player_expiry_strikes
        FROM seats s LEFT JOIN players p ON p.seat_id = s.id WHERE s.id = $1`,
       [seatId],
     );
@@ -243,6 +267,7 @@ export class PgGameRepository implements GameRepository {
             lobbyUserId: row.player_lobby_user_id,
             score: row.player_score,
             profile: lobbyProfile,
+            expiryStrikes: row.player_expiry_strikes ?? 0,
           }
         : null,
       delays: {}, // filled in by the service (derived from round history)
@@ -260,6 +285,39 @@ export class PgGameRepository implements GameRepository {
       status,
       matchId,
     ]);
+  }
+
+  async setPhase(
+    matchId: string,
+    phase: Phase | null,
+    startedAtIso: string | null,
+    deadlineIso: string | null,
+  ): Promise<void> {
+    await this.pool.query(
+      'UPDATE matches SET phase = $1, phase_started_at = $2, phase_deadline = $3 WHERE id = $4',
+      [phase, startedAtIso, deadlineIso, matchId],
+    );
+  }
+
+  async setExpiryStrikes(matchId: string, playerId: string, strikes: number): Promise<void> {
+    await this.pool.query(
+      'UPDATE players SET expiry_strikes = $1 WHERE id = $2 AND match_id = $3',
+      [strikes, playerId, matchId],
+    );
+  }
+
+  async endMatch(
+    matchId: string,
+    winnerSeatKey: string | null,
+    endReason: MatchEndReason,
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE matches
+       SET status = 'finished', winner_seat_key = $1, end_reason = $2,
+           phase = NULL, phase_started_at = NULL, phase_deadline = NULL
+       WHERE id = $3`,
+      [winnerSeatKey, endReason, matchId],
+    );
   }
 
   async recordMove(input: {
@@ -298,8 +356,15 @@ export class PgGameRepository implements GameRepository {
   }): Promise<void> {
     await this.tx(async (client) => {
       await client.query(
-        `INSERT INTO round_results (match_id, round, outcome, moves) VALUES ($1, $2, $3, $4)`,
-        [input.matchId, input.result.round, input.result.outcome, JSON.stringify(input.result.moves)],
+        `INSERT INTO round_results (match_id, round, outcome, moves, auto_picked)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          input.matchId,
+          input.result.round,
+          input.result.outcome,
+          JSON.stringify(input.result.moves),
+          JSON.stringify(input.result.autoPicked ?? []),
+        ],
       );
       for (const [playerId, score] of Object.entries(input.scores)) {
         await client.query('UPDATE players SET score = $1 WHERE id = $2', [score, playerId]);
@@ -309,7 +374,8 @@ export class PgGameRepository implements GameRepository {
 
   async listResults(matchId: string): Promise<RoundResult[]> {
     const res = await this.pool.query(
-      'SELECT round, outcome, moves FROM round_results WHERE match_id = $1 ORDER BY round ASC',
+      `SELECT round, outcome, moves, auto_picked
+       FROM round_results WHERE match_id = $1 ORDER BY round ASC`,
       [matchId],
     );
     return res.rows.map(
@@ -317,6 +383,10 @@ export class PgGameRepository implements GameRepository {
         round: row.round,
         outcome: row.outcome,
         moves: typeof row.moves === 'string' ? JSON.parse(row.moves) : row.moves,
+        autoPicked:
+          typeof row.auto_picked === 'string'
+            ? JSON.parse(row.auto_picked)
+            : (row.auto_picked ?? []),
       }),
     );
   }

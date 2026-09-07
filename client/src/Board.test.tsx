@@ -30,6 +30,7 @@ function seat(
           lobbyUserId: null,
           score,
           profile: null,
+          expiryStrikes: 0,
         }
       : null,
     lobbyProfile: null,
@@ -46,6 +47,8 @@ function state(over: {
   results?: RoundResult[];
   scores?: [number, number];
   finished?: boolean;
+  /** Seconds left on the round clock; omit for no clock at all. */
+  secondsLeft?: number;
 } = {}): MatchState {
   const {
     currentRound = 1,
@@ -56,7 +59,9 @@ function state(over: {
     results = [],
     scores = [0, 0],
     finished = false,
+    secondsLeft,
   } = over;
+  const now = Date.now();
   return {
     match: {
       id: 'match-1',
@@ -68,6 +73,13 @@ function state(over: {
       name: 'Friendly Match',
       gameMode: 'rpslr',
       status: finished ? 'finished' : 'playing',
+      phase: finished || secondsLeft === undefined ? null : 'pick',
+      phaseStartedAt:
+        secondsLeft === undefined ? null : new Date(now - 5_000).toISOString(),
+      phaseDeadline:
+        secondsLeft === undefined ? null : new Date(now + secondsLeft * 1000).toISOString(),
+      endReason: finished ? 'played' : null,
+      winnerSeatKey: null,
       bestOf: 5,
       currentRound,
       createdAt: '2026-01-01T00:00:00Z',
@@ -79,6 +91,7 @@ function state(over: {
     results,
     submittedPlayerIds: submitted,
     currentRoundMoves: {},
+    serverNow: new Date(now).toISOString(),
     matchWinnerSeatKey: finished ? MY_SEAT : null,
   };
 }
@@ -104,7 +117,7 @@ function renderBoard(s: MatchState, myChosenMove: Move | null = null) {
 const ROUND_1: RoundResult = {
   round: 1,
   outcome: MY_SEAT,
-  moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' },
+  moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' }, autoPicked: [] 
 };
 
 describe('<Board> rules note (JQ-101)', () => {
@@ -181,6 +194,27 @@ describe('<Board> round header (JQ 3.2)', () => {
     expect(screen.getByText('Round 4 · You 2 – 1')).toBeInTheDocument();
   });
 
+  it('shows the round clock beside the score (JQ-156)', () => {
+    renderBoard(state({ currentRound: 4, scores: [2, 1], results: [ROUND_1], secondsLeft: 12 }));
+    expect(screen.getByLabelText('12 seconds left this round')).toBeInTheDocument();
+  });
+
+  it('keeps the clock inside the scoreboard, which costs no page height', () => {
+    // The board already overflows a 390x844 phone (JQ-165); the seat-card row
+    // is centred and 201px tall, so the clock is free there and is not on the
+    // round label, which would add a row.
+    const { container } = renderBoard(
+      state({ currentRound: 4, scores: [2, 1], results: [ROUND_1], secondsLeft: 12 }),
+    );
+    expect(container.querySelector('.scoreboard .round-timer')).not.toBeNull();
+    expect(container.querySelector('.round-label .round-timer')).toBeNull();
+  });
+
+  it('shows no clock before the match has started', () => {
+    const { container } = renderBoard(state({ bothSeated: false }));
+    expect(container.querySelector('.round-timer')).toBeNull();
+  });
+
   it('pulses the pip of the seat that just took the round', () => {
     const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
     expect(container.querySelector('.win-pip--pulse')).not.toBeInTheDocument();
@@ -254,7 +288,7 @@ describe('<Board> round reveal (JQ 3.1)', () => {
     const drawn: RoundResult = {
       round: 1,
       outcome: 'draw',
-      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'rock' },
+      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'rock' }, autoPicked: [] 
     };
     const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
     rerender(boardEl(state({ currentRound: 2, results: [drawn] })));
@@ -287,7 +321,7 @@ describe('<Board> round reveal (JQ 3.1)', () => {
     const finalRound: RoundResult = {
       round: 3,
       outcome: MY_SEAT,
-      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'scissors' },
+      moves: { [MY_PLAYER]: 'rock', [OPP_PLAYER]: 'scissors' }, autoPicked: [] 
     };
     const { container, rerender } = render(boardEl(state({ currentRound: 3, scores: [2, 1] })));
     rerender(

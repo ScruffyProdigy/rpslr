@@ -13,17 +13,17 @@ const results: RoundResult[] = [
   {
     round: 1,
     outcome: 'a',
-    moves: { [PLAYER_A]: 'paper', [PLAYER_B]: 'robot' },
+    moves: { [PLAYER_A]: 'paper', [PLAYER_B]: 'robot' }, autoPicked: [] 
   },
   {
     round: 2,
     outcome: 'draw',
-    moves: { [PLAYER_A]: 'rock', [PLAYER_B]: 'rock' },
+    moves: { [PLAYER_A]: 'rock', [PLAYER_B]: 'rock' }, autoPicked: [] 
   },
   {
     round: 3,
     outcome: 'b',
-    moves: { [PLAYER_A]: 'scissors', [PLAYER_B]: 'rock' },
+    moves: { [PLAYER_A]: 'scissors', [PLAYER_B]: 'rock' }, autoPicked: [] 
   },
 ];
 
@@ -92,7 +92,7 @@ describe('<History> compact strip (JQ 3.4)', () => {
 
   it('flips win/loss for the opponent seat', () => {
     const { container } = renderHistory({
-      results: [{ round: 1, outcome: 'a', moves: { [PLAYER_A]: 'paper', [PLAYER_B]: 'robot' } }],
+      results: [{ round: 1, outcome: 'a', moves: { [PLAYER_A]: 'paper', [PLAYER_B]: 'robot' }, autoPicked: [] }],
       mySeatKey: 'b',
       myPlayerId: PLAYER_B,
       you: OPP,

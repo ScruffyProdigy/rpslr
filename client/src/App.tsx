@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   api,
   type Move,
@@ -12,10 +12,12 @@ import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
+import { RoundTimer } from './components/RoundTimer';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
+import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
@@ -223,11 +225,13 @@ function Game({
   // Live updates over WebSocket (replaces polling). Opens once we're in a match.
   useEffect(() => {
     if (phase !== 'playing' || !ref) return;
-    const socket = connectMatchSocket(ref, {
+    const socket = connectMatchSocket(ref, myPlayerId, {
       onState: setState,
       onError: (message) => {
         setPendingMove(null);
-        setError(message);
+        // Losing the race to the deadline is the expected outcome of the
+        // auto-commit, not something to shout about in red.
+        if (!isLateMoveConflict(message)) setError(message);
       },
       onOpen: () => setConnected(true),
       onClose: () => setConnected(false),
@@ -238,7 +242,7 @@ function Game({
       socket.close();
       socketRef.current = null;
     };
-  }, [phase, ref]);
+  }, [phase, ref, myPlayerId]);
 
   // Remember our pick for this round once the server lists us in submittedPlayerIds.
   useEffect(() => {
@@ -336,17 +340,18 @@ function Game({
     if (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove) return;
     setError(null);
     setPendingMove(move);
-    const sent = socketRef.current?.sendMove(myPlayerId, move);
+    const round = state.match.currentRound;
+    const sent = socketRef.current?.sendMove(myPlayerId, move, round);
     if (sent) return;
     // Socket not ready — REST still publishes to the opponent over the hub.
     try {
-      const next = await api.submitMove(ref, myPlayerId, move);
+      const next = await api.submitMove(ref, myPlayerId, move, round);
       setState(next);
       setLockedMove(next.currentRoundMoves[myPlayerId] ?? move);
       setPendingMove(null);
     } catch (err) {
       setPendingMove(null);
-      setError((err as Error).message);
+      if (!isLateMoveConflict((err as Error).message)) setError((err as Error).message);
     }
   }
 
@@ -472,6 +477,23 @@ function Lobby({
 /** Stable empty list so the reveal hook can run before the loading return. */
 const NO_RESULTS: RoundResult[] = [];
 
+/**
+ * The move we auto-committed arrived after the server had already picked for
+ * us. Both repositories reject the duplicate with this message and the server's
+ * pick stands, which is the designed outcome — surfacing it as a red error at
+ * the exact moment the round resolves would be alarming and useless.
+ *
+ * Matched on the message because that is all the transport carries; the string
+ * is fixed in `api/src/repository.ts` callers and asserted in the API tests.
+ */
+function isLateMoveConflict(message: string): boolean {
+  return (
+    message.includes('move already submitted for this round') ||
+    message.includes('round has already moved on') ||
+    message.includes('match is already finished')
+  );
+}
+
 export function Board({
   myPlayerId,
   mySeatKey,
@@ -490,6 +512,7 @@ export function Board({
   onPlay: (move: Move) => void;
 }) {
   const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
+  const roundDeadline = useRoundDeadline(state);
 
   if (!state) return <p>Loading match…</p>;
 
@@ -546,6 +569,7 @@ export function Board({
           mySeatKey={mySeatKey}
           myPlayerId={myPlayerId}
           lobbyReturnUrl={lobbyReturnUrl}
+          endReason={match.endReason}
         />
       </div>
     );
@@ -574,6 +598,7 @@ export function Board({
         submittedPlayerIds={submitted}
         bestOf={match.bestOf}
         pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
+        deadline={allSeated && !revealingNow ? roundDeadline : null}
       />
 
       {!allSeated && !revealingNow ? (
@@ -610,6 +635,7 @@ export function Board({
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             onPlay={onPlay}
+            secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}
             centerSlot={
               reveal ? (
@@ -650,6 +676,7 @@ function Scoreboard({
   submittedPlayerIds,
   bestOf,
   pulseSeatKey,
+  deadline,
 }: {
   seats: Seat[];
   mySeatKey: string;
@@ -657,20 +684,32 @@ function Scoreboard({
   bestOf: number;
   /** Seat that just took a round — its newest pip pulses once. */
   pulseSeatKey: string | null;
+  /** Round clock, or null when none is running. */
+  deadline: RoundDeadline | null;
 }) {
   const needed = winsNeeded(bestOf);
   return (
     <div className="scoreboard">
       {seats.map((seat, i) => (
-        <SeatCard
-          key={seat.id}
-          seat={seat}
-          mine={seat.seatKey === mySeatKey}
-          winsNeeded={needed}
-          showVs={i < seats.length - 1}
-          lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
-          justWon={seat.seatKey === pulseSeatKey}
-        />
+        <Fragment key={seat.id}>
+          <SeatCard
+            seat={seat}
+            mine={seat.seatKey === mySeatKey}
+            winsNeeded={needed}
+            lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
+            justWon={seat.seatKey === pulseSeatKey}
+          />
+          {/* Between the two seat cards, which are already 201px tall — so the
+              clock costs no page height, and the board is 111px over on a
+              390x844 phone as it is (JQ-165). It also reads as what it is:
+              one clock belonging to the round, not to either player. */}
+          {i < seats.length - 1 && (
+            <span className="vs-slot">
+              <span className="vs">vs</span>
+              {deadline && <RoundTimer deadline={deadline} />}
+            </span>
+          )}
+        </Fragment>
       ))}
     </div>
   );
@@ -713,14 +752,12 @@ function SeatCard({
   seat,
   mine,
   winsNeeded: needed,
-  showVs,
   lockedIn,
   justWon,
 }: {
   seat: Seat;
   mine: boolean;
   winsNeeded: number;
-  showVs: boolean;
   lockedIn: boolean;
   justWon: boolean;
 }) {
@@ -759,7 +796,6 @@ function SeatCard({
         {waiting && <span className="player-status">on their way</span>}
         <WinProgress wins={wins} needed={needed} justWon={justWon} />
       </div>
-      {showVs && <span className="vs">vs</span>}
     </>
   );
 }

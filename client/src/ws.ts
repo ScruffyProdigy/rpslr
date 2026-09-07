@@ -11,12 +11,18 @@ type ErrorHandler = (message: string) => void;
 
 export interface MatchSocket {
   /** Returns false if the socket is not connected (caller should use REST fallback). */
-  sendMove: (playerId: string, move: Move) => boolean;
+  sendMove: (playerId: string, move: Move, round: number) => boolean;
   close: () => void;
 }
 
 export function connectMatchSocket(
   ref: string,
+  /**
+   * Who this socket belongs to. The server counts it as presence, which is what
+   * tells the idle policy that a silent player is thinking rather than gone.
+   * Null before a seat is claimed; the socket still receives state.
+   */
+  playerId: string | null,
   handlers: {
     onState: StateHandler;
     onError?: ErrorHandler;
@@ -34,7 +40,7 @@ export function connectMatchSocket(
 
     ws.onopen = () => {
       retry = 0;
-      ws?.send(JSON.stringify({ type: 'subscribe', ref }));
+      ws?.send(JSON.stringify({ type: 'subscribe', ref, playerId }));
       handlers.onOpen?.();
     };
 
@@ -64,9 +70,11 @@ export function connectMatchSocket(
   connect();
 
   return {
-    sendMove(playerId: string, move: Move) {
+    sendMove(playerId: string, move: Move, round: number) {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'move', playerId, move }));
+        // Naming the round keeps a move that arrives after its round resolved
+        // from landing on the next one.
+        ws.send(JSON.stringify({ type: 'move', playerId, move, round }));
         return true;
       }
       return false;

@@ -1,6 +1,8 @@
-# Dependencies
-node_modules/
-**/node_modules/
+# Dependencies. No trailing slash: a worktree may symlink node_modules to the
+# primary clone's, and `node_modules/` matches only directories — a symlink
+# slipped past it once and got committed.
+node_modules
+**/node_modules
 
 # Build output
 dist/
@@ -38,3 +40,6 @@ playwright-report/
 # K8s real secrets (commit only *.example.yaml)
 k8s/secrets/*.yaml
 !k8s/secrets/*.example.yaml
+
+# Agent worktrees (one per task; never committed)
+.claude/worktrees/

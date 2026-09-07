@@ -45,7 +45,7 @@ afterEach(() => {
 describe('connectMatchSocket', () => {
   it('reports the drop so callers can show a reconnecting state', () => {
     const onClose = vi.fn();
-    connectMatchSocket('RPS-1234', { onState: () => {}, onClose });
+    connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onClose });
 
     FakeSocket.instances[0].open();
     expect(onClose).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe('connectMatchSocket', () => {
 
   it('reconnects, re-subscribes, and reports the reopen', () => {
     const onOpen = vi.fn();
-    connectMatchSocket('RPS-1234', { onState: () => {}, onOpen });
+    connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onOpen });
 
     FakeSocket.instances[0].open();
     FakeSocket.instances[0].close();
@@ -66,13 +66,15 @@ describe('connectMatchSocket', () => {
     FakeSocket.instances[1].open();
     expect(onOpen).toHaveBeenCalledTimes(2);
     expect(FakeSocket.instances[1].sent).toEqual([
-      JSON.stringify({ type: 'subscribe', ref: 'RPS-1234' }),
+      // Re-subscribing must carry the player id too, or a reconnect would look
+      // to the server like the player never came back.
+      JSON.stringify({ type: 'subscribe', ref: 'RPS-1234', playerId: 'player-a' }),
     ]);
   });
 
   it('stays quiet once the caller closes it', () => {
     const onClose = vi.fn();
-    const socket = connectMatchSocket('RPS-1234', { onState: () => {}, onClose });
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {}, onClose });
 
     FakeSocket.instances[0].open();
     socket.close();
@@ -80,5 +82,17 @@ describe('connectMatchSocket', () => {
     expect(onClose).not.toHaveBeenCalled();
     vi.advanceTimersByTime(5000);
     expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  it('names the round on every move it sends', () => {
+    // A move that arrives after its round resolved would otherwise be recorded
+    // against the next one — a pick the player never made for it.
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {} });
+    FakeSocket.instances[0].open();
+    socket.sendMove('player-a', 'rock', 3);
+
+    expect(FakeSocket.instances[0].sent).toContain(
+      JSON.stringify({ type: 'move', playerId: 'player-a', move: 'rock', round: 3 }),
+    );
   });
 });

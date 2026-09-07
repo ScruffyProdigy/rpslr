@@ -13,6 +13,7 @@ function result(over: Partial<RoundResult> = {}): RoundResult {
     round: 2,
     outcome: 'a',
     moves: { [MY_PLAYER]: 'paper', [OPP_PLAYER]: 'robot' },
+    autoPicked: [],
     ...over,
   };
 }

@@ -16,13 +16,28 @@ import type { LobbyProvisionInput } from './provision.js';
 import { TokenError } from './tokens.js';
 import { computeDelays, decideRound, isMove, matchWinner, winsNeeded, type Move } from './game.js';
 import type { MatchHub } from './matchHub.js';
+import type { PresenceTracker } from './presence.js';
+import {
+  chooseAutoPick,
+  deadlineFor,
+  decidePenalty,
+  policyForMode,
+  type Phase,
+} from './roundPolicy.js';
 import {
   ConflictError,
   NotFoundError,
   makeCode,
   type GameRepository,
 } from './repository.js';
-import type { Match, MatchState, RoundResult, Seat, SeatReservation } from './types.js';
+import type {
+  Match,
+  MatchEndReason,
+  MatchState,
+  RoundResult,
+  Seat,
+  SeatReservation,
+} from './types.js';
 import type { AssignmentClaims, AssignmentSeat } from './tokens.js';
 
 export class ValidationError extends Error {}
@@ -44,6 +59,12 @@ export interface GameServiceOptions {
   bannedLobbyUsers?: string[];
   /** Optional live-update bus; state is published after every mutation. */
   hub?: MatchHub;
+  /** Who currently holds a socket; the disconnect grace period needs this. */
+  presence?: PresenceTracker;
+  /** Injectable clock, so deadline tests need not wait in real time. */
+  now?: () => number;
+  /** Injectable randomness for auto-picks, so tests are deterministic. */
+  rng?: () => number;
 }
 
 /**
@@ -58,10 +79,18 @@ export interface GameServiceOptions {
 export class GameService {
   private readonly banned: Set<string>;
   private readonly hub?: MatchHub;
+  private readonly presence?: PresenceTracker;
+  private readonly now: () => number;
+  private readonly rng: () => number;
+  /** One enforcement pass per match at a time; see `enforceDeadlines`. */
+  private readonly enforcing = new Map<string, Promise<void>>();
 
   constructor(private readonly repo: GameRepository, options: GameServiceOptions = {}) {
     this.banned = new Set(options.bannedLobbyUsers ?? []);
     this.hub = options.hub;
+    this.presence = options.presence;
+    this.now = options.now ?? Date.now;
+    this.rng = options.rng ?? Math.random;
   }
 
   // --- Match creation -------------------------------------------------------
@@ -211,6 +240,8 @@ export class GameService {
     const seats = await this.repo.listSeats(match.id);
     if (match.status === 'waiting' && seats.every((s) => s.player)) {
       await this.repo.setMatchStatus(match.id, 'playing');
+      // The clock starts when the match does, not when the first move arrives.
+      await this.startPhase(match.id, match.gameMode, match.currentRound);
     }
 
     const state = await this.publishState(match.id);
@@ -226,6 +257,9 @@ export class GameService {
   async getState(idOrCode: string): Promise<MatchState> {
     const match = await this.repo.getMatch(idOrCode);
     if (!match) throw new NotFoundError('match not found');
+    // Reading is what makes an expired deadline take effect: the waiting player
+    // polls while they wait, so the person who cares drives the policy.
+    await this.enforceDeadlines(match.id);
     return this.getStateByMatchId(match.id);
   }
 
@@ -239,7 +273,9 @@ export class GameService {
         : {};
     const submittedPlayerIds = Object.keys(rawRoundMoves);
     const need = winsNeeded(match.bestOf);
-    const winner = seats.find((s) => (s.player?.score ?? 0) >= need);
+    // A forfeit ends a match without anyone scoring, so a recorded winner
+    // outranks the score-derived one.
+    const scoredWinner = seats.find((s) => (s.player?.score ?? 0) >= need);
     // Each seat's delay marks are derived from that player's resolved moves.
     for (const seat of seats) {
       seat.delays = computeDelays(seat.player ? playerMoveSequence(results, seat.player.id) : []);
@@ -250,7 +286,8 @@ export class GameService {
       results,
       submittedPlayerIds,
       currentRoundMoves: rawRoundMoves,
-      matchWinnerSeatKey: winner ? winner.seatKey : null,
+      matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
+      serverNow: new Date(this.now()).toISOString(),
     });
   }
 
@@ -268,13 +305,38 @@ export class GameService {
 
   // --- Gameplay -------------------------------------------------------------
 
-  async submitMove(idOrCode: string, playerId: string, move: unknown): Promise<MatchState> {
+  /**
+   * `expectedRound` is the round the caller believed it was playing. A move
+   * that arrives after its round has resolved would otherwise be recorded
+   * against the *next* one — a move the player never chose for it, committed
+   * silently when legal and rejected as a cooldown violation when not.
+   *
+   * Reachable without the client's auto-commit (a lock-in tapped as the round
+   * resolves does the same), but the auto-commit fires on a timer at exactly
+   * the moment expiry lands, so it turns a rare race into a systematic one.
+   *
+   * Optional, so a caller that does not know its round keeps the old behaviour
+   * rather than being locked out.
+   */
+  async submitMove(
+    idOrCode: string,
+    playerId: string,
+    move: unknown,
+    expectedRound?: number,
+  ): Promise<MatchState> {
     if (!isMove(move)) {
       throw new ValidationError('move must be one of rock, paper, scissors');
     }
-    const match = await this.repo.getMatch(idOrCode);
-    if (!match) throw new NotFoundError('match not found');
+    const found = await this.repo.getMatch(idOrCode);
+    if (!found) throw new NotFoundError('match not found');
+    // Settle any expiry before accepting this move, so a move that arrives after
+    // the deadline loses to the policy rather than racing past it.
+    await this.enforceDeadlines(found.id);
+    const match = (await this.repo.getMatch(found.id))!;
     if (match.status === 'finished') throw new ConflictError('match is already finished');
+    if (expectedRound != null && expectedRound !== match.currentRound) {
+      throw new ConflictError('round has already moved on');
+    }
 
     const seats = await this.repo.listSeats(match.id);
     const occupied = seats.filter((s) => s.player);
@@ -300,6 +362,10 @@ export class GameService {
       playerId,
       move: move as Move,
     });
+    // Strikes count a *run* of silence, so playing on time clears it.
+    if (mySeat.player!.expiryStrikes > 0) {
+      await this.repo.setExpiryStrikes(match.id, playerId, 0);
+    }
 
     const moves = await this.repo.getMovesForRound(match.id, match.currentRound);
     if (Object.keys(moves).length < occupied.length) {
@@ -318,6 +384,7 @@ export class GameService {
     bestOf: number,
     seats: Seat[],
     moves: Record<string, Move>,
+    autoPicked: string[] = [],
   ): Promise<MatchState> {
     const [seatA, seatB] = seats;
     const playerA = seatA.player!;
@@ -333,16 +400,167 @@ export class GameService {
       round,
       outcome: winningSeatKey,
       moves: { [playerA.id]: moves[playerA.id], [playerB.id]: moves[playerB.id] },
+      autoPicked,
     };
     await this.repo.saveRoundResult({ matchId, result, scores });
 
     const decided = matchWinner(scores[playerA.id], scores[playerB.id], winsNeeded(bestOf));
     await this.repo.setMatchProgress(matchId, round + 1, decided ? 'finished' : 'playing');
     if (decided) {
-      const winningSeatKey = rel === 'draw' ? null : rel === 'a' ? seatA.seatKey : seatB.seatKey;
-      void this.notifyLobbyMatchComplete(matchId, winningSeatKey, seats);
+      const winnerSeatKey = decided === 'a' ? seatA.seatKey : seatB.seatKey;
+      await this.repo.endMatch(matchId, winnerSeatKey, 'played');
+      this.presence?.forget(matchId);
+      void this.notifyLobbyMatchComplete(matchId, winnerSeatKey, seats);
+    } else {
+      const match = await this.repo.getMatch(matchId);
+      if (match) await this.startPhase(matchId, match.gameMode, round + 1);
     }
     return this.publishState(matchId);
+  }
+
+  // --- Deadlines and the idle policy ---------------------------------------
+
+  /**
+   * Register a player's live connection, by whatever reference the caller has.
+   * Presence is keyed by match id, but every caller holds a join code or an
+   * external id instead — resolving it here keeps that mismatch out of the
+   * transport layer, where getting it wrong would silently disable the
+   * disconnect grace rather than fail.
+   */
+  async markConnected(ref: string, playerId: string): Promise<void> {
+    const match = await this.repo.getMatch(ref);
+    if (match) this.presence?.connect(match.id, playerId);
+  }
+
+  /** Counterpart to `markConnected`; starts this player's grace period. */
+  async markDisconnected(ref: string, playerId: string): Promise<void> {
+    const match = await this.repo.getMatch(ref);
+    if (match) this.presence?.disconnect(match.id, playerId);
+  }
+
+  /** Put the next phase on the clock. */
+  private async startPhase(matchId: string, gameMode: string, round: number): Promise<void> {
+    const phase: Phase = 'pick';
+    const startedAt = this.now();
+    const deadline = deadlineFor(policyForMode(gameMode), phase, round, startedAt);
+    await this.repo.setPhase(
+      matchId,
+      phase,
+      new Date(startedAt).toISOString(),
+      new Date(deadline).toISOString(),
+    );
+  }
+
+  /**
+   * Apply the idle policy to a match, if it is due anything.
+   *
+   * Deliberately lazy: expiry is a pure function of (deadline, now, moves) and
+   * is evaluated on every read and every move rather than by a background
+   * timer. That keeps it correct across restarts and replicas for free, and the
+   * waiting player's own 3s poll is what makes it prompt — when nobody is
+   * watching at all, promptness has nobody to serve.
+   *
+   * Serialized per match: two concurrent readers must not both auto-pick.
+   */
+  private enforceDeadlines(matchId: string): Promise<void> {
+    const inflight = this.enforcing.get(matchId);
+    if (inflight) return inflight;
+    const run = this.applyIdlePolicy(matchId).finally(() => this.enforcing.delete(matchId));
+    this.enforcing.set(matchId, run);
+    return run;
+  }
+
+  private async applyIdlePolicy(matchId: string): Promise<void> {
+    const match = await this.repo.getMatch(matchId);
+    if (!match || match.status !== 'playing') return;
+
+    const seats = await this.repo.listSeats(matchId);
+    const occupied = seats.filter((s) => s.player);
+    if (occupied.length < seats.length) return;
+
+    const moves = await this.repo.getMovesForRound(matchId, match.currentRound);
+    const policy = policyForMode(match.gameMode);
+    const now = this.now();
+    const deadline = match.phaseDeadline ? Date.parse(match.phaseDeadline) : null;
+
+    const verdicts = occupied.map((seat) => ({
+      seat,
+      action: decidePenalty({
+        policy,
+        now,
+        deadline,
+        hasMoved: moves[seat.player!.id] !== undefined,
+        strikes: seat.player!.expiryStrikes,
+        disconnectedSince: this.presence?.disconnectedSince(matchId, seat.player!.id) ?? null,
+      }),
+    }));
+
+    const forfeited = verdicts.filter((v) => v.action.kind === 'forfeit');
+    if (forfeited.length > 0) {
+      await this.forfeitMatch(matchId, seats, verdicts, forfeited);
+      return;
+    }
+
+    const expired = verdicts.filter((v) => v.action.kind === 'auto-pick');
+    if (expired.length === 0) return;
+
+    const results = await this.repo.listResults(matchId);
+    const autoPicked: string[] = [];
+    for (const { seat } of expired) {
+      const player = seat.player!;
+      const delays = computeDelays(playerMoveSequence(results, player.id));
+      const move = chooseAutoPick(delays, this.rng);
+      try {
+        await this.repo.recordMove({
+          matchId,
+          round: match.currentRound,
+          playerId: player.id,
+          move,
+        });
+      } catch (err) {
+        // Their own move landed first; the unique constraint says so.
+        if (err instanceof ConflictError) continue;
+        throw err;
+      }
+      await this.repo.setExpiryStrikes(matchId, player.id, player.expiryStrikes + 1);
+      autoPicked.push(player.id);
+    }
+
+    const filled = await this.repo.getMovesForRound(matchId, match.currentRound);
+    if (Object.keys(filled).length < occupied.length) {
+      await this.publishState(matchId);
+      return;
+    }
+    await this.resolveDuelRound(
+      matchId,
+      match.currentRound,
+      match.bestOf,
+      seats,
+      filled,
+      autoPicked,
+    );
+  }
+
+  private async forfeitMatch(
+    matchId: string,
+    seats: Seat[],
+    verdicts: { seat: Seat; action: { kind: string } }[],
+    forfeited: { seat: Seat; action: { kind: string } }[],
+  ): Promise<void> {
+    const everyone = forfeited.length === verdicts.length;
+    // Both players went silent — nobody was there to earn the win.
+    const winner = everyone ? null : verdicts.find((v) => v.action.kind !== 'forfeit')!.seat;
+    const first = forfeited[0].action as { reason?: 'strikes' | 'disconnect' };
+    const endReason: MatchEndReason = everyone
+      ? 'abandoned'
+      : first.reason === 'disconnect'
+        ? 'forfeit-disconnect'
+        : 'forfeit-strikes';
+
+    await this.repo.endMatch(matchId, winner?.seatKey ?? null, endReason);
+    this.presence?.forget(matchId);
+    void this.notifyLobbyMatchComplete(matchId, winner?.seatKey ?? null, seats);
+    await this.publishState(matchId);
   }
 
   /** Best-effort callback so Lobby can clear matched queue rows. */

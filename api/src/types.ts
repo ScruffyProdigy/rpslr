@@ -1,7 +1,14 @@
 import type { Move } from './game.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
+import type { Phase } from './roundPolicy.js';
 
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
+
+/**
+ * How a match ended. `played` is someone reaching the winning score; the rest
+ * come from the idle policy, where `abandoned` means both players went silent.
+ */
+export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
 
 export interface Match {
   id: string;
@@ -22,6 +29,20 @@ export interface Match {
   status: MatchStatus;
   bestOf: number;
   currentRound: number;
+  /** Timed segment currently running, or null when nothing is on the clock. */
+  phase: Phase | null;
+  /**
+   * ISO time `phase` began. Sent alongside the deadline so the client can draw
+   * elapsed-vs-total without inferring the allowance from whichever snapshot it
+   * happened to receive.
+   */
+  phaseStartedAt: string | null;
+  /** ISO deadline for `phase`. The client renders it; the server owns it. */
+  phaseDeadline: string | null;
+  /** Set once the match is over. */
+  endReason: MatchEndReason | null;
+  /** Winner at the moment the match ended — a forfeit wins without scoring. */
+  winnerSeatKey: string | null;
   createdAt: string;
 }
 
@@ -48,6 +69,8 @@ export interface SeatPlayer {
   lobbyUserId: string | null;
   score: number;
   profile: LobbyPlayerProfile | null;
+  /** Consecutive rounds this player let expire; reset by any on-time move. */
+  expiryStrikes: number;
 }
 
 export interface RoundResult {
@@ -55,6 +78,8 @@ export interface RoundResult {
   /** Winning seat_key, or 'draw'. */
   outcome: string;
   moves: Record<string, Move>;
+  /** Player ids whose move the server chose for them when the round expired. */
+  autoPicked: string[];
 }
 
 export interface MatchState {
@@ -67,6 +92,12 @@ export interface MatchState {
   currentRoundMoves: Record<string, Move>;
   /** Winning seat_key once decided, or 'draw'/null. */
   matchWinnerSeatKey: string | null;
+  /**
+   * The server's clock when this snapshot was built, ISO. The client renders
+   * `match.phaseDeadline` as an offset from this rather than trusting its own
+   * clock, which may be minutes off.
+   */
+  serverNow: string;
 }
 
 /** Input describing a seat to reserve when creating a match. */
