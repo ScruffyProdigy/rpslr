@@ -15,12 +15,15 @@ import { hasSeen, markSeen } from './prefs';
  * panels are short. It would not be if a first-timer could stall a veteran.
  */
 /**
- * TEMPORARY (2026-09-06): show the panels on every match, not just a player's
- * first, so the first-run flow can be tried repeatedly without clearing site
- * data. Safe only because nobody is playing yet. Flip back to `false` before
- * real traffic — otherwise every player gets the rules in the face every match.
+ * Reverted 2026-09-07, before the first production deploy that real players
+ * can reach. While this was `true` the panels opened every match, so the
+ * first-run flow could be retried without clearing site data — fine while
+ * nobody was playing, and exactly wrong once they are.
+ *
+ * The `alwaysShow` parameter below survives the revert: it is how the tests
+ * drive the open path without touching storage.
  */
-const ALWAYS_SHOW_RULES = true;
+const ALWAYS_SHOW_RULES = false;
 
 export function useFirstMatchRules(
   allSeated: boolean,
