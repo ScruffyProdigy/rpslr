@@ -1,3 +1,28 @@
+/* Vendored, not CDN-loaded: the wordmark is on the critical path and should
+   not depend on a third party. Latin subsets only — the game ships English. */
+@font-face {
+  font-family: 'Archivo';
+  src: url('/fonts/archivo-var-latin.woff2') format('woff2');
+  font-weight: 400 900;
+  font-stretch: 62.5% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson-700-latin.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #0f1117;
   --card: #1a1d27;
@@ -17,6 +42,10 @@
   --graph: #7c8699;
   /* The gold the arrows used to wear, kept for the one thing it means. */
   --trophy: #f5c518;
+  /* Archivo speaks for the match — state, numbers, verdicts. Atkinson speaks
+     to the player — anything whose job is to be understood. Assign by role. */
+  --font-display: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
 }
 
@@ -26,7 +55,8 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
+  font-size: 16.5px;
   background: radial-gradient(1200px 800px at 70% -10%, #1c2030, var(--bg));
   color: var(--text);
 }
@@ -1660,4 +1690,36 @@ ul.history-strip {
   margin: 10px 0 0;
   text-align: center;
   font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Type roles — Archivo pronounces, Atkinson explains
+   --------------------------------------------------------------------------- */
+
+.wordmark,
+.round-label,
+.match-end__verdict,
+.match-end__score,
+.match-end__winner-name,
+.reveal-card__verdict,
+.cooldown-pill,
+.history-chip__round {
+  font-family: var(--font-display);
+}
+
+/* The wordmark runs narrow so the full name survives more widths before it has
+   to fall back to "RPSLR"; the score runs wide because mass is its whole job. */
+.wordmark {
+  font-stretch: 75%;
+  font-weight: 700;
+}
+.match-end__score {
+  font-stretch: 112.5%;
+}
+
+/* The score changes in place every round. Archivo holds digit width without
+   this, but stating it keeps the guarantee where a reader can see it. */
+.round-label {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
