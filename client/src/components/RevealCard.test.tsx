@@ -74,10 +74,16 @@ describe('<RevealCard> (JQ 3.1)', () => {
     expect(container.querySelector('.reveal-card--exiting')).not.toBeInTheDocument();
   });
 
-  it('announces itself and offers an explicit skip', () => {
-    const { container, onSkip } = renderCard();
-    expect(container.querySelector('[role="status"]')).toBeInTheDocument();
+  it('offers an explicit skip', () => {
+    const { onSkip } = renderCard();
     screen.getByRole('button', { name: /skip/i }).click();
     expect(onSkip).toHaveBeenCalled();
+  });
+
+  it('brings no live region of its own (JQ-157)', () => {
+    // The centre slot it lands in is already the board's one region. A second
+    // one arriving mid-round is how the result got double-announced or lost.
+    const { container } = renderCard();
+    expect(container.querySelector('[role="status"], [aria-live]')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import {
   describeBeat,
   describeOutcome,
   describeBeatsOf,
+  describeBeatsGraph,
   describeRoundMatchup,
   beatsOf,
   opponentCooldownPhrase,
@@ -158,5 +159,44 @@ describe('cooldownCause', () => {
   it('falls back to the opening when you have not played it', () => {
     expect(cooldownCause('robot', [])).toBe('Robot starts the match on cooldown');
     expect(cooldownCause('robot', ['rock'])).toBe('Robot starts the match on cooldown');
+  });
+});
+
+describe('describeBeatsGraph (JQ-157)', () => {
+  /*
+   * The arrows SVG is aria-hidden, so this is the only form of the pentagon a
+   * screen reader ever gets. Five lines carry all ten edges.
+   */
+  it('covers all ten beats in one line per move', () => {
+    expect(describeBeatsGraph({}).edges).toEqual([
+      'Rock crushes Scissors & Lizard',
+      'Paper covers Rock & disproves Robot',
+      'Scissors cuts Paper & decapitates Lizard',
+      'Lizard eats Paper & poisons Robot',
+      'Robot smashes Scissors & vaporizes Rock',
+    ]);
+  });
+
+  it('says the graph is fully live when the opponent has no cooldowns', () => {
+    expect(describeBeatsGraph({}).opponent).toBe(
+      'The opponent can play every move this round, so every arrow is live.',
+    );
+  });
+
+  it('names the attacks the opponent cannot make, which the board draws faded', () => {
+    expect(describeBeatsGraph({ lizard: 2, robot: 1 }).opponent).toBe(
+      "The opponent can't play Lizard or Robot this round, so those attacks are drawn faded.",
+    );
+  });
+
+  it('reads a single unavailable move without a list', () => {
+    expect(describeBeatsGraph({ rock: 1 }).opponent).toBe(
+      "The opponent can't play Rock this round, so those attacks are drawn faded.",
+    );
+  });
+
+  it('ignores moves whose cooldown has run out', () => {
+    expect(describeBeatsGraph({ rock: 0, lizard: 2 }).opponent).toContain("can't play Lizard");
+    expect(describeBeatsGraph({ rock: 0, lizard: 2 }).opponent).not.toContain('Rock');
   });
 });

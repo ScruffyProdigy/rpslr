@@ -14,6 +14,7 @@ import {
   beatsOf,
   cooldownCause,
   cooldownPhrase,
+  describeBeatsGraph,
   describeBeatsOf,
   opponentCooldownPhrase,
   type WinningEdge,
@@ -172,6 +173,7 @@ export function MovePicker({
     else setPicked(move);
   }
 
+  const graphText = describeBeatsGraph(oppDelays);
   const myCooldowns = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
@@ -359,20 +361,46 @@ export function MovePicker({
           );
         })}
 
-        {centerSlot ?? (
-          <PickerCenter
-            preview={preview}
-            picked={picked}
-            lockedIn={lockedIn}
-            opponentLockedIn={opponentLockedIn}
-            myChosenMove={myChosenMove}
-            myDelays={myDelays}
-            myRecentMoves={myRecentMoves}
-            oppDelays={oppDelays}
-            onCommit={commit}
-          />
-        )}
+        {/* One live region, mounted for the life of the board.
+            The centre is the board's voice — the prompt, the preview caption,
+            the wait, the round result — and it used to be two regions taking
+            turns: `PickerCenter` carried one, `RevealCard` brought another,
+            and the reveal swapped one for the other mid-round. A region that
+            appears with its content already in it is not reliably announced,
+            which put the round result, the one thing that must never be
+            dropped, on the unreliable path. Now the region outlives the swap
+            and only its contents change. It is `inset: 0` so the absolutely
+            positioned card inside still centres on the board. */}
+        <div className="picker-slot" role="status">
+          {centerSlot ?? (
+            <PickerCenter
+              preview={preview}
+              picked={picked}
+              lockedIn={lockedIn}
+              opponentLockedIn={opponentLockedIn}
+              myChosenMove={myChosenMove}
+              myDelays={myDelays}
+              myRecentMoves={myRecentMoves}
+              oppDelays={oppDelays}
+              onCommit={commit}
+            />
+          )}
+        </div>
       </div>
+
+      {/* The pentagon in words.
+          The arrows above are an aria-hidden SVG, so this is the whole graph
+          for anyone who cannot see it. Deliberately not a live region: it is
+          reference material to be read while deciding, and announcing it every
+          time a cooldown ticks would talk over the round. */}
+      <section className="sr-only" aria-label="What beats what">
+        <ul>
+          {graphText.edges.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p>{graphText.opponent}</p>
+      </section>
 
       <p className="graph-legend">
         <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
@@ -407,6 +435,10 @@ export function MovePicker({
 /**
  * The pentagon's middle cell: idle prompt, preview caption, the explicit
  * "Lock in" commit, and your pinned pick once the round is locked.
+ *
+ * It carries no `role="status"` of its own — the slot it renders into is the
+ * board's one live region, and a second one nested inside would double-announce
+ * (JQ-157).
  */
 function PickerCenter({
   preview,
@@ -433,7 +465,7 @@ function PickerCenter({
   // below the board doesn't have to say anything.
   if (lockedIn && myChosenMove) {
     return (
-      <div className="picker-center picker-center--waiting" role="status">
+      <div className="picker-center picker-center--waiting">
         <span className="picker-center__pick">
           <MoveIcon move={myChosenMove} className="picker-center__pick-icon" />{' '}
           {MOVE_META[myChosenMove].label}
@@ -449,7 +481,7 @@ function PickerCenter({
   const shown = lockedIn ? myChosenMove : preview;
   if (!shown) {
     return (
-      <div className="picker-center picker-center--idle" role="status">
+      <div className="picker-center picker-center--idle">
         <span className="picker-center__idle">Pick a move</span>
       </div>
     );
@@ -459,7 +491,7 @@ function PickerCenter({
   const myDelay = myDelays[shown] ?? 0;
   if (myDelay > 0) {
     return (
-      <div className="picker-center picker-center--why" role="status">
+      <div className="picker-center picker-center--why">
         <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
         <p className="picker-center__why">
           {cooldownCause(shown, myRecentMoves)} — back in {myDelay} turn
@@ -475,7 +507,7 @@ function PickerCenter({
   const commitTarget = !lockedIn && picked != null && preview === picked ? picked : null;
 
   return (
-    <div className="picker-center" role="status">
+    <div className="picker-center">
       <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
       {oppDelay > 0 && (
         <p className="picker-center__opp">{opponentCooldownPhrase(shown, oppDelay)}</p>

@@ -244,6 +244,21 @@ describe('<Board> round reveal (JQ 3.1)', () => {
     expect(within(card).getByText('You take round 1')).toBeInTheDocument();
   });
 
+  it('announces the result through the region that was already on the board (JQ-157)', () => {
+    // The card used to arrive carrying its own role="status", so the round
+    // result was announced by a region mounted in the same tick — the case
+    // screen readers most often drop. The board's region now outlives the
+    // swap, and the result lands inside the region that was already there.
+    const { container, rerender } = render(boardEl(state({ currentRound: 1 })));
+    const before = container.querySelector('.move-board [role="status"]');
+    expect(before).not.toBeNull();
+    rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));
+    const after = container.querySelector('.move-board [role="status"]');
+    expect(after).toBe(before);
+    expect(after).toHaveTextContent('You take round 1');
+    expect(container.querySelectorAll('.move-board [role="status"]')).toHaveLength(1);
+  });
+
   it('locks the picker while the reveal is up', () => {
     const { rerender } = render(boardEl(state({ currentRound: 1 })));
     rerender(boardEl(state({ currentRound: 2, scores: [1, 0], results: [ROUND_1] })));

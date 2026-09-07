@@ -873,6 +873,15 @@ button.ghost {
 /* The pentagon's middle cell: prompt, preview caption, explicit commit. Kept
    narrower than the gap between the side nodes, and click-through, so it never
    sits on a tap target. */
+/* The board's live region: a permanent box over the board that the centre slot
+   renders into, so the region survives the picker → reveal swap (JQ-157). It
+   is not a container and sets no z-index, so `.picker-center` keeps resolving
+   its cqw widths and its stacking against `.move-board` exactly as before. */
+.picker-slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .picker-center {
   position: absolute;
   left: 50%;

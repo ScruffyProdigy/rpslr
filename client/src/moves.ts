@@ -69,6 +69,34 @@ export function describeBeatsOf(move: Move): string {
 }
 
 /**
+ * The beats graph as text.
+ *
+ * The board draws the pentagon into an `aria-hidden` SVG, so this is the whole
+ * graph for anyone who cannot see it: five lines carry all ten edges, and one
+ * closing line names the attacks the opponent cannot make this round — the
+ * faded arrows a sighted player reads straight off the board.
+ */
+export function describeBeatsGraph(oppDelays: Record<string, number>): {
+  edges: string[];
+  opponent: string;
+} {
+  const edges = ALL_MOVES.map(describeBeatsOf);
+  const off = ALL_MOVES.filter((m) => (oppDelays[m] ?? 0) > 0).map((m) => MOVE_META[m].label);
+  if (off.length === 0) {
+    return {
+      edges,
+      opponent: 'The opponent can play every move this round, so every arrow is live.',
+    };
+  }
+  const list =
+    off.length === 1 ? off[0] : `${off.slice(0, -1).join(', ')} or ${off[off.length - 1]}`;
+  return {
+    edges,
+    opponent: `The opponent can't play ${list} this round, so those attacks are drawn faded.`,
+  };
+}
+
+/**
  * What can beat `move` this round. `all` is the two moves that beat it; `live`
  * drops the ones the opponent has on cooldown, so `safe` means the move cannot
  * lose. This is the same read a familiar player makes off the pentagon — a node

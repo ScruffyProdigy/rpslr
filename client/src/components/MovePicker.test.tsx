@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MovePicker } from './MovePicker';
@@ -36,6 +36,15 @@ function renderPicker(
     />,
   );
   return { ...utils, onPlay };
+}
+
+/**
+ * The centre slot. Its caption has to be read through this rather than off the
+ * screen: since JQ-157 the board also carries a screen-reader summary of the
+ * whole graph, which says the same five lines.
+ */
+function center(container: HTMLElement): HTMLElement {
+  return container.querySelector('.picker-center') as HTMLElement;
 }
 
 /** The `<line>` for one "beats" edge, e.g. robot → rock. */
@@ -174,7 +183,7 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
     await user.click(screen.getByRole('button', { name: /^Rock/ }));
 
     expect(onPlay).not.toHaveBeenCalled();
-    expect(screen.getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+    expect(within(center(container)).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Rock/ })).toHaveClass('move-btn--preview');
     expect(screen.getByRole('button', { name: /^Scissors/ })).toHaveClass('move-btn--target');
     expect(arrow(container, 'rock', 'lizard')).toHaveClass('beat-arrow--preview');
@@ -192,12 +201,12 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
 
   it('switches the preview instead of locking when you tap a different move', async () => {
     const user = userEvent.setup();
-    const { onPlay } = renderPicker();
+    const { container, onPlay } = renderPicker();
     await user.click(screen.getByRole('button', { name: /^Rock/ }));
     await user.click(screen.getByRole('button', { name: /^Paper/ }));
 
     expect(onPlay).not.toHaveBeenCalled();
-    expect(screen.getByText('Paper covers Rock & disproves Robot')).toBeInTheDocument();
+    expect(within(center(container)).getByText('Paper covers Rock & disproves Robot')).toBeInTheDocument();
   });
 
   it('offers an explicit Lock in button in the centre', async () => {
@@ -210,9 +219,9 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
 
   it('previews on keyboard focus too', async () => {
     const user = userEvent.setup();
-    renderPicker();
+    const { container } = renderPicker();
     await user.tab();
-    expect(screen.getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+    expect(within(center(container)).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
   });
 
   it('prompts before anything is previewed', () => {
@@ -221,8 +230,8 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
   });
 
   it('pins the caption for your pick once the round is locked', () => {
-    renderPicker({ lockedIn: true, disabled: true, myChosenMove: 'lizard' });
-    expect(screen.getByText('Lizard eats Paper & poisons Robot')).toBeInTheDocument();
+    const { container } = renderPicker({ lockedIn: true, disabled: true, myChosenMove: 'lizard' });
+    expect(within(center(container)).getByText('Lizard eats Paper & poisons Robot')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
   });
 });
@@ -497,5 +506,93 @@ describe('<MovePicker> auto-commit at the deadline (JQ-156)', () => {
     tickTo(rerender, 1, { onPlay });
     tickTo(rerender, 0, { onPlay });
     expect(onPlay).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('<MovePicker> gives the pentagon a text equivalent (JQ-157)', () => {
+  /*
+   * The arrows are drawn into an aria-hidden SVG, so without this the game's
+   * core teaching device is unreachable: the only textual access was the
+   * preview caption, one move at a time.
+   */
+  it('summarises what beats what outside the aria-hidden arrows', () => {
+    const { container } = renderPicker();
+    expect(container.querySelector('.move-arrows')).toHaveAttribute('aria-hidden', 'true');
+    const graph = screen.getByRole('region', { name: /what beats what/i });
+    expect(within(graph).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+    expect(within(graph).getByText('Robot smashes Scissors & vaporizes Rock')).toBeInTheDocument();
+  });
+
+  it('names the attacks the faded arrows stand for', () => {
+    renderPicker({ oppDelays: { lizard: 2 } });
+    const graph = screen.getByRole('region', { name: /what beats what/i });
+    expect(within(graph).getByText(/can't play Lizard/)).toBeInTheDocument();
+  });
+
+  it('says so when every arrow is live', () => {
+    renderPicker();
+    const graph = screen.getByRole('region', { name: /what beats what/i });
+    expect(within(graph).getByText(/every arrow is live/)).toBeInTheDocument();
+  });
+
+  it('is read on demand rather than announced', () => {
+    // A cooldown ticking down must not interrupt the round.
+    const graph = (renderPicker(), screen.getByRole('region', { name: /what beats what/i }));
+    expect(graph.closest('[role="status"]')).toBeNull();
+    expect(graph).not.toHaveAttribute('aria-live');
+  });
+});
+
+/** A picker with only the centre slot varying, for the live-region tests. */
+function boardEl(centerSlot?: React.ReactNode) {
+  return (
+    <MovePicker
+      myDelays={{}}
+      oppDelays={{}}
+      myChosenMove={null}
+      lockedIn={false}
+      disabled={false}
+      round={3}
+      myRecentMoves={[]}
+      onPlay={() => {}}
+      secondsLeft={null}
+      winningEdge={null}
+      centerSlot={centerSlot}
+    />
+  );
+}
+
+describe('<MovePicker> speaks through one live region (JQ-157)', () => {
+  it('carries a single live region on the board', () => {
+    const { container } = renderPicker();
+    const board = container.querySelector('.move-board') as HTMLElement;
+    expect(board.querySelectorAll('[role="status"], [aria-live]')).toHaveLength(1);
+  });
+
+  it('keeps that region mounted when the reveal takes the centre', () => {
+    // A live region mounted with its content already in it is not reliably
+    // announced, and the round result is the one thing that must never be
+    // dropped. So the region outlives the swap; only its contents change.
+    const { container, rerender } = render(boardEl());
+    const before = container.querySelector('[role="status"]');
+    expect(before).not.toBeNull();
+    rerender(boardEl(<p className="reveal-card">You take round 2</p>));
+    const after = container.querySelector('[role="status"]');
+    expect(after).toBe(before);
+    expect(after).toHaveTextContent('You take round 2');
+  });
+
+  it('announces the preview caption through it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker();
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelector('[role="status"]')).toHaveTextContent(
+      'Rock crushes Scissors & Lizard',
+    );
+  });
+
+  it('announces the pick and the wait through it after lock-in', () => {
+    const { container } = renderPicker({ lockedIn: true, myChosenMove: 'rock' });
+    expect(container.querySelector('[role="status"]')).toHaveTextContent(/Waiting for opponent/);
   });
 });
