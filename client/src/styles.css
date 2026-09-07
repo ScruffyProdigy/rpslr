@@ -453,35 +453,97 @@ button.ghost {
 
 /* ---- Round timer ---------------------------------------------------------
    Stacked with "vs" between the two seat cards. Those are already 201px tall
-   and the row is centred, so the clock costs no page height — which matters,
+   and the row is centred, so the ring costs no page height — which matters,
    because the board overflows a 390x844 phone (JQ-165).
+
+   A ring rather than a bare numeral: the player is looking at the pentagon, so
+   the clock has to register in peripheral vision without demanding they stop
+   deciding in order to read it. A depleting arc does that; a small number next
+   to "vs" did not, which is why this got louder.
 
    One shared clock, not one per player. It renders identically whether or not
    either player has locked in, which is deliberate: a clock that reacted to
    lock-in would leak it, and the planned Helpers mode has a card (Poker Face)
    whose whole effect is hiding exactly that. */
+/* The separator column: "vs" sits above the clock, and the whole column is
+   vertically centred against the seat cards. */
 .vs-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .round-timer {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  /* Full --text, not --muted: at --muted the clock wore the same tone as the
+     captions around it and read as decoration rather than as the thing you are
+     racing. The arc inherits this, so ring and numeral brighten together. */
+  color: var(--text);
+  transition: color 240ms ease;
+}
+.round-timer__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Start the arc at 12 o'clock and deplete clockwise. */
+  transform: rotate(-90deg);
+}
+.round-timer__track {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 4;
+}
+.round-timer__arc {
+  fill: none;
+  /* Inherits the container's colour, so the arc and the numeral change
+     together rather than needing the urgency rule written twice. */
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linecap: round;
+  /* One second per tick, so a linear glide reads as continuous depletion
+     rather than a stepping hand. */
+  transition: stroke-dashoffset 1s linear;
+}
+.round-timer__value {
+  font-family: var(--font-display);
   /* Digits change in place, so they must be tabular or the number twitches. */
   font-variant-numeric: tabular-nums;
-  font-family: var(--font-display);
+  font-size: 1.5rem;
   font-weight: 700;
-  color: var(--muted);
-  transition: color 200ms ease;
+  line-height: 1;
+  color: inherit;
 }
 /* Amber, not red. A clock running low is a state, not an error — --danger is
    reserved for errors, and neither --you nor --opp belongs here: those are
    fixed role colours, and tinting a shared clock with either would say it
-   belonged to that player. --warn is the amber the "opponent has locked in"
-   pill already wears. */
+   belonged to that player. */
 .round-timer--urgent {
   color: var(--warn);
 }
+/* The last five seconds are the one moment worth motion the player did not
+   ask for. One beat a second, and only here. */
+.round-timer--critical {
+  animation: round-timer-pulse 1s ease-in-out infinite;
+}
+@keyframes round-timer-pulse {
+  50% {
+    transform: scale(1.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-timer--critical {
+    animation: none;
+  }
+  .round-timer__arc {
+    transition: none;
+  }
+}
+
 /* ---- Move picker (pentagon) ----------------------------------------------
    The board is a fixed 380-unit square scaled by its container width, so the
    SVG arrows and the buttons shrink together and tap targets stay honest. */
