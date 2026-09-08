@@ -456,10 +456,14 @@ docs/fixtures/prequeue/
 
 | # | Gate | Owner | Done when |
 | --- | --- | --- | --- |
-| S1 | Contract agreed, incl. the 4 `[CHANGE]`s and the Blind Spot question | **This session** ↔ JQ-163 agent | Both repos hold identical `docs/prequeue-options-contract.md` and fixtures |
-| S2 | Game serves §1, §2, §5; accepts §4 | JQ-148 agent | Fixture tests green in the game repo |
-| S3 | Lobby builds against a locally-running game API on `:3001` | JQ-163 agent | Lobby can queue and provision a real `duel-helpers` match, with the picker sectioned by `group` |
-| S4 | Tandem deploy | Ryan | Game shipped, lobby shipped, `REQUIRE_PREQUEUE_OPTIONS=true` |
+| S1 | Contract agreed | **This session** ↔ JQ-163 agent | ✅ **Done** — contract v5, both repos hold the same fixtures |
+| S2 | Game serves §1, §2; accepts and **persists** §4, and `rulesForSeat` reads it | JQ-148 agent | Fixture tests green, `./scripts/stub-lobby.sh --all` passes |
+| S3 | Lobby renders the sectioned picker against a locally-running game API on `:3001` | JQ-163 agent | Lobby can queue and provision a real `duel-helpers` match |
+| S4 | **Lobby deployed** from a clean `origin/main` checkout | Ryan | Merging ships nothing — this is a separate manual step and the one easiest to skip |
+| S5 | Game's manifest declares `preQueue` | Ryan | The feature is live. Also the moment §2's fail-closed roster can make the mode unjoinable — do not serve `queue-options` off a cold start |
+
+There is no tighten-afterwards step. Provision was never permissive: a seat with no
+selection is a `400`, so the mode either has loadouts or it refuses the match.
 
 ### Who talks to whom
 
