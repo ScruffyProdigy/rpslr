@@ -130,14 +130,6 @@
       "locked": false
     },
     {
-      "id": "blind-spot",
-      "label": "Blind Spot",
-      "section": "Minor",
-      "badge": "1 mark",
-      "description": "One of your moves has its cooldown hidden from them all match.",
-      "locked": false
-    },
-    {
       "id": "small-mercy",
       "label": "Small Mercy",
       "section": "Trinket",

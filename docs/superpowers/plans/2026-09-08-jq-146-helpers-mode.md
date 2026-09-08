@@ -6,7 +6,7 @@
 > superpowers:subagent-driven-development to run them.
 
 **Goal:** Ship `duel-helpers`, a second RPSLR mode where each player brings two of
-22 helpers chosen before queueing, delivered to the game in the JoinQuest provision
+21 helpers chosen before queueing, delivered to the game in the JoinQuest provision
 payload.
 
 **Architecture:** `api/src/game.ts` stays pure and gains a `PlayerRules` parameter;
@@ -25,8 +25,9 @@ loadout.
 - Everything is server-authoritative. A client that could report its own helper
   state could report a win. The same-move random roll is server-rolled.
 - `api/src/game.ts` stays pure — no I/O, no clock, no imports from `helpers/roster.ts`.
-- The roster is **all 22 helpers** (9 Majors, 8 Minors, 5 Trinkets) — Ryan's call,
-  2026-09-08, over the design doc's recommended curated 10.
+- The roster is **21 helpers** (9 Majors, 7 Minors, 5 Trinkets) = **210 loadouts**.
+  Ryan's call 2026-09-08 was all 22, over the design doc's recommended curated 10;
+  Blind Spot was then cut the same day, leaving 21.
 - Loadouts are picked **pre-queue in the lobby only** — Ryan's call, 2026-09-08.
   There is no in-game draft screen. See "Consequences of pre-queue-only" below.
 - A loadout is any **two distinct** helpers. No slot rule.
@@ -50,7 +51,9 @@ loadout.
 
 | Question | Decision | Who |
 | --- | --- | --- |
-| Roster size for v1 | All 22 helpers, 231 loadouts | Ryan, 2026-09-08 |
+| Roster size for v1 | All helpers, not a curated subset | Ryan, 2026-09-08 |
+| Blind Spot | **Cut** — "doesn't seem like it would be fun in general". Roster is 21, loadouts 210 | Ryan, 2026-09-08 |
+| `exclusionKey` | Specified in the contract, **not built** — no consumer once Blind Spot went | Ryan, 2026-09-08 |
 | Where the pick happens | Pre-queue in the lobby only; no in-game draft | Ryan, 2026-09-08 |
 | JQ-163 contract status | **Not frozen** — the game may push changes back as real data appears | Ryan, 2026-09-08 |
 | Missing `options` on provision | Default to Ferrus + Featherweight (today's `lizard: 1, robot: 2` opening), until `REQUIRE_PREQUEUE_OPTIONS=true` | This plan, §Tandem deploy |
@@ -78,17 +81,16 @@ yet reflect. Each is handled by a task below.
 3. **Blindness is free.** Picking before matchmaking means neither player can
    counter-pick, so the design doc's blind-simultaneous machinery is unnecessary.
    Mirror loadouts remain legal for the same reason.
-4. **Blind Spot needs a home.** "At draft, name one of your moves" has no draft to
-   happen at. **Both sides now recommend exploding it into one choice per move**
-   rather than adding parameterised choices to the contract — see
-   [the contract](../../prequeue-options-contract.md) §7 for the reasoning and for
-   the two things still open: Ryan's call, and an `exclusionKey` so the lobby can
-   stop a player picking two Blind Spot variants.
+4. **Blind Spot had no home, and was cut.** "At draft, name one of your moves" has
+   no draft to happen at, and the ways to express it pre-queue all cost more than
+   the card was worth — Ryan cut it on design grounds rather than integration ones
+   ("doesn't seem like it would be fun in general"). The roster is 21 helpers and
+   210 loadouts; `roster.ts` and `ladder.test.ts` on `main` already say so.
 
-   **Watch this one if you are working on JQ-147.** The game-side refinement (b′)
-   keeps `roster.ts` at 22 helpers and explodes only at the wire, so the ladder
-   test's 231 stands. Plain (b) would take the engine to 26 helpers and **325**
-   loadouts. The constant in `ladder.test.ts` depends on which way Ryan goes.
+   It leaves one artifact: `exclusionKey`, the contract field that would have
+   stopped a player picking two Blind Spot variants. It keeps its specification in
+   [the contract](../../prequeue-options-contract.md) §2 but has no consumer, and is
+   explicitly not to be built until one appears.
 
 ### Abilities recharge
 

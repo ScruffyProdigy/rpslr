@@ -1,8 +1,7 @@
 # Pre-Queue Options — Lobby ↔ Game Contract
 
-**Contract version:** 3
-**Status:** Agreed with the JQ-163 session 2026-09-08. One item in §7 needs Ryan —
-Blind Spot's representation. Nothing else is open.
+**Contract version:** 4
+**Status:** Agreed and closed. Nothing open.
 **Game side:** [JQ-146 epic](https://linear.app/joinquest/issue/JQ-146), primarily
 [JQ-148](https://linear.app/joinquest/issue/JQ-148)
 **Lobby side:** [JQ-163](https://linear.app/joinquest/issue/JQ-163) — **already
@@ -21,6 +20,7 @@ discovery, provisioning, link-out and claim. Read that first; this only adds opt
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4 | 2026-09-08 | Blind Spot cut from the roster (Ryan). The roster is 21 helpers. `exclusionKey` keeps its specification but has no consumer and is **not to be built** until one appears. |
 | 3 | 2026-09-08 | `exclusionKey` agreed and promoted into §2. Added the sibling-replacement rule for pickers at max, the ban on inferring exclusion from id syntax, and the degenerate-roster rule. |
 | 2 | 2026-09-08 | Negotiated with JQ-163. `group`→`section` to resolve a collision; `select`→per-group `min`/`max`; `rosterPath` dropped for the conventional path; `capabilities` dropped; `blurb`→`description`; provision options become an array of per-group selections. |
 | 1 | 2026-09-08 | First draft from the JQ-146 epic plan. |
@@ -33,7 +33,7 @@ Both sides independently used **"group"** for different things. Resolved:
   arity*. A mode can ask for a weapon **and** an armour set: two groups, picked
   separately. This is the lobby's shipped meaning and it keeps the name.
 - **Section** (`choices[].section`) — a *display heading inside one roster*. RPSLR
-  has one selection group whose 22 choices fall under three sections: Major, Minor,
+  has one selection group whose 21 choices fall under three sections: Major, Minor,
   Trinket.
 
 RPSLR is therefore **one group, three sections** — not three groups.
@@ -124,6 +124,15 @@ decks you built", which no manifest can express.
   choice carries a requirement rather than vanishing. RPSLR sends `false` throughout.
 
 ### `exclusionKey` — "at most one of these"
+
+> **Specified, not built (v4).** Blind Spot was cut, so nothing in the roster has
+> variants and no game needs this yet. **Do not implement it** — an unused
+> validation rule is a rule nothing keeps honest. The specification stays because
+> the problem it solves is real and will recur the first time any game ships
+> variants of one thing, and re-deriving it (including the two rules below, which
+> cost a round trip to find) would be waste. Ryan's call, 2026-09-08: "there might
+> be use for the exclusionKey at some point, we can cross that bridge when we get
+> to it."
 
 An optional string. **At most one choice per `exclusionKey` may be selected within a
 group.** Choices without one are unconstrained.
@@ -271,53 +280,39 @@ API, so the game repo's tests and CI never need a lobby.
 
 ---
 
-## 7. Open — needs Ryan
+## 7. Blind Spot, and why `exclusionKey` exists anyway
 
-### Blind Spot's representation
+**Resolved 2026-09-08: Blind Spot is cut.** Ryan's reason is a design one rather
+than an integration one — *"Blind Spot's ability doesn't seem like it would be fun
+in general"* — so it is not a card worth carrying a contract feature for.
 
-Blind Spot's effect is *"name one of your moves; its cooldown is hidden from them all
-match"*. Picked pre-queue, there is no in-game moment to name it, and `optionIds` is
-a flat list of strings.
+The roster is therefore **21 helpers** (9 Majors, 7 Minors, 5 Trinkets) and
+**210 loadouts**. `api/src/helpers/roster.ts` and `ladder.test.ts` on `main` already
+reflect this.
 
-**Both sides recommend (b): explode it into one roster entry per move.** JQ-163's
-argument is that (a) — a parameterised choice — is not one field but a conditional
-sub-selection: a param spec in the roster, a dependent control in the picker, and
-validation over the param's domain. Real contract and UI surface for one card in one
-game. And (b) migrates to (a) cleanly later, since only ids change.
+### What this leaves behind
 
-The clutter objection to (b) is also weaker than it looked: five neighbours inside a
-sectioned **Minor** heading reads far better than five in a flat 26-card grid, which
-is what v1 was picturing before sections existed.
+Nothing in the roster now has variants, so `exclusionKey` has no consumer. It keeps
+its specification in §2 and is explicitly **not to be built** — an unused validation
+rule is one nothing keeps honest, and it would sit in the lobby untested until the
+day it mattered.
 
-**Game-side refinement — (b′), explode at the wire only.** The five entries need not
-reach the engine. `api/src/helpers/roster.ts` keeps **22** helpers with Blind Spot
-carrying a move parameter; the `queue-options` endpoint serialises it as five
-choices, and provision parsing maps `blind-spot:rock` back to
-`{ id: 'blind-spot', param: 'rock' }`. This matters concretely: plain (b) would take
-the engine to 26 helpers and **325** loadouts, changing the constant in JQ-147's
-ladder test from 231 — a live ripple into work already in progress. (b′) has (b)'s
-zero-contract-change property and leaves the engine untouched.
+Keeping the specification is still worth it. The problem it solves recurs the moment
+any game ships variants of one thing, and two of the three rules around it were only
+found by trying to use it:
 
-### The exclusivity hole it opens — closed
+- a picker at `max` must replace the *sibling*, not the oldest pick, or three
+  ordinary clicks produce an invalid selection;
+- a group whose `max` exceeds its exclusion classes is unsatisfiable and presents as
+  a mysteriously unjoinable mode.
 
-**Resolved 2026-09-08:** `exclusionKey` is agreed and specified in §2, along with
-the sibling-replacement rule and the degenerate-roster rule the discussion turned
-up. Nothing here is open any more.
+Both cost a round trip between the two repos to discover. Re-deriving them later
+would be waste; reading §2 would not.
 
-### What the decision actually costs
+### If Blind Spot ever comes back
 
-Both roster fixtures exist, so this is a one-line change either way:
-
-| | `queue-options.duel-helpers.json` | `queue-options.duel-helpers.blind-spot-exploded.json` |
-| --- | --- | --- |
-| Wire choices | 22 | 26 |
-| Blind Spot | one choice, cannot name a move | five, one per move, sharing `exclusionKey` |
-| Engine roster | 22 | 22 under (b′) — 26 under plain (b) |
-| Ladder test constant | 231 | 231 under (b′) — **325** under plain (b) |
-
-The recommendation is **(b) with (b′)'s wire-only explosion**: use the exploded
-fixture, keep `roster.ts` at 22 with Blind Spot carrying a move param, and map
-`blind-spot:rock` → `{ id: 'blind-spot', param: 'rock' }` when parsing provision.
-JQ-163 has confirmed the mapping is invisible to the lobby.
-
-If Ryan instead cuts Blind Spot, delete the exploded fixture and nothing else moves.
+It would need a way to name a move at pick time. The options were: a parameterised
+choice (`{id, param}`) — generic, but a conditional sub-selection rather than one
+field, so real contract and UI surface; or one roster entry per move, which is what
+`exclusionKey` was specified for. The second is cheaper and migrates to the first
+cleanly, since only ids change.

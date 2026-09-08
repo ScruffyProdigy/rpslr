@@ -7,6 +7,13 @@
 > Read `2026-09-08-jq-146-helpers-mode.md` first — it holds the epic's Global
 > Constraints and the lobby contract this ticket's data feeds.
 
+> **MERGED 2026-09-08** as PR #9. This plan is history now, and it diverged from
+> what shipped in two ways worth knowing before you read it as a spec:
+> **abilities recharge** on their own cooldown slot rather than the four charge
+> Majors being resized, and **Blind Spot was cut**, so the roster is **21 helpers**
+> and the ladder test asserts **210** loadouts, not the 22/231 written below.
+> `api/src/helpers/` on `main` is the source of truth.
+
 **Goal:** Make RPSLR's rules a function of a two-helper loadout, so `duel-helpers`
 can exist, while `duel` keeps producing byte-identical state through the same code.
 
