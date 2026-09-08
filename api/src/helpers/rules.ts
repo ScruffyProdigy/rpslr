@@ -6,8 +6,8 @@
  * engine, so the engine cannot grow a dependency on the roster.
  *
  * Not implemented here, deliberately:
- *   - Quarantine asks its owner for a move every round, so it needs per-round
- *     input the rules object has nowhere to put yet.
+ *   - Quarantine asks its owner to name a move when it fires, so it needs input the
+ *     rules object has nowhere to put yet.
  *   - Oracle needs a mid-round reveal sub-phase (JQ-150).
  *   - Sacrifice, Rust, Thief and Freeze are fired by choice, so they need ability
  *     state the rules object does not carry yet, and a record of what was fired
