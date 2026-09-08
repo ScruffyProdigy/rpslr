@@ -10,38 +10,6 @@
       "locked": false
     },
     {
-      "id": "sacrifice",
-      "label": "Sacrifice",
-      "section": "Major",
-      "badge": "2 marks",
-      "description": "Once per match, declare the round a draw before picking and clear all your marks.",
-      "locked": false
-    },
-    {
-      "id": "oracle",
-      "label": "Oracle",
-      "section": "Major",
-      "badge": "2 marks",
-      "description": "Once per match, after both lock in, learn one live move they did not play, then re-pick.",
-      "locked": false
-    },
-    {
-      "id": "quarantine",
-      "label": "Quarantine",
-      "section": "Major",
-      "badge": "2 marks",
-      "description": "At the start of each round, name a move. If they play it, it takes 4 marks instead of 2.",
-      "locked": false
-    },
-    {
-      "id": "rust",
-      "label": "Rust",
-      "section": "Major",
-      "badge": "2 marks",
-      "description": "Once per match, add 2 marks to a move they currently have live.",
-      "locked": false
-    },
-    {
       "id": "chimera",
       "label": "Chimera",
       "section": "Major",
@@ -50,19 +18,51 @@
       "locked": false
     },
     {
-      "id": "thief",
-      "label": "Thief",
-      "section": "Major",
-      "badge": "2 marks",
-      "description": "Once per match, move one mark from one of your moves onto one of theirs.",
-      "locked": false
-    },
-    {
       "id": "ferrus",
       "label": "Ferrus",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Your Robot takes 1 mark instead of 2.",
+      "description": "When you play Robot, the move they played takes an extra mark.",
+      "locked": false
+    },
+    {
+      "id": "quarantine",
+      "label": "Quarantine",
+      "section": "Major",
+      "badge": "2 marks",
+      "description": "Name a move. If they play it, it takes 2 extra marks.",
+      "locked": false
+    },
+    {
+      "id": "oracle",
+      "label": "Oracle",
+      "section": "Major",
+      "badge": "2 marks",
+      "description": "Learn one live move they did not play, then re-pick.",
+      "locked": false
+    },
+    {
+      "id": "sacrifice",
+      "label": "Sacrifice",
+      "section": "Major",
+      "badge": "2 marks",
+      "description": "Declare the round a draw before picking, and clear all your marks.",
+      "locked": false
+    },
+    {
+      "id": "rust",
+      "label": "Rust",
+      "section": "Major",
+      "badge": "2 marks",
+      "description": "Add 2 marks to a move they currently have live.",
+      "locked": false
+    },
+    {
+      "id": "thief",
+      "label": "Thief",
+      "section": "Major",
+      "badge": "2 marks",
+      "description": "Move one mark from one of your moves onto one of theirs.",
       "locked": false
     },
     {
@@ -70,14 +70,14 @@
       "label": "Freeze",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Once per match, their marks don't decrement this round.",
+      "description": "Their marks don't decrement this round.",
       "locked": false
     },
     {
       "id": "second-wind",
       "label": "Second Wind",
-      "section": "Minor",
-      "badge": "1 mark",
+      "section": "Major",
+      "badge": "2 marks",
       "description": "The first round you lose is a draw instead.",
       "locked": false
     },
@@ -124,8 +124,8 @@
     {
       "id": "poker-face",
       "label": "Poker Face",
-      "section": "Minor",
-      "badge": "1 mark",
+      "section": "Trinket",
+      "badge": "Free",
       "description": "The opponent is never told you have locked in.",
       "locked": false
     },
@@ -134,7 +134,7 @@
       "label": "Small Mercy",
       "section": "Trinket",
       "badge": "Free",
-      "description": "The first round you lose, the move that beat you takes an extra mark for them.",
+      "description": "The first round you lose, the move that beat you takes an extra mark.",
       "locked": false
     },
     {
@@ -171,3 +171,4 @@
     }
   ]
 }
+

@@ -19,8 +19,9 @@ Three shapes:
 
 ## The roster is 21 choices, and settled
 
-`queue-options.duel-helpers.json` carries 21 helpers — 9 Majors, 7 Minors, 5
-Trinkets, giving 210 loadouts. Blind Spot was cut (Ryan, 2026-09-08: its ability
+`queue-options.duel-helpers.json` carries 21 helpers, giving 210 loadouts. It is
+**generated from `api/src/helpers/roster.ts`** — never hand-edit it. The tier split
+moves under JQ-209; regenerate rather than patching by hand. Blind Spot was cut (Ryan, 2026-09-08: its ability
 did not look fun), which also removed the only card that needed `exclusionKey`.
 That field keeps its specification in contract §2 but has no consumer and is not
 to be built.

@@ -286,8 +286,9 @@ API, so the game repo's tests and CI never need a lobby.
 than an integration one — *"Blind Spot's ability doesn't seem like it would be fun
 in general"* — so it is not a card worth carrying a contract feature for.
 
-The roster is therefore **21 helpers** (9 Majors, 7 Minors, 5 Trinkets) and
-**210 loadouts**. `api/src/helpers/roster.ts` and `ladder.test.ts` on `main` already
+The roster is therefore **21 helpers** and **210 loadouts**. The tier split moved
+separately under JQ-209 (Second Wind promoted, Poker Face demoted) and is
+**10 Majors / 5 Minors / 6 Trinkets** as of `main`. `api/src/helpers/roster.ts` and `ladder.test.ts` on `main` already
 reflect this.
 
 ### What this leaves behind

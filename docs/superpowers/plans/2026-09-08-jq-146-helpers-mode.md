@@ -25,7 +25,9 @@ loadout.
 - Everything is server-authoritative. A client that could report its own helper
   state could report a win. The same-move random roll is server-rolled.
 - `api/src/game.ts` stays pure — no I/O, no clock, no imports from `helpers/roster.ts`.
-- The roster is **21 helpers** (9 Majors, 7 Minors, 5 Trinkets) = **210 loadouts**.
+- The roster is **21 helpers** = **210 loadouts**, currently 10 Majors / 5 Minors /
+  6 Trinkets. The tier split is JQ-209's to move; `api/src/helpers/roster.ts` is the
+  source of truth and the fixture is generated from it, never hand-edited.
   Ryan's call 2026-09-08 was all 22, over the design doc's recommended curated 10;
   Blind Spot was then cut the same day, leaving 21.
 - Loadouts are picked **pre-queue in the lobby only** — Ryan's call, 2026-09-08.
