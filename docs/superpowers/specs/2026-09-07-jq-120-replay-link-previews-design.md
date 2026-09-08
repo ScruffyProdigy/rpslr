@@ -120,12 +120,14 @@ rather than announcing their defeat to everyone they sent it to — a link someo
 forwards after losing should not read as a scoreboard rubbing it in.
 
 `og:description` is the round-by-round line, deterministic and built from the
-recorded results: `1 rock beats scissors · 2 paper beats rock · 3 lizard beats
-spock · 4 rock beats lizard`, truncated at 200 characters on a separator. A draw
-reads `3 draw`. A match that ended on a forfeit says so instead of inventing
-rounds: `Ana won on forfeit after 2 rounds`.
+recorded results: `1 Rock over Scissors · 2 Paper over Rock · 3 draw · 4 Robot
+over Rock`, truncated at 200 characters on a separator. A match that ended on a
+forfeit says so instead of inventing rounds: `Ana won on forfeit after 2 rounds`.
 
-Move labels come from the game's own move list, not a second copy.
+The five moves are rock, paper, scissors, lizard and **robot** — the game
+replaced Spock. Labels are capitalised from `MOVES` in `api/src/game.ts`; the
+client's `BEAT_VERBS` rules copy ("crushes", "vaporizes") is deliberately not
+duplicated here, which is why the line reads `over` rather than a verb.
 
 ## Layout and the safe square
 
