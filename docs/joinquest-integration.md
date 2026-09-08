@@ -59,10 +59,30 @@ GET /api/v1/game-modes
 
 - **`lobbyId`** — which Lobby instance provisioned the match (e.g. `https://joinquest.cc` per environment). Required on push.
 - **`assignment.seats`** — `seatKey` + `lobbyUserId` only (no `displayName` on the push).
-- **`bestOf`** — optional on `assignment`; not in the catalog manifest. If omitted, this game defaults to **5** for `duel`.
+- **`bestOf`** — optional on `assignment`; not in the catalog manifest. If omitted, this game defaults to **5** for both modes.
 
-> RPS only ships `duel`. A chess or MOBA game would publish its own manifest with
-> the same structure — no contract change needed.
+RPS ships two modes. `duel-helpers` additionally carries a **`preQueue`** block, which
+asks Lobby to run a picker before the player queues and to send the result back on
+provision as `seats[].options`. The roster it renders comes from
+
+```
+GET /api/v1/players/{lobbyUserId}/queue-options?modeKey=duel-helpers
+```
+
+which serves the same 21 helpers to every player. A mode with no pre-queue pick
+answers that path `200` with `{ "modeKey": "duel", "choices": [] }`, never `404`.
+Declaring `preQueue` is itself the capability signal: Lobby sends `options` only for a
+mode whose manifest carries it, so the two sides self-synchronise in either deploy
+order.
+
+The wire contract itself is JoinQuest platform documentation rather than this game's:
+the lobby repo's developer integration guide, **§13 Pre-queue options**, carries the
+full shapes and the `400`-not-`403` rule. The golden bodies both repos test against
+are executable, so they stay here — [`docs/fixtures/prequeue/`](./fixtures/prequeue/),
+whose README points at the rest.
+
+> A chess or MOBA game would publish its own manifest with the same structure — no
+> contract change needed.
 
 ---
 

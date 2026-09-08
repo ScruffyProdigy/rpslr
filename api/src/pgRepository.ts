@@ -11,6 +11,7 @@ import {
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Phase } from './roundPolicy.js';
 import type {
+  AbilityFiring,
   Match,
   MatchEndReason,
   MatchStatus,
@@ -18,6 +19,7 @@ import type {
   Seat,
   SeatPlayer,
 } from './types.js';
+import type { Loadout } from './helpers/loadout.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapMatch(row: any): Match {
@@ -104,9 +106,19 @@ export class PgGameRepository implements GameRepository {
       const match = mapMatch(matchRes.rows[0]);
       for (const s of input.seats) {
         await client.query(
-          `INSERT INTO seats (match_id, seat_key, team_key, role, position, reserved_for_lobby_user)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [match.id, s.seatKey, s.teamKey ?? null, s.role ?? null, s.position, s.reservedForLobbyUser ?? null],
+          `INSERT INTO seats (match_id, seat_key, team_key, role, position, reserved_for_lobby_user,
+                              loadout, loadout_roll)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+          [
+            match.id,
+            s.seatKey,
+            s.teamKey ?? null,
+            s.role ?? null,
+            s.position,
+            s.reservedForLobbyUser ?? null,
+            s.loadout ? JSON.stringify(s.loadout) : null,
+            s.loadoutRoll ?? null,
+          ],
         );
       }
       return match;
@@ -172,6 +184,8 @@ export class PgGameRepository implements GameRepository {
             }
           : null,
         delays: {}, // filled in by the service (derived from round history)
+        loadout: parseLoadoutColumn(row.loadout),
+        loadoutRoll: row.loadout_roll ?? null,
       };
     });
     /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -271,6 +285,8 @@ export class PgGameRepository implements GameRepository {
           }
         : null,
       delays: {}, // filled in by the service (derived from round history)
+      loadout: parseLoadoutColumn(row.loadout),
+      loadoutRoll: row.loadout_roll ?? null,
     };
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -372,6 +388,48 @@ export class PgGameRepository implements GameRepository {
     });
   }
 
+  async recordAbilityFiring(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    helperId: string;
+    target: Move | null;
+  }): Promise<void> {
+    try {
+      await this.pool.query(
+        `INSERT INTO ability_firings (match_id, seat_id, round, helper_id, target)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [input.matchId, input.seatId, input.round, input.helperId, input.target],
+      );
+    } catch (err) {
+      // The unique index is the authority on one firing per seat per round; a
+      // double-tap racing through two connections lands here rather than spending
+      // a charge twice.
+      if ((err as { code?: string }).code === '23505') {
+        throw new ConflictError('this seat already fired an ability this round');
+      }
+      throw err;
+    }
+  }
+
+  async listAbilityFirings(matchId: string): Promise<AbilityFiring[]> {
+    const res = await this.pool.query(
+      `SELECT f.round, f.helper_id, f.target, s.seat_key
+         FROM ability_firings f JOIN seats s ON s.id = f.seat_id
+        WHERE f.match_id = $1
+        ORDER BY f.round ASC, s.position ASC`,
+      [matchId],
+    );
+    return res.rows.map(
+      (row): AbilityFiring => ({
+        round: row.round,
+        seatKey: row.seat_key,
+        helperId: row.helper_id,
+        target: row.target ?? null,
+      }),
+    );
+  }
+
   async listResults(matchId: string): Promise<RoundResult[]> {
     const res = await this.pool.query(
       `SELECT round, outcome, moves, auto_picked
@@ -394,4 +452,16 @@ export class PgGameRepository implements GameRepository {
   async close(): Promise<void> {
     await this.pool.end();
   }
+}
+
+/**
+ * `loadout` is jsonb, which the driver hands back parsed — except when it does not,
+ * so this tolerates both rather than depending on which. An absent loadout is a duel
+ * seat, not a defect.
+ */
+function parseLoadoutColumn(raw: unknown): Loadout | null {
+  if (raw === null || raw === undefined) return null;
+  const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  return [value[0], value[1]] as Loadout;
 }

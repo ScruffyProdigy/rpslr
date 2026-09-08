@@ -22,6 +22,24 @@ import { lobbyJwksUrl } from './lobbyIssuer.js';
  */
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 
+/**
+ * One selection group's picks for a seat, from Lobby's pre-queue picker.
+ *
+ * An array of these rather than a single object, because a mode may ask for a weapon
+ * *and* an armour set. It carries no `kind`: that is already on the mode manifest,
+ * and repeating it per seat only invites the two copies to disagree.
+ *
+ * Lobby's cached display strings (`labels`) are deliberately absent — see
+ * `parseLobbyProvision`.
+ *
+ * @see JoinQuest developer integration guide §13 "Pre-queue options"; golden
+ * bodies in `docs/fixtures/prequeue/`.
+ */
+export interface SeatOptionSelection {
+  groupKey: string;
+  optionIds: string[];
+}
+
 export interface AssignmentSeat {
   seatKey: string;
   team?: string;
@@ -29,6 +47,8 @@ export interface AssignmentSeat {
   lobbyUserId: string;
   /** Optional presentation data from Lobby at provision time. */
   player?: LobbyPlayerProfile;
+  /** Pre-queue picks, present only for a mode whose manifest declares `preQueue`. */
+  options?: SeatOptionSelection[];
 }
 
 export interface AssignmentClaims {

@@ -11,12 +11,14 @@ import { attachWebsocketServer } from './ws.js';
 
 let server: Server;
 let service: GameService;
+let repo: MemoryGameRepository;
 let baseWsUrl: string;
 
 beforeEach(async () => {
   const config = loadConfig({ GAME_APP_ENV: 'local' } as NodeJS.ProcessEnv);
   const hub = new MatchHub();
-  service = new GameService(new MemoryGameRepository(), { hub });
+  repo = new MemoryGameRepository();
+  service = new GameService(repo, { hub });
   const app = createApp(service, config);
   server = createServer(app);
   attachWebsocketServer(server, { service, hub, config });
@@ -137,5 +139,56 @@ describe('WebSocket gameplay transport', () => {
     const err = await waitFor(ws, (m) => m.type === 'error');
     expect(err.error).toMatch(/subscribe/);
     ws.close();
+  });
+});
+
+describe('an unresolved ability firing never reaches the socket', () => {
+  it('keeps Quarantine\'s named move out of the pushed state until the round resolves', async () => {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'copycat'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const hostId = created.you.playerId;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    const challengerId = joined.you.playerId;
+
+    const state = await service.getState(code);
+    await repo.recordAbilityFiring({
+      matchId: state.match.id,
+      seatId: state.seats[0].id,
+      round: 1,
+      helperId: 'quarantine',
+      target: 'rock',
+    });
+
+    // The opponent's own socket, which is the one that would give the game away.
+    const opponent = await open();
+    send(opponent, { type: 'subscribe', ref: code });
+    const snapshot = await waitFor(opponent, (m) => m.type === 'state');
+    expect((snapshot.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([]);
+    // Holding Quarantine is public; the move it named is not, until the round is over.
+    expect(JSON.stringify(snapshot)).not.toContain('"target"');
+
+    // Play the round out; now it is history, and history is public.
+    await service.submitMove(code, hostId, 'paper');
+    const resolved = waitFor(
+      opponent,
+      (m) =>
+        m.type === 'state' &&
+        (m.state as { abilityFirings: unknown[] }).abilityFirings.length > 0,
+    );
+    await service.submitMove(code, challengerId, 'scissors');
+    const after = await resolved;
+    expect((after.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([
+      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock' },
+    ]);
+
+    opponent.close();
   });
 });

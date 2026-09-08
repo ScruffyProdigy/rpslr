@@ -11,6 +11,7 @@ import {
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Phase } from './roundPolicy.js';
 import type {
+  AbilityFiring,
   Match,
   MatchEndReason,
   MatchStatus,
@@ -18,6 +19,7 @@ import type {
   Seat,
   SeatPlayer,
 } from './types.js';
+import type { Loadout } from './helpers/loadout.js';
 
 interface SeatRow {
   id: string;
@@ -27,6 +29,16 @@ interface SeatRow {
   role: string | null;
   position: number;
   reservedForLobbyUser: string | null;
+  loadout: Loadout | null;
+  loadoutRoll: Move | null;
+}
+
+interface AbilityFiringRow {
+  matchId: string;
+  seatId: string;
+  round: number;
+  helperId: string;
+  target: Move | null;
 }
 
 interface PlayerRow {
@@ -53,6 +65,7 @@ export class MemoryGameRepository implements GameRepository {
   private players: PlayerRow[] = [];
   private moves: MoveRow[] = [];
   private results = new Map<string, RoundResult[]>();
+  private abilityFirings: AbilityFiringRow[] = [];
 
   async createMatch(input: CreateMatchInput): Promise<Match> {
     const id = randomUUID();
@@ -87,6 +100,8 @@ export class MemoryGameRepository implements GameRepository {
         role: s.role ?? null,
         position: s.position,
         reservedForLobbyUser: s.reservedForLobbyUser ?? null,
+        loadout: s.loadout ?? null,
+        loadoutRoll: s.loadoutRoll ?? null,
       });
     }
     this.results.set(id, []);
@@ -137,6 +152,8 @@ export class MemoryGameRepository implements GameRepository {
       lobbyProfile,
       player: player ? this.toSeatPlayer(player, lobbyProfile) : null,
       delays: {}, // filled in by the service (derived from round history)
+      loadout: s.loadout,
+      loadoutRoll: s.loadoutRoll,
     };
   }
 
@@ -275,6 +292,35 @@ export class MemoryGameRepository implements GameRepository {
 
   async listResults(matchId: string): Promise<RoundResult[]> {
     return [...(this.results.get(matchId) ?? [])];
+  }
+
+  async recordAbilityFiring(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    helperId: string;
+    target: Move | null;
+  }): Promise<void> {
+    const clash = this.abilityFirings.find(
+      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+    );
+    if (clash) throw new ConflictError('this seat already fired an ability this round');
+    this.abilityFirings.push({ ...input });
+  }
+
+  async listAbilityFirings(matchId: string): Promise<AbilityFiring[]> {
+    const seatKeyById = new Map(
+      this.seats.filter((s) => s.matchId === matchId).map((s) => [s.id, s.seatKey]),
+    );
+    return this.abilityFirings
+      .filter((f) => f.matchId === matchId)
+      .sort((a, b) => a.round - b.round)
+      .map((f) => ({
+        round: f.round,
+        seatKey: seatKeyById.get(f.seatId) ?? f.seatId,
+        helperId: f.helperId,
+        target: f.target,
+      }));
   }
 
   async close(): Promise<void> {

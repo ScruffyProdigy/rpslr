@@ -1,15 +1,25 @@
 import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { GAME_NAME, GAME_VERSION, type AppConfig } from './config.js';
-import { buildGameModesPayload } from './gameModes.js';
+import { buildGameModesPayload, getGameMode } from './gameModes.js';
+import { optionSourceFor } from './helpers/queueOptions.js';
 import { buildLaunchUrlsForAssignment } from './launchUrls.js';
 import {
   ConflictError,
   NotFoundError,
   ReservationError,
 } from './repository.js';
-import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
-import { BannedPlayerError, ValidationError, type GameService } from './service.js';
+import {
+  parseLobbyProvision,
+  parseStandaloneSeats,
+  verifyLobbyProvisionAuth,
+} from './provision.js';
+import {
+  BannedPlayerError,
+  PreQueueError,
+  ValidationError,
+  type GameService,
+} from './service.js';
 import { registerReplayCardRoutes } from './replayCard/routes.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';
 
@@ -58,11 +68,38 @@ export function createApp(
   });
 
   // Game-mode manifest: Lobby catalog sync reads this (see lobby game-catalog-architecture.md).
+  // Declaring `preQueue` on a mode here is also what tells Lobby to send `options`
+  // on provision for it, so the catalog gains duel-helpers by this route alone.
   app.get('/api/v1/game-modes', (_req, res) => {
     res.json(buildGameModesPayload(GAME_NAME));
   });
 
   const api = express.Router();
+
+  // The pre-queue roster Lobby's picker renders. A fixed conventional path, matching
+  // the mode-eligibility endpoint, so Lobby SSRF-validates one origin rather than a
+  // path each game declares for itself.
+  //
+  // The roster is the same for every player: no progression, so `lobbyUserId` is
+  // read only to keep the path shape Lobby already knows. It is generated from
+  // `roster.ts`, never hand-written — see `helpers/queueOptions.ts`.
+  //
+  // This endpoint does not fail open. If it errors or times out, Lobby makes the
+  // mode unjoinable rather than inventing a roster, so it must not sit behind
+  // anything with a cold start.
+  api.get('/players/:lobbyUserId/queue-options', (req: Request, res: Response) => {
+    const modeKey = typeof req.query.modeKey === 'string' ? req.query.modeKey.trim() : '';
+    if (!modeKey) return res.status(400).json({ error: 'modeKey is required' });
+
+    const mode = getGameMode(modeKey);
+    if (!mode) return res.status(404).json({ error: `unknown mode: ${modeKey}` });
+
+    // A mode with no pre-queue pick answers 200 with an empty roster, not 404: the
+    // mode exists and is joinable, it just asks nothing before the queue.
+    const groups = mode.preQueue?.groups ?? [];
+    const choices = groups.flatMap((group) => optionSourceFor(group)?.choices() ?? []);
+    return res.json({ modeKey: mode.key, choices });
+  });
 
   // Create a match — either a Lobby-pushed assignment or a standalone self-serve.
   api.post(
@@ -92,12 +129,19 @@ export function createApp(
         );
         return res.status(201).json({ ...state, launchUrls });
       }
+      // A mode with a pre-queue pick needs one here too: standalone has no lobby to
+      // pick in, so the caller names the loadouts rather than getting a default.
+      const standaloneSeats = parseStandaloneSeats(body.seats);
+      if (typeof standaloneSeats === 'string') {
+        return res.status(400).json({ error: standaloneSeats });
+      }
       const result = await service.createStandaloneMatch({
         gameMode: body.gameMode,
         name: body.name,
         bestOf: body.bestOf,
         hostName: body.hostName,
         hostLobbyUserId: body.lobbyUserId,
+        seats: standaloneSeats,
       });
       return res.status(201).json(result);
     }),
@@ -174,6 +218,13 @@ export function createApp(
     if (err instanceof NotFoundError) return res.status(404).json({ error: err.message });
     if (err instanceof BannedPlayerError) {
       return res.status(403).json({ error: err.message, bannedLobbyUserIds: err.bannedLobbyUserIds });
+    }
+    // 400, never 403 — Lobby parses 403 as the banlist shape and would re-matchmake
+    // forever on a selection it can only fix by not sending it again.
+    if (err instanceof PreQueueError) {
+      return res
+        .status(400)
+        .json({ error: 'invalid pre-queue selection', seatKey: err.seatKey, reason: err.reason });
     }
     if (err instanceof ReservationError) return res.status(403).json({ error: err.message });
     if (err instanceof ConflictError) return res.status(409).json({ error: err.message });

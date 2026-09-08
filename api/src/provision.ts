@@ -1,5 +1,5 @@
 import { parseLobbyPlayerProfile } from './lobbyProfile.js';
-import type { AssignmentSeat } from './tokens.js';
+import type { AssignmentSeat, SeatOptionSelection } from './tokens.js';
 
 /** Lobby deployment endpoints supplied at provision time (not hardcoded on the game). */
 export interface LobbyEndpoints {
@@ -19,6 +19,39 @@ export interface LobbyProvisionInput {
     bestOf?: number;
     seats: AssignmentSeat[];
   };
+}
+
+/**
+ * Shape-check a seat's pre-queue picks. Whether the ids are *legal* is a separate
+ * question, answered against the mode's manifest in `preQueue.ts` — this only
+ * establishes that a well-formed array arrived.
+ *
+ * `labels` is read and dropped on purpose. It is Lobby's cache of the strings this
+ * game served at pick time, kept so a waiting player still reads "Ferrus" when the
+ * game is unreachable. It is not authoritative and must never be read back as
+ * identity, and the surest way to keep that true is for it not to exist past here.
+ */
+function parseSeatOptions(raw: unknown): SeatOptionSelection[] | undefined | string {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return 'seat options must be an array of selection groups';
+
+  const out: SeatOptionSelection[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') return 'each seat option entry must be an object';
+    const o = row as Record<string, unknown>;
+    const groupKey = typeof o.groupKey === 'string' ? o.groupKey.trim() : '';
+    if (!groupKey) return 'each seat option entry requires groupKey';
+    if (!Array.isArray(o.optionIds)) return `seat option ${groupKey} requires optionIds`;
+    const optionIds: string[] = [];
+    for (const value of o.optionIds) {
+      if (typeof value !== 'string' || !value.trim()) {
+        return `seat option ${groupKey} has a non-string optionId`;
+      }
+      optionIds.push(value.trim());
+    }
+    out.push({ groupKey, optionIds });
+  }
+  return out;
 }
 
 function parseLobbyEndpoints(raw: unknown): LobbyEndpoints | string {
@@ -68,12 +101,15 @@ export function parseLobbyProvision(body: unknown): LobbyProvisionInput | string
     if (!seatKey) return 'each seat requires seatKey';
     if (!lobbyUserId) return 'each seat requires lobbyUserId';
     const player = parseLobbyPlayerProfile(s.player);
+    const options = parseSeatOptions(s.options);
+    if (typeof options === 'string') return options;
     seats.push({
       seatKey,
       lobbyUserId,
       team: typeof s.team === 'string' ? s.team : undefined,
       role: typeof s.role === 'string' ? s.role : undefined,
       player,
+      options,
     });
   }
 
@@ -103,4 +139,31 @@ export function verifyLobbyProvisionAuth(
     return 'provision requires Authorization: Bearer matching lobby.serviceToken';
   }
   return null;
+}
+
+/**
+ * Pre-queue picks on a standalone create, which arrives from a browser rather than
+ * from Lobby and so gets the same shape-check.
+ *
+ * Standalone names its loadouts because there is no default to fall back on and no
+ * lobby to pick in. Whether the ids are *legal* is still settled against the mode's
+ * manifest in `preQueue.ts`.
+ */
+export function parseStandaloneSeats(
+  raw: unknown,
+): { seatKey: string; options?: SeatOptionSelection[] }[] | undefined | string {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return 'seats must be an array';
+
+  const out: { seatKey: string; options?: SeatOptionSelection[] }[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') return 'each seats entry must be an object';
+    const s = row as Record<string, unknown>;
+    const seatKey = typeof s.seatKey === 'string' ? s.seatKey.trim() : '';
+    if (!seatKey) return 'each seats entry requires seatKey';
+    const options = parseSeatOptions(s.options);
+    if (typeof options === 'string') return options;
+    out.push({ seatKey, options });
+  }
+  return out;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.js';
+import { prequeueFixture, serialize } from './fixtures.testutil.js';
 import { loadConfig } from './config.js';
 import { MemoryGameRepository } from './memoryRepository.js';
 import { GameService } from './service.js';
@@ -340,5 +341,157 @@ describe('Lobby push + signed-token claim (option 2)', () => {
     const app = buildApp({ REQUIRE_LOBBY_AUTH: 'true' });
     const res = await request(app).post('/api/v1/matches/whatever/claim').send({ playerName: 'X' });
     expect(res.status).toBe(401);
+  });
+});
+
+// --- Pre-queue options (JQ-148) --------------------------------------------
+// The fixtures under docs/fixtures/prequeue are the contract's specification, so
+// these tests load them rather than restating what they say.
+
+describe('GET /api/v1/players/:lobbyUserId/queue-options', () => {
+  it('serves the full helper roster for duel-helpers', async () => {
+    const res = await request(buildApp()).get('/api/v1/players/u_1/queue-options').query({
+      modeKey: 'duel-helpers',
+    });
+    expect(res.status).toBe(200);
+    expect(serialize(res.body)).toBe(serialize(prequeueFixture('queue-options.duel-helpers')));
+  });
+
+  it('carries id, label, section, badge, description and locked on every choice', async () => {
+    const res = await request(buildApp())
+      .get('/api/v1/players/u_1/queue-options')
+      .query({ modeKey: 'duel-helpers' });
+    for (const choice of res.body.choices) {
+      expect(Object.keys(choice)).toEqual([
+        'id',
+        'label',
+        'section',
+        'badge',
+        'description',
+        'locked',
+      ]);
+      expect(choice.locked).toBe(false);
+    }
+  });
+
+  it('serves the same roster to every player — no progression', async () => {
+    const app = buildApp();
+    const one = await request(app).get('/api/v1/players/u_1/queue-options').query({
+      modeKey: 'duel-helpers',
+    });
+    const two = await request(app).get('/api/v1/players/someone-else/queue-options').query({
+      modeKey: 'duel-helpers',
+    });
+    expect(two.body).toEqual(one.body);
+  });
+
+  it('answers 200 with an empty roster for a mode that asks nothing, not 404', async () => {
+    const res = await request(buildApp())
+      .get('/api/v1/players/u_1/queue-options')
+      .query({ modeKey: 'duel' });
+    expect(res.status).toBe(200);
+    expect(serialize(res.body)).toBe(serialize(prequeueFixture('queue-options.duel')));
+  });
+
+  it('404s a mode this game does not serve', async () => {
+    const res = await request(buildApp())
+      .get('/api/v1/players/u_1/queue-options')
+      .query({ modeKey: 'nonesuch' });
+    expect(res.status).toBe(404);
+  });
+
+  it('400s when modeKey is missing', async () => {
+    const res = await request(buildApp()).get('/api/v1/players/u_1/queue-options');
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/matches with pre-queue options', () => {
+  type ProvisionFixture = {
+    request: Record<string, unknown>;
+    expect: { status: number; seatKey?: string; reason?: string };
+  };
+
+  async function provision(fixture: ProvisionFixture, env: Partial<NodeJS.ProcessEnv> = {}) {
+    return request(buildApp(env)).post('/api/v1/matches').send(fixture.request);
+  }
+
+  for (const name of [
+    'duplicate-helper',
+    'unknown-helper',
+    'wrong-arity',
+    'missing-options',
+  ] as const) {
+    it(`rejects ${name} with the fixture's status, seat and reason`, async () => {
+      const fixture = prequeueFixture<ProvisionFixture>(`provision.${name}`);
+      const res = await provision(fixture);
+      expect(res.status).toBe(fixture.expect.status);
+      expect(res.body.error).toBe('invalid pre-queue selection');
+      expect(res.body.seatKey).toBe(fixture.expect.seatKey);
+      expect(res.body.reason).toContain(fixture.expect.reason);
+    });
+  }
+
+  it('rejects with 400 and never 403, which Lobby reads as the banlist handshake', async () => {
+    const fixture = prequeueFixture<ProvisionFixture>('provision.duplicate-helper');
+    const res = await provision(fixture);
+    expect(res.status).toBe(400);
+    expect(res.body).not.toHaveProperty('bannedLobbyUserIds');
+  });
+
+  it('accepts a valid selection and provisions the match', async () => {
+    const fixture = prequeueFixture<ProvisionFixture>('provision.valid');
+    const res = await provision(fixture);
+    expect(res.status).toBe(201);
+    expect(res.body.match.gameMode).toBe('duel-helpers');
+    expect(res.body.seats).toHaveLength(2);
+  });
+
+  it('ignores the labels Lobby cached — they are display strings, not identity', async () => {
+    const fixture = prequeueFixture<ProvisionFixture>('provision.valid');
+    const assignment = (fixture.request.assignment as { seats: Record<string, unknown>[] });
+    const relabelled = {
+      ...fixture.request,
+      assignment: {
+        ...assignment,
+        externalMatchId: 'fixture-valid-relabelled',
+        seats: assignment.seats.map((seat) => ({
+          ...seat,
+          options: (seat.options as { groupKey: string; optionIds: string[] }[]).map((o) => ({
+            ...o,
+            labels: ['Not', 'A Helper Name'],
+          })),
+        })),
+      },
+    };
+    const res = await request(buildApp()).post('/api/v1/matches').send(relabelled);
+    expect(res.status).toBe(201);
+  });
+
+  it('never invents a loadout for a seat that picked nothing', async () => {
+    const fixture = prequeueFixture<ProvisionFixture>('provision.missing-options');
+    const res = await provision(fixture);
+    expect(res.status).toBe(400);
+    // The old default was Ferrus + Featherweight. Nothing should reach for it.
+    expect(JSON.stringify(res.body)).not.toContain('featherweight');
+  });
+
+  it('leaves duel provisioning untouched', async () => {
+    const res = await request(buildApp())
+      .post('/api/v1/matches')
+      .send({
+        lobbyId: 'https://lobby.local',
+        lobby: { returnUrl: 'http://localhost:5173', graphqlUrl: 'http://localhost:8080/query' },
+        assignment: {
+          externalMatchId: 'plain-duel',
+          gameMode: 'duel',
+          bestOf: 5,
+          seats: [
+            { seatKey: '1', lobbyUserId: 'u_1' },
+            { seatKey: '2', lobbyUserId: 'u_2' },
+          ],
+        },
+      });
+    expect(res.status).toBe(201);
   });
 });

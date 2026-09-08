@@ -13,7 +13,7 @@ import {
   resolveLobbyPlayerProfile,
 } from './lobbyPlayer.js';
 import type { LobbyProvisionInput } from './provision.js';
-import { TokenError } from './tokens.js';
+import { TokenError, type SeatOptionSelection } from './tokens.js';
 import {
   availableMoves,
   computeDelays,
@@ -27,7 +27,14 @@ import {
   type PlayedRound,
   type PlayerRules,
 } from './game.js';
-import { DUEL_RULES } from './helpers/rules.js';
+import { rollFor, rulesFor } from './helpers/rules.js';
+import { uniformPicker } from './helpers/loadout.js';
+import {
+  isPreQueueRejection,
+  resolvePreQueueOptions,
+  seatLoadout,
+  type ResolvedSelection,
+} from './preQueue.js';
 import type { MatchHub } from './matchHub.js';
 import type { PresenceTracker } from './presence.js';
 import {
@@ -44,6 +51,7 @@ import {
   type GameRepository,
 } from './repository.js';
 import type {
+  AbilityFiring,
   Match,
   MatchEndReason,
   MatchState,
@@ -54,6 +62,25 @@ import type {
 import type { AssignmentClaims, AssignmentSeat } from './tokens.js';
 
 export class ValidationError extends Error {}
+
+/**
+ * A pre-queue selection the game will not seat.
+ *
+ * Separate from `ValidationError` because the contract's body carries the seat and
+ * the reason as fields, and because the status matters: this is a `400`. A `403`
+ * would be read by Lobby as the banlist handshake and re-matchmade forever.
+ *
+ * It fails the whole provision. `seatKey` is for diagnosis, not for salvaging the
+ * other seats — there is no match left to salvage them into.
+ */
+export class PreQueueError extends Error {
+  constructor(
+    public readonly seatKey: string,
+    public readonly reason: string,
+  ) {
+    super(`invalid pre-queue selection for seat ${seatKey}: ${reason}`);
+  }
+}
 
 /** A pushed roster contained a player this game refuses to host. */
 export class BannedPlayerError extends Error {
@@ -115,15 +142,31 @@ export class GameService {
     bestOf?: number;
     hostName?: string;
     hostLobbyUserId?: string | null;
+    /**
+     * Pre-queue picks per seat, for a mode that asks for them. Standalone has no
+     * lobby to pick in, so it names the loadouts up front instead — there is no
+     * default to fall back on, and inventing one here is exactly what v5 removed.
+     */
+    seats?: { seatKey: string; options?: SeatOptionSelection[] }[];
   }): Promise<ClaimResult> {
     const mode = this.requireMode(opts.gameMode ?? DEFAULT_GAME_MODE);
     const bestOf = clampBestOf(opts.bestOf, defaultBestOfForMode(mode.key));
+    const reservations = seatsFromMode(mode);
+    const named = new Map((opts.seats ?? []).map((s) => [s.seatKey, s.options]));
+    const selections = this.resolveSelections(
+      mode,
+      reservations.map((r) => ({
+        seatKey: r.seatKey,
+        lobbyUserId: '',
+        options: named.get(r.seatKey),
+      })),
+    );
     const match = await this.repo.createMatch({
       code: await this.uniqueCode(),
       name: opts.name?.trim() || 'Untitled Match',
       gameMode: mode.key,
       bestOf,
-      seats: seatsFromMode(mode),
+      seats: this.withLoadouts(mode, selections, reservations),
     });
     const seatKeys = seatKeysForMode(mode);
     const firstSeatKey = seatKeys[0];
@@ -131,6 +174,44 @@ export class GameService {
       seatKey: firstSeatKey,
       name: opts.hostName?.trim() || 'Host',
       lobbyUserId: opts.hostLobbyUserId ?? null,
+    });
+  }
+
+  /**
+   * Validate the pre-queue selections for a set of seats, or refuse to seat them.
+   *
+   * There is nothing to fall back on: a mode declaring `preQueue` requires a
+   * selection per seat, and a missing one is a rejection rather than a prompt to
+   * invent a loadout the player did not choose.
+   */
+  private resolveSelections(
+    mode: GameModeManifest,
+    seats: AssignmentSeat[],
+  ): ResolvedSelection[] {
+    const resolved = resolvePreQueueOptions(mode, seats);
+    if (isPreQueueRejection(resolved)) {
+      throw new PreQueueError(resolved.seatKey, resolved.reason);
+    }
+    return resolved;
+  }
+
+  /**
+   * Attach each seat's loadout, and settle its roll, before the seats exist.
+   *
+   * The roll is thrown once here rather than per request. Two helpers bound to the
+   * same move displace the cheaper one's marks onto a move drawn at random, and a
+   * throw repeated on every read would give a match a different opening every time
+   * anyone looked at it.
+   */
+  private withLoadouts(
+    mode: GameModeManifest,
+    selections: ResolvedSelection[],
+    reservations: SeatReservation[],
+  ): SeatReservation[] {
+    const pick = uniformPicker(this.rng);
+    return reservations.map((reservation) => {
+      const loadout = seatLoadout(mode, selections, reservation.seatKey);
+      return { ...reservation, loadout, loadoutRoll: rollFor(loadout, pick) };
     });
   }
 
@@ -157,7 +238,12 @@ export class GameService {
 
     const mode = this.requireMode(assignment.gameMode);
     assertAssignmentCoversMode(mode, assignment.seats);
-    const reservations = reservationsFromAssignment(mode, assignment.seats);
+    const selections = this.resolveSelections(mode, assignment.seats);
+    const reservations = this.withLoadouts(
+      mode,
+      selections,
+      reservationsFromAssignment(mode, assignment.seats),
+    );
     let match: Match;
     try {
       match = await this.repo.createMatch({
@@ -280,6 +366,7 @@ export class GameService {
     const match = (await this.repo.getMatch(matchId))!;
     const seats = await this.repo.listSeats(match.id);
     const results = await this.repo.listResults(match.id);
+    const firings = await this.repo.listAbilityFirings(match.id);
     const rawRoundMoves =
       match.status === 'playing'
         ? await this.repo.getMovesForRound(match.id, match.currentRound)
@@ -301,6 +388,7 @@ export class GameService {
       submittedPlayerIds,
       currentRoundMoves: rawRoundMoves,
       matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
+      abilityFirings: resolvedFirings(firings, results),
       serverNow: new Date(this.now()).toISOString(),
     });
   }
@@ -659,15 +747,39 @@ function playerMoveSequence(results: RoundResult[], playerId: string): Move[] {
 /**
  * The rules a seat plays by.
  *
- * Every seat is a duel seat today: nothing carries a loadout until JQ-148 puts one
- * on provision and on the match record. Routing duel through this call rather than
- * around it is the point — when loadouts arrive, only this function changes.
+ * `duel` is the null loadout and reaches `BASE_RULES` through the same call, so the
+ * two modes share every code path rather than branching. The roll is the stored one:
+ * a replay has to reach the marks the match reached the first time, and re-throwing
+ * it here would make a match's opening depend on when it was read.
  */
-function rulesForSeat(_seat: Seat): PlayerRules {
-  return DUEL_RULES;
+function rulesForSeat(seat: Seat): PlayerRules {
+  return rulesFor(seat.loadout, { roll: seat.loadoutRoll });
 }
 
-/** Both moves of each resolved round, in round order, seat A's first. */
+/**
+ * Firings from rounds that have already resolved.
+ *
+ * An ability spent in the round being played is withheld from every viewer, because
+ * Quarantine names the move it fears and an opponent who could read that would
+ * simply play something else. The same commit-then-reveal property JQ-150 protects
+ * for Oracle, and the reason the filter is here rather than in the client: a state
+ * payload the client chooses not to render is still a payload anyone can read.
+ */
+function resolvedFirings(firings: AbilityFiring[], results: RoundResult[]): AbilityFiring[] {
+  const resolved = new Set(results.map((r) => r.round));
+  return firings.filter((f) => resolved.has(f.round));
+}
+
+/**
+ * Both moves of each resolved round, in round order, seat A's first.
+ *
+ * The filter is defensive only, and cannot fire today: a round is recorded once both
+ * players have moved, and Sacrifice was ruled to draw a round the firer still picks
+ * in, so every resolved round carries both moves by construction. It is written down
+ * because a card that produced a round without one would be discarded here in
+ * silence, taking its decrement and recharge with it — so this line would need
+ * revisiting rather than being relied on.
+ */
 function playedRounds(results: RoundResult[], idA: string, idB: string): PlayedRound[] {
   return [...results]
     .sort((a, b) => a.round - b.round)

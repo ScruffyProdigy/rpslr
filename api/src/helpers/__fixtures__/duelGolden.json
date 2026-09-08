@@ -2586,6 +2586,7 @@
   "duel": {
     "perRound": [
       {
+        "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
           "bestOf": 5,
@@ -2630,6 +2631,8 @@
               "scissors": 0
             },
             "id": "<seat:1>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2655,6 +2658,8 @@
               "scissors": 0
             },
             "id": "<seat:2>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2676,6 +2681,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
           "bestOf": 5,
@@ -2729,6 +2735,8 @@
               "scissors": 0
             },
             "id": "<seat:1>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2754,6 +2762,8 @@
               "scissors": 2
             },
             "id": "<seat:2>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2775,6 +2785,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
           "bestOf": 5,
@@ -2837,6 +2848,8 @@
               "scissors": 2
             },
             "id": "<seat:1>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2862,6 +2875,8 @@
               "scissors": 1
             },
             "id": "<seat:2>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2883,6 +2898,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
           "bestOf": 5,
@@ -2954,6 +2970,8 @@
               "scissors": 1
             },
             "id": "<seat:1>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -2979,6 +2997,8 @@
               "scissors": 0
             },
             "id": "<seat:2>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -3000,6 +3020,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
           "bestOf": 5,
@@ -3080,6 +3101,8 @@
               "scissors": 0
             },
             "id": "<seat:1>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -3105,6 +3128,8 @@
               "scissors": 0
             },
             "id": "<seat:2>",
+            "loadout": null,
+            "loadoutRoll": null,
             "lobbyProfile": null,
             "matchId": "<match>",
             "player": {
@@ -3127,6 +3152,7 @@
       }
     ],
     "final": {
+      "abilityFirings": [],
       "currentRoundMoves": {},
       "match": {
         "bestOf": 5,
@@ -3207,6 +3233,8 @@
             "scissors": 0
           },
           "id": "<seat:1>",
+          "loadout": null,
+          "loadoutRoll": null,
           "lobbyProfile": null,
           "matchId": "<match>",
           "player": {
@@ -3232,6 +3260,8 @@
             "scissors": 0
           },
           "id": "<seat:2>",
+          "loadout": null,
+          "loadoutRoll": null,
           "lobbyProfile": null,
           "matchId": "<match>",
           "player": {

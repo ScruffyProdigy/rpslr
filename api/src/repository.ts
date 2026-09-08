@@ -2,6 +2,7 @@ import type { Move } from './game.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Phase } from './roundPolicy.js';
 import type {
+  AbilityFiring,
   Match,
   MatchEndReason,
   MatchStatus,
@@ -80,6 +81,21 @@ export interface GameRepository {
     scores: Record<string, number>;
   }): Promise<void>;
   listResults(matchId: string): Promise<RoundResult[]>;
+  /**
+   * Record an ability a seat spent this round. At most one per seat per round — an
+   * ability sits on its own slot on the cooldown track, so there is only one to
+   * spend. Re-recording the same round is a conflict, not an overwrite: a spent
+   * charge is not a decision anyone gets to take back.
+   */
+  recordAbilityFiring(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    helperId: string;
+    target: Move | null;
+  }): Promise<void>;
+  /** Every firing in the match, in round order. Callers decide what to disclose. */
+  listAbilityFirings(matchId: string): Promise<AbilityFiring[]>;
   close(): Promise<void>;
 }
 
