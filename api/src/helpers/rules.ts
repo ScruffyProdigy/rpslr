@@ -9,10 +9,11 @@
  *   - Quarantine asks its owner for a move every round, so it needs per-round
  *     input the rules object has nowhere to put yet.
  *   - Oracle needs a mid-round reveal sub-phase (JQ-150).
- *   - Sacrifice, Rust, Thief and Freeze are gated on the charge-Major resize
- *     sign-off (JQ-146 Task 1.0). Each is worth about a third of what a passive
- *     earns at present, so building them to the current numbers would bake in a
- *     balance bug.
+ *   - Sacrifice, Rust, Thief and Freeze are fired by choice, so they need ability
+ *     state the rules object does not carry yet, and a record of what was fired
+ *     each round — firing is a decision, so unlike everything here it is not
+ *     derivable from the move list. Task 1.6, once JQ-148's migration has somewhere
+ *     to put it.
  * All six are legal to hold today and cost their opening marks; they simply have
  * no further effect, and a test pins that so none of them half-works by accident.
  */

@@ -12,8 +12,14 @@ import type { Move } from '../game.js';
 export type Tier = 'Major' | 'Minor' | 'Trinket';
 
 /**
- * How a helper spends itself. `passive` is always on; `charge` fires once a
- * match; `per-round` asks its owner for something every round.
+ * How a helper spends itself. `passive` is always on; `per-round` asks its owner
+ * for something every round; `charge` is fired by choice.
+ *
+ * A charge is not spent once and gone: it sits on its own slot on the cooldown
+ * track with opening and recharge marks, in the same delay marks a move uses, and
+ * "once per match" is a recharge of never. Those numbers land in Task 1.6 — until
+ * then this stays a bare string, because inventing the structure before the effects
+ * exist would be structure nothing reads.
  */
 export type Load = 'passive' | 'charge' | 'per-round';
 
@@ -46,9 +52,10 @@ const MAJORS = [
     load: 'per-round', blurb: 'Name a move each round. If they play it, it takes 4 marks.' },
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
     load: 'charge', blurb: 'Once per match, learn one live move they did not play, then re-pick.' },
-  // The four below are gated on the epic plan's Task 1.0 resize sign-off. They are
-  // named here because the roster endpoint and the ladder test need all 22; their
-  // effects are not implemented until the resize closes.
+  // The four below have no effect yet. They are named here because the roster
+  // endpoint and the ladder test need all 22; JQ-147 Task 1.6 implements them, at
+  // which point `load` carries their opening and recharge marks rather than the
+  // bare string 'charge'.
   { id: 'sacrifice', name: 'Sacrifice', tier: 'Major', boundMove: 'rock',
     load: 'charge', blurb: 'Once per match, declare the round a draw and clear all your marks.' },
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
