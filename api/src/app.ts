@@ -8,9 +8,9 @@ import {
   NotFoundError,
   ReservationError,
 } from './repository.js';
-import { reportMatchResult } from './lobbyClient.js';
 import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
 import { BannedPlayerError, ValidationError, type GameService } from './service.js';
+import { registerReplayCardRoutes } from './replayCard/routes.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';
 
 /**
@@ -23,6 +23,7 @@ export function createApp(
   service: GameService,
   config: AppConfig,
   tokenVerifier?: TokenVerifier,
+  opts: { fetchImpl?: typeof fetch } = {},
 ): Express {
   const app = express();
   // Lazily build the JWKS verifier so standalone/test paths never touch it.
@@ -160,6 +161,10 @@ export function createApp(
       res.json(await service.submitMove(req.params.ref, playerId, move, round));
     }),
   );
+
+  // Replay link previews (JQ-120). Registered before the error middleware:
+  // these routes answer with a card rather than an error, always.
+  registerReplayCardRoutes(app, { service, config, fetchImpl: opts.fetchImpl });
 
   app.use('/api/v1', api);
 

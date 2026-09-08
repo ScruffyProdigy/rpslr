@@ -19,6 +19,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Built JS + SQL migrations (migrate runs against compiled dist at runtime).
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+# Card fonts — resvg loads these at startup; without them /replay has no type.
+COPY assets ./assets
 
 # Run as the built-in non-root "node" user.
 USER node

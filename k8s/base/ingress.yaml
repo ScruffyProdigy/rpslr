@@ -22,6 +22,16 @@ spec:
                 name: rps-game-api
                 port:
                   number: 3001
+          # Replay links are served by the API so a crawler gets og: meta in the
+          # head; the API returns the client's own index.html around them, so a
+          # human still lands on the SPA (JQ-120).
+          - path: /replay
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-api
+                port:
+                  number: 3001
           - path: /healthz
             pathType: Prefix
             backend:

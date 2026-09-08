@@ -16,7 +16,7 @@ export function normalizeLobbyIssuer(raw: string): string {
     const u = new URL(trimmed);
     u.search = '';
     u.hash = '';
-    let path = u.pathname.replace(/\/$/, '') || '';
+    const path = u.pathname.replace(/\/$/, '') || '';
     return `${u.protocol}//${u.host}${path}`.replace(/\/$/, '');
   } catch {
     return trimmed.replace(/\/$/, '');

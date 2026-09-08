@@ -562,7 +562,7 @@ export function Board({
   // just played. Only once it is over — a replay of a live match would hand
   // the other player's picks to anyone with the link.
   const shareRef = finished ? replayRef(match) : null;
-  const replayUrl = shareRef ? buildReplayUrl(shareRef) : null;
+  const replayUrl = shareRef ? buildReplayUrl(shareRef, undefined, { by: mySeatKey }) : null;
   // The deciding round plays out before the match-end banner takes the screen.
   const revealingNow = reveal != null;
   // As the card dissolves, the graph asserts the same fact: the edge the round

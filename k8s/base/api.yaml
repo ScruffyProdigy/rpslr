@@ -88,4 +88,6 @@ spec:
               memory: 64Mi
             limits:
               cpu: 250m
-              memory: 192Mi
+              # 256Mi, not 192Mi: the link-preview renderer holds a 1200x630
+              # RGBA buffer plus the card fonts and a few cached PNGs (JQ-120).
+              memory: 256Mi

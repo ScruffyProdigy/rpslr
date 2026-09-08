@@ -15,6 +15,9 @@ data:
   GAME_API_AUDIENCE: "https://rpsls-duel.win"
   # Browser origin for launchUrls on provision (must match Lobby catalog playUrl).
   GAME_PLAY_URL: "https://rpsls-duel.win"
+  # Where /replay fetches the SPA shell from for link-preview meta (JQ-120).
+  # In-cluster service, not the public host — no hairpin through the ingress.
+  GAME_CLIENT_ORIGIN: "http://rps-game-client"
 ---
 apiVersion: v1
 kind: ConfigMap
