@@ -10,6 +10,7 @@ import {
 } from './moves';
 import {
   DELAY_ON_CHOICE,
+  advanceDelays,
   type DelayMap,
   type Replay,
   type ReplayFrame,
@@ -95,6 +96,9 @@ export type CalloutKind =
   | 'safe-out-of-reach'
   | 'trap'
   | 'round-edge'
+  | 'tempo-gap'
+  | 'tempo-return'
+  | 'tempo-punish-spent'
   | 'cooldown'
   | 'match-point';
 
@@ -177,6 +181,73 @@ function whySafe(move: Move, oppDelays: DelayMap): string {
 }
 
 /**
+ * What both players are holding going into the next round.
+ *
+ * None of this is a guess. A pick costs its owner that move for two rounds, so
+ * the moment this round's picks land, both hands for the next round are fixed
+ * — and each side holds exactly three playable moves there, same as every
+ * other round. "What will I be holding next round" is small and exactly
+ * computable, which is the whole reason a tempo note can be stated as fact.
+ *
+ * `advanceDelays` is imported rather than rewritten: the −1/+2 rule already
+ * lives in `api/src/game.ts` and is mirrored once in `replay.ts`, and a third
+ * copy of it is a third thing to keep in step.
+ *
+ * One round, and no further. Two rounds would need a search over what gets
+ * played in between, and a replay says what was true, not what might have been.
+ */
+export interface Lookahead {
+  /** The round these hands are held into. */
+  round: number;
+  a: DelayMap;
+  b: DelayMap;
+  /** What that round is worth to A under best play — `roundValue`, projected. */
+  value: number;
+}
+
+export function lookahead(frame: ReplayFrame): Lookahead {
+  const a = advanceDelays(frame.a.delaysBefore, frame.a.move);
+  const b = advanceDelays(frame.b.delaysBefore, frame.b.move);
+  return {
+    round: frame.round + 1,
+    a,
+    b,
+    value: roundValue(liveMoves(a), liveMoves(b)),
+  };
+}
+
+/**
+ * The one move the opponent can play next round that this player holds no
+ * answer to, or null when they can answer everything.
+ *
+ * There is never more than one. A move is unanswerable exactly when both moves
+ * that beat it are resting, every side rests exactly two, and no two moves
+ * share an attacking pair — so at most one move in the whole set qualifies,
+ * and it only counts if the opponent can actually play it.
+ */
+function unanswerable(mine: DelayMap, theirs: DelayMap): Move | null {
+  return liveMoves(theirs).find((m) => threatsTo(m, mine).safe) ?? null;
+}
+
+/** What the round did for the side that played it, as a verb phrase. */
+function outcomePhrase(frame: ReplayFrame, side: ReplaySide): string {
+  if (frame.outcome === 'draw') return 'draws the round';
+  return frame.outcome === side.seatKey ? 'takes the round' : 'loses the round';
+}
+
+/**
+ * The round a move played this round can be played again.
+ *
+ * The pick is charged +2 on top of the −1 every move takes, so it enters the
+ * next round on 2, the one after on 1, and comes free the round after that.
+ * Said as a round number rather than a duration: a round number can be checked
+ * against the strip, where "out for 2 rounds" has to be counted.
+ */
+function returnsInRound(round: number): number {
+  return round + DELAY_ON_CHOICE + 1;
+}
+
+/**
  * How many strategy notes a round is allowed before they bury the board. The
  * cooldown line and match point are not counted against it — they are the
  * round's bookkeeping and always survive.
@@ -193,18 +264,45 @@ const MAX_INSIGHTS = 2;
 export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
   const nameA = replay.a.identity.name;
   const nameB = replay.b.identity.name;
+  // A lookahead into a round the match never reached would name a round nobody
+  // can check it against, so the last frame of a replay gets no tempo notes.
+  const lastRound = replay.frames[replay.frames.length - 1]?.round ?? frame.round;
+  const hasNextRound = frame.round < lastRound;
+  const ahead = lookahead(frame);
   const sides = [
-    { side: frame.a, oppDelays: frame.b.delaysBefore, mover: nameA, blocked: nameB },
-    { side: frame.b, oppDelays: frame.a.delaysBefore, mover: nameB, blocked: nameA },
+    {
+      side: frame.a,
+      opp: frame.b,
+      oppDelays: frame.b.delaysBefore,
+      mine: ahead.a,
+      theirs: ahead.b,
+      // The projected round's value always reads from A; B's share of it is
+      // the same number the other way round.
+      value: ahead.value,
+      mover: nameA,
+      blocked: nameB,
+    },
+    {
+      side: frame.b,
+      opp: frame.a,
+      oppDelays: frame.a.delaysBefore,
+      mine: ahead.b,
+      theirs: ahead.a,
+      value: -ahead.value,
+      mover: nameB,
+      blocked: nameA,
+    },
   ];
 
   // Tiered rather than one list: the note about how a round was won beats the
-  // note about what was merely available, whichever player each belongs to.
+  // note about what it costs next round, which in turn beats the note about
+  // what was merely available — whichever player each belongs to.
   const played: Callout[] = [];
+  const tempo: Callout[] = [];
   const missed: Callout[] = [];
   const traps: Callout[] = [];
 
-  for (const { side, oppDelays, mover, blocked } of sides) {
+  for (const { side, opp, oppDelays, mine, theirs, value, mover, blocked } of sides) {
     const read = safeRead(side);
     if (read) {
       const { move: safe, reachable, punish } = read;
@@ -251,6 +349,55 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
       traps.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
     }
+
+    // Tempo: what this pick costs in the round after this one. Everything
+    // below is read off the projected hands and the projected round's value,
+    // never guessed at.
+    //
+    // The gate is `value`, not merely "the opponent will hold something I
+    // cannot beat". That second thing is true of about half of all rounds,
+    // because half of all positions leave somebody a safe move — and a safe
+    // move on its own is worth nothing at all, since the mirror draws it. It
+    // is worth something only when its owner also holds one of the two moves
+    // that beat it, and asking the solver whether the projected round actually
+    // favours them is the honest way to tell those two apart. So the note
+    // fires on the rounds where the gap costs something and stays quiet on the
+    // rounds where it is scenery.
+    const gap = hasNextRound && value < 0 ? unanswerable(mine, theirs) : null;
+    if (gap && opp.delaysBefore[gap] > 0 && theirs[gap] === 0) {
+      // The opponent's clock is what changed: a move they could not play comes
+      // back, and this player will be holding nothing that answers it.
+      tempo.push({
+        kind: 'tempo-return',
+        text:
+          `${blocked}'s ${label(gap)} is back in round ${ahead.round} ${EM} and ${mover} ` +
+          `will be holding nothing that beats it.`,
+      });
+    } else if (gap && beatsOf(side.move).includes(gap)) {
+      // This player's own clock is what changed: the move just spent was one
+      // of the two that answered `gap`, and the other is resting too.
+      tempo.push({
+        kind: 'tempo-gap',
+        text:
+          `${mover}'s ${label(side.move)} ${outcomePhrase(frame, side)} ${EM} and leaves ` +
+          `them with nothing that beats ${label(gap)} in round ${ahead.round}.`,
+      });
+    }
+
+    // Spending the punish is the cost that decides whether a round was worth
+    // taking. A safe move is worth a third of a win only while its owner still
+    // holds one of the two moves that beat it — the answer to the mirror — so
+    // playing that move banks the edge and hands it back at the same time.
+    if (hasNextRound && read?.reachable && read.punish.includes(side.move) && value <= 0) {
+      tempo.push({
+        kind: 'tempo-punish-spent',
+        text:
+          `${label(side.move)} was ${mover}'s answer to ${label(read.move)} ${EM} spending ` +
+          (roundEdge(value) === 'even'
+            ? `it leaves round ${ahead.round} an even one.`
+            : `it leaves round ${ahead.round} ${blocked}'s under best play.`),
+      });
+    }
   }
 
   const insights: Callout[] = [];
@@ -268,7 +415,7 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     });
   }
 
-  insights.push(...played, ...traps, ...missed);
+  insights.push(...played, ...tempo, ...traps, ...missed);
 
   // Only when nothing more specific applied. These are the rounds that most
   // look like guesswork from outside, and the ones where saying whether the
@@ -293,10 +440,18 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
 
   const always: Callout[] = [];
 
+  // Named by the round it comes back rather than by a duration, so it can be
+  // read straight off the strip. A rest that outlasts the match has no round
+  // to name, so it says that instead of pointing at a round nobody will see.
+  const back = returnsInRound(frame.round);
+  const overruns = back > lastRound;
+
   if (frame.outcome === 'draw') {
     always.push({
       kind: 'cooldown',
-      text: `Neither can play ${label(frame.a.move)} for the next ${DELAY_ON_CHOICE} rounds.`,
+      text: overruns
+        ? `Neither plays ${label(frame.a.move)} again this match.`
+        : `${label(frame.a.move)} is back for both in round ${back}.`,
     });
   } else {
     const aWon = frame.outcome === frame.a.seatKey;
@@ -304,7 +459,9 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     const name = aWon ? nameA : nameB;
     always.push({
       kind: 'cooldown',
-      text: `${name}'s ${label(winner.move)} is now out for ${DELAY_ON_CHOICE} rounds.`,
+      text: overruns
+        ? `${name}'s ${label(winner.move)} is out for the rest of the match.`
+        : `${name}'s ${label(winner.move)} is back in round ${back}.`,
     });
   }
 

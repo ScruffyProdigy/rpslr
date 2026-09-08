@@ -3,10 +3,12 @@ import type { MatchState, Move, RoundResult, Seat } from './api';
 import {
   RULE_CARDS,
   calloutsFor,
+  lookahead,
   narrateRound,
   ruleCardSchedule,
   type RuleCardId,
 } from './commentary';
+import { ALL_MOVES } from './moves';
 import { buildReplay, type Replay } from './replay';
 
 /**
@@ -139,19 +141,48 @@ describe('calloutsFor safe picks', () => {
 });
 
 describe('calloutsFor cooldowns', () => {
-  it("puts the winner's move out for the two rounds it now rests", () => {
+  it('names the round the pick comes back rather than how long it rests', () => {
+    // Played in round 1, so it enters round 2 on 2 marks, round 3 on 1, and is
+    // live again in round 4 — a number that can be checked against the strip.
+    const replay = replayOf([
+      round(1, 'rock', 'paper', 'b'),
+      round(2, 'scissors', 'rock', 'b'),
+      round(3, 'paper', 'lizard', 'b'),
+      round(4, 'rock', 'scissors', 'a'),
+      round(5, 'lizard', 'robot', 'a'),
+    ]);
+    expect(calloutsFor(replay.frames[0], replay)).toContainEqual({
+      kind: 'cooldown',
+      text: "Ben's Paper is back in round 4.",
+    });
+  });
+
+  it('says a rest outlasts the match rather than naming a round nobody sees', () => {
     const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
     expect(calloutsFor(replay.frames[0], replay)).toContainEqual({
       kind: 'cooldown',
-      text: "Ben's Paper is now out for 2 rounds.",
+      text: "Ben's Paper is out for the rest of the match.",
     });
   });
 
   it('covers both players in one line when they played the same move', () => {
+    const replay = replayOf([
+      round(1, 'rock', 'rock', 'draw'),
+      round(2, 'paper', 'scissors', 'b'),
+      round(3, 'scissors', 'paper', 'a'),
+      round(4, 'rock', 'rock', 'draw'),
+    ]);
+    expect(calloutsFor(replay.frames[0], replay)).toContainEqual({
+      kind: 'cooldown',
+      text: 'Rock is back for both in round 4.',
+    });
+  });
+
+  it('says a shared rest outlasts the match when it does', () => {
     const replay = replayOf([round(1, 'rock', 'rock', 'draw')]);
     expect(calloutsFor(replay.frames[0], replay)).toContainEqual({
       kind: 'cooldown',
-      text: 'Neither can play Rock for the next 2 rounds.',
+      text: 'Neither plays Rock again this match.',
     });
   });
 });
@@ -381,5 +412,131 @@ describe('calloutsFor beating the answer to a safe move', () => {
     const kinds = calloutsFor(replay.frames[2], replay).map((c) => c.kind);
     expect(kinds).toContain('punish');
     expect(kinds).not.toContain('round-edge');
+  });
+});
+
+/**
+ * The tempo fixture, chosen because both halves of the idea land in it.
+ *
+ * Round 2: Ben's Scissors takes the round and is the last thing he held that
+ * beat Lizard, so round 3 arrives with Lizard unanswerable.
+ * Round 3: Ana punishes with Scissors — and Scissors was the move that made
+ * her own Lizard worth holding, so round 4 comes back even.
+ * Round 4 is the last frame, so nothing looks past it.
+ */
+const TEMPO = [
+  round(1, 'rock', 'rock', 'draw'),
+  round(2, 'paper', 'scissors', 'b'),
+  round(3, 'scissors', 'paper', 'a'),
+  round(4, 'rock', 'rock', 'draw'),
+];
+
+describe('lookahead', () => {
+  it('applies exactly one round to each side, and no more', () => {
+    const replay = replayOf(TEMPO);
+    const frame = replay.frames[1];
+    const ahead = lookahead(frame);
+    expect(ahead.round).toBe(frame.round + 1);
+    // The pick is charged, everything else counts down: the server's rule,
+    // borrowed rather than restated.
+    expect(ahead.b.scissors).toBe(2);
+    expect(ahead.b.paper).toBe(frame.b.delaysBefore.paper);
+    expect(ahead.a.rock).toBe(Math.max(0, frame.a.delaysBefore.rock - 1));
+  });
+
+  it('leaves both sides holding three moves, the way every round does', () => {
+    const replay = replayOf(TEMPO);
+    for (const frame of replay.frames) {
+      const ahead = lookahead(frame);
+      for (const hand of [ahead.a, ahead.b]) {
+        expect(ALL_MOVES.filter((m) => hand[m] === 0)).toHaveLength(3);
+      }
+    }
+  });
+
+  it('values the round it projects, not the one on screen', () => {
+    const replay = replayOf(TEMPO);
+    // Round 3 is Ana's by a third of a win; the round 2 it follows is not.
+    expect(lookahead(replay.frames[1]).value).toBeCloseTo(1 / 3);
+    expect(lookahead(replay.frames[2]).value).toBeCloseTo(0);
+  });
+});
+
+describe('calloutsFor tempo', () => {
+  it('names what a pick leaves its player with no answer to next round', () => {
+    const replay = replayOf(TEMPO);
+    expect(calloutsFor(replay.frames[1], replay)).toContainEqual({
+      kind: 'tempo-gap',
+      text:
+        "Ben's Scissors takes the round — and leaves them with nothing that beats " +
+        'Lizard in round 3.',
+    });
+  });
+
+  it('says the same of a pick that lost the round, without second-guessing it', () => {
+    const replay = replayOf([
+      round(1, 'rock', 'rock', 'draw'),
+      round(2, 'paper', 'paper', 'draw'),
+      round(3, 'scissors', 'lizard', 'a'),
+      round(4, 'rock', 'rock', 'draw'),
+    ]);
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'tempo-gap',
+      text:
+        "Ben's Lizard loses the round — and leaves them with nothing that beats Robot " +
+        'in round 4.',
+    });
+  });
+
+  it('names a move coming back to the other player that this one cannot answer', () => {
+    const replay = replayOf([
+      round(1, 'rock', 'rock', 'draw'),
+      round(2, 'paper', 'paper', 'draw'),
+      round(3, 'scissors', 'robot', 'b'),
+      round(4, 'rock', 'rock', 'draw'),
+    ]);
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'tempo-return',
+      text: "Ana's Rock is back in round 4 — and Ben will be holding nothing that beats it.",
+    });
+  });
+
+  it('names what spending the answer to the mirror cost', () => {
+    const replay = replayOf(TEMPO);
+    const kinds = calloutsFor(replay.frames[2], replay).map((c) => c.kind);
+    // The round was won on the punish, and the punish is what it cost.
+    expect(kinds).toContain('punish');
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'tempo-punish-spent',
+      text: "Scissors was Ana's answer to Lizard — spending it leaves round 4 an even one.",
+    });
+  });
+
+  it('stays quiet when the round it hands over is worth nothing to anybody', () => {
+    const replay = replayOf(TEMPO);
+    // Ana's Rock is the last thing she holds that beats Scissors, so round 2
+    // does arrive with Scissors unanswerable — but round 2 is dead even, so
+    // the mirror draws it and the gap costs her nothing worth a note.
+    expect(lookahead(replay.frames[0]).value).toBeCloseTo(0);
+    expect(calloutsFor(replay.frames[0], replay).some((c) => c.kind.startsWith('tempo-'))).toBe(
+      false,
+    );
+  });
+
+  it('never looks past the last round the match actually played', () => {
+    const replay = replayOf(TEMPO);
+    const last = replay.frames[replay.frames.length - 1];
+    // There is a projection, and it is lopsided — but round 5 never happened.
+    expect(lookahead(last).value).toBeCloseTo(-1 / 3);
+    expect(calloutsFor(last, replay).some((c) => c.kind.startsWith('tempo-'))).toBe(false);
+  });
+
+  it('competes for the strategy cap without displacing the bookkeeping', () => {
+    const replay = replayOf(TEMPO);
+    const callouts = calloutsFor(replay.frames[1], replay);
+    const insights = callouts.filter((c) => c.kind !== 'cooldown' && c.kind !== 'match-point');
+    expect(insights.length).toBeLessThanOrEqual(2);
+    expect(insights.map((c) => c.kind)).toContain('tempo-gap');
+    expect(callouts.map((c) => c.kind)).toContain('cooldown');
   });
 });
