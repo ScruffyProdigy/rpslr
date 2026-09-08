@@ -76,7 +76,7 @@ const MAJORS = [
   // A Major because cancelling their first win is worth ~+15.6pp — first-to-3
   // against first-to-4 is a six-round race you take with three wins, 42/64. A tier
   // step is only worth ~3pp, so this is the defensible price rather than the right
-  // one; the effect itself is what wants revisiting. See JQ-153.
+  // one; the effect itself is what wants revisiting. See JQ-209.
   { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
     load: 'passive', blurb: 'The first round you lose is a draw instead.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
