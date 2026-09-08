@@ -546,9 +546,13 @@ describe('Sacrifice', () => {
     expect(resolveRound(mirror, sharp, other, at).outcomeA).toBe('draw');
   });
 
-  it('clears every one of the firer’s marks', () => {
+  it('clears the firer’s marks, and then the move they played takes its cost', () => {
     const { a } = replayMatch([round], firer, other);
-    expect(a).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 });
+    // The clear lands when the ability is fired — before the pick — so the reset is
+    // total but the round still costs a move. Four live, not five: Sacrifice buys
+    // the board back for a move's tempo rather than for nothing, which is what
+    // keeps it a don't-lose button rather than a win button.
+    expect(a).toEqual({ rock: 2, paper: 0, scissors: 0, lizard: 0, robot: 0 });
   });
 
   it('leaves the opponent’s marks exactly as the round left them', () => {

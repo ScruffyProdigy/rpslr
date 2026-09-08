@@ -300,6 +300,14 @@ export function replayMatch(
       if (!firedB.freezesOpponentDecay) a[m] = Math.max(0, a[m] - 1);
       if (!firedA.freezesOpponentDecay) b[m] = Math.max(0, b[m] - 1);
     }
+    // Sacrifice clears its owner's board when it is *fired*, which is before either
+    // seat picks — so the move they go on to play still takes its normal cost, and
+    // they enter the next round with four moves live rather than five. Clearing at
+    // the end of the round instead would hand back the tempo too, making a Major
+    // that costs nothing to fire and yields the strongest board in the game.
+    if (rulesA.declaresDraw(round.firedA ?? [])) for (const m of MOVES) a[m] = 0;
+    if (rulesB.declaresDraw(round.firedB ?? [])) for (const m of MOVES) b[m] = 0;
+
     a[round.a] += rulesA.delayOnChoice({ move: round.a, outcome: outcomeA, roundIndex });
     b[round.b] += rulesB.delayOnChoice({ move: round.b, outcome: outcomeB, roundIndex });
 
@@ -321,11 +329,6 @@ export function replayMatch(
     for (const [m, n] of Object.entries(firedA.marks.opponent)) add(b, m as Move, n ?? 0);
     for (const [m, n] of Object.entries(firedB.marks.own)) add(b, m as Move, n ?? 0);
     for (const [m, n] of Object.entries(firedB.marks.opponent)) add(a, m as Move, n ?? 0);
-
-    // Last word in the round: Sacrifice clears the marks its owner ends up with,
-    // including the ones the round itself just added.
-    if (rulesA.declaresDraw(round.firedA ?? [])) for (const m of MOVES) a[m] = 0;
-    if (rulesB.declaresDraw(round.firedB ?? [])) for (const m of MOVES) b[m] = 0;
 
     if (outcomeA === 'loss') lossesA += 1;
     if (outcomeB === 'loss') lossesB += 1;
