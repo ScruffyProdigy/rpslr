@@ -84,8 +84,8 @@ export function openingMarks(loadout: Loadout, pick: MovePicker): Opening {
 
   // `>=` keeps the first-picked helper on a tie, so the second one is displaced.
   const [one, two] = bound;
-  const keeper = MARK_COST[one.tier] >= MARK_COST[two.tier] ? one : two;
-  const displaced = keeper === one ? two : one;
+  const [keeper, displaced] =
+    MARK_COST[one.tier] >= MARK_COST[two.tier] ? [one, two] : [two, one];
 
   delays[keeper.boundMove as Move] += MARK_COST[keeper.tier];
   const rolledMove = pick(MOVES.filter((m) => delays[m] === 0));
