@@ -93,6 +93,8 @@ export interface GameRepository {
     round: number;
     helperId: string;
     target: Move | null;
+    /** Thief's own-side move; null for every other ability. */
+    source: Move | null;
   }): Promise<void>;
   /** Every firing in the match, in round order. Callers decide what to disclose. */
   listAbilityFirings(matchId: string): Promise<AbilityFiring[]>;

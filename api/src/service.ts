@@ -22,13 +22,18 @@ import {
   resolveRound,
   winsNeeded,
   type DelayMap,
+  type Firing,
   type Move,
+  type PlayedRound,
   type PlayerRules,
 } from './game.js';
+import { chargesNow, slotsFor, type AbilityMap } from './helpers/abilities.js';
+import { viewSnapshotAs, type MatchSnapshot } from './matchView.js';
 import { rollFor } from './helpers/rules.js';
 import { uniformPicker } from './helpers/loadout.js';
 import {
   boardsThroughMatch,
+  firedIn,
   playedRoundsFrom,
   rulesForSeats,
   type ReconstructionSeat,
@@ -230,7 +235,7 @@ export class GameService {
   async ensureMatchFromAssignment(input: LobbyProvisionInput): Promise<MatchState> {
     const { lobbyId, assignment } = input;
     const existing = await this.repo.getMatch(assignment.externalMatchId);
-    if (existing) return this.getStateByMatchId(existing.id);
+    if (existing) return this.sharedState(existing.id);
 
     // Reject the whole roster if it contains any banned player.
     const banned = assignment.seats
@@ -271,7 +276,7 @@ export class GameService {
       // Concurrent Lobby provision POSTs can race on externalMatchId; treat as idempotent.
       if (isDuplicateExternalMatchId(err)) {
         const raced = await this.repo.getMatch(assignment.externalMatchId);
-        if (raced) return this.getStateByMatchId(raced.id);
+        if (raced) return this.sharedState(raced.id);
       }
       throw err;
     }
@@ -279,7 +284,7 @@ export class GameService {
       match.id,
       assignment.seats.map((s) => s.lobbyUserId),
     );
-    return this.getStateByMatchId(match.id);
+    return this.sharedState(match.id);
   }
 
   async claimSeatWithLobbyClaims(
@@ -347,7 +352,7 @@ export class GameService {
       await this.startPhase(match.id, match.gameMode, match.currentRound);
     }
 
-    const state = await this.publishState(match.id);
+    const state = await this.publishState(match.id, player.id);
     const mySeat = state.seats.find((s) => s.player?.id === player.id)!;
     return {
       state,
@@ -357,16 +362,21 @@ export class GameService {
 
   // --- State ----------------------------------------------------------------
 
-  async getState(idOrCode: string): Promise<MatchState> {
+  /**
+   * `viewerPlayerId` is whose seat the caller is asking as. It changes nothing but
+   * `abilities`, which is seat-private; a caller that cannot name a viewer gets the
+   * shared view rather than an arbitrary seat's charges.
+   */
+  async getState(idOrCode: string, viewerPlayerId?: string | null): Promise<MatchState> {
     const match = await this.repo.getMatch(idOrCode);
     if (!match) throw new NotFoundError('match not found');
     // Reading is what makes an expired deadline take effect: the waiting player
     // polls while they wait, so the person who cares drives the policy.
     await this.enforceDeadlines(match.id);
-    return this.getStateByMatchId(match.id);
+    return viewSnapshotAs(await this.buildSnapshot(match.id), viewerPlayerId ?? null);
   }
 
-  private async getStateByMatchId(matchId: string): Promise<MatchState> {
+  private async buildSnapshot(matchId: string): Promise<MatchSnapshot> {
     const match = (await this.repo.getMatch(matchId))!;
     const seats = await this.repo.listSeats(match.id);
     const results = await this.repo.listResults(match.id);
@@ -380,33 +390,47 @@ export class GameService {
     // A forfeit ends a match without anyone scoring, so a recorded winner
     // outranks the score-derived one.
     const scoredWinner = seats.find((s) => (s.player?.score ?? 0) >= need);
-    // Each seat's delay marks are replayed from the resolved rounds.
+    // Each seat's delay marks are replayed from the resolved rounds — firings
+    // included, since Rust, Thief and Freeze all move marks the moves did not.
     const delays = delaysBySeat(results, seats, firings);
     for (const seat of seats) {
       seat.delays = delays[seat.seatKey];
     }
-    return this.publicView({
-      match,
-      seats,
-      results,
-      submittedPlayerIds,
-      currentRoundMoves: rawRoundMoves,
-      matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
-      abilityFirings: resolvedFirings(firings, results),
-      serverNow: new Date(this.now()).toISOString(),
-    });
+    return {
+      shared: this.publicView({
+        match,
+        seats,
+        results,
+        submittedPlayerIds,
+        currentRoundMoves: rawRoundMoves,
+        matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
+        abilityFirings: resolvedFirings(firings, results),
+        abilities: {},
+        serverNow: new Date(this.now()).toISOString(),
+      }),
+      abilitiesByPlayerId: chargesByPlayerId(seats, results, firings, match.currentRound),
+    };
   }
 
-  /** Hide in-progress opponent moves; resolved rounds still expose both in `results`. */
+  /**
+   * Hide in-progress opponent moves; resolved rounds still expose both in `results`.
+   * `abilities` is emptied for the same reason and by the same hand — a seat's
+   * charge state is only ever added back by `viewSnapshotAs`, for that seat.
+   */
   private publicView(state: MatchState): MatchState {
-    return { ...state, currentRoundMoves: {} };
+    return { ...state, currentRoundMoves: {}, abilities: {} };
   }
 
-  /** Build the latest state and broadcast it to live subscribers. */
-  private async publishState(matchId: string): Promise<MatchState> {
-    const state = await this.getStateByMatchId(matchId);
-    this.hub?.publish(matchId, state);
-    return state;
+  /** The shared view, for callers with no seat to view as (provisioning, mostly). */
+  private async sharedState(matchId: string): Promise<MatchState> {
+    return (await this.buildSnapshot(matchId)).shared;
+  }
+
+  /** Build the latest snapshot and broadcast it to live subscribers. */
+  private async publishState(matchId: string, viewerPlayerId?: string): Promise<MatchState> {
+    const snapshot = await this.buildSnapshot(matchId);
+    this.hub?.publish(matchId, snapshot);
+    return viewSnapshotAs(snapshot, viewerPlayerId ?? null);
   }
 
   // --- Gameplay -------------------------------------------------------------
@@ -477,12 +501,115 @@ export class GameService {
 
     const moves = await this.repo.getMovesForRound(match.id, match.currentRound);
     if (Object.keys(moves).length < occupied.length) {
-      const broadcast = await this.publishState(match.id);
+      const broadcast = await this.publishState(match.id, playerId);
       // Echo the caller's move so their UI can lock in without exposing the opponent's pick.
       return { ...broadcast, currentRoundMoves: { [playerId]: move as Move } };
     }
 
-    return this.resolveDuelRound(match.id, match.currentRound, match.bestOf, seats, moves, results);
+    return this.resolveDuelRound(
+      match.id,
+      match.currentRound,
+      match.bestOf,
+      seats,
+      moves,
+      results,
+      [],
+      playerId,
+    );
+  }
+
+  /**
+   * Spend a charge on the round being played.
+   *
+   * Its own call rather than a field on the move commit. Oracle (JQ-150) has to
+   * fire, show its owner something, and only *then* be picked against, which a
+   * firing welded to the commit cannot express — and the other five read the same
+   * way round, since Quarantine and Rust are hedges against a move not yet made.
+   * Firing after your own lock-in is therefore allowed: the round is still open
+   * until the opponent moves, and nothing about the hedge stops being a hedge.
+   *
+   * There is no withdrawal. The charge is spent whether or not the ability lands —
+   * Quarantine's miss costs exactly what its hit costs — so an un-fire path would
+   * only ever be a way to buy information and then take the payment back.
+   */
+  async fireAbility(
+    idOrCode: string,
+    playerId: string,
+    firing: { helperId?: unknown; target?: unknown; source?: unknown; round?: number },
+  ): Promise<MatchState> {
+    const { helperId } = firing;
+    if (typeof helperId !== 'string' || helperId === '') {
+      throw new ValidationError('helperId is required');
+    }
+    const found = await this.repo.getMatch(idOrCode);
+    if (!found) throw new NotFoundError('match not found');
+    // Settle any expiry before accepting this, exactly as a move does: a firing
+    // that arrives after the deadline must lose to the policy rather than land on
+    // the round the auto-pick has just resolved.
+    await this.enforceDeadlines(found.id);
+    const match = (await this.repo.getMatch(found.id))!;
+    if (match.status === 'finished') throw new ConflictError('match is already finished');
+    if (firing.round != null && firing.round !== match.currentRound) {
+      throw new ConflictError('round has already moved on');
+    }
+
+    const seats = await this.repo.listSeats(match.id);
+    const occupied = seats.filter((s) => s.player);
+    if (match.status !== 'playing' || occupied.length < seats.length) {
+      throw new ConflictError('waiting for all seats to be filled');
+    }
+    const mySeat = seats.find((s) => s.player?.id === playerId);
+    if (!mySeat) throw new NotFoundError('player not in this match');
+    const theirSeat = seats.find((s) => s.seatKey !== mySeat.seatKey);
+    if (!theirSeat) throw new ConflictError('firing needs an opponent seat');
+
+    // Asked through `slotsFor`, the same source `rulesFor` compiles its abilities
+    // from, so "this seat holds it" cannot drift from "the engine will honour it".
+    if (!slotsFor(mySeat.loadout)[helperId]) {
+      throw new ValidationError(`this seat does not hold '${helperId}'`);
+    }
+    if (helperId === ORACLE) {
+      // Oracle's effect is the mid-round reveal sub-phase JQ-150 owns, and it does
+      // not exist yet. Taking the firing would spend the charge and do nothing —
+      // worse for the player than being told no, and unrecoverable by design.
+      throw new ValidationError(`'${helperId}' cannot be fired yet`);
+    }
+
+    const results = await this.repo.listResults(match.id);
+    const allFirings = await this.repo.listAbilityFirings(match.id);
+    if (firedIn(allFirings, match.currentRound, mySeat.seatKey).length > 0) {
+      throw new ConflictError('this seat already fired an ability this round');
+    }
+    const charge = chargesNow(
+      mySeat.loadout,
+      firingRounds(allFirings, mySeat.seatKey, results),
+    )[helperId];
+    if (!charge?.available) {
+      throw new ConflictError(
+        charge?.marks == null
+          ? `'${helperId}' is spent for this match`
+          : `'${helperId}' is not charged (${charge.marks} mark${charge.marks === 1 ? '' : 's'} to go)`,
+      );
+    }
+
+    const delays = delaysBySeat(results, seats, allFirings);
+    const named = namedMovesFor(helperId, firing, {
+      own: delays[mySeat.seatKey],
+      opponent: delays[theirSeat.seatKey],
+    });
+
+    // The repository's one-per-seat-per-round constraint is the authority on a
+    // double-spend, not the check above: two taps racing through two connections
+    // both pass it, and only one insert survives.
+    await this.repo.recordAbilityFiring({
+      matchId: match.id,
+      seatId: mySeat.id,
+      round: match.currentRound,
+      helperId,
+      target: named.target,
+      source: named.source,
+    });
+    return this.publishState(match.id, playerId);
   }
 
   /** RPS "duel" resolution: exactly two seats, ordered by position. */
@@ -494,11 +621,20 @@ export class GameService {
     moves: Record<string, Move>,
     priorResults: RoundResult[],
     autoPicked: string[] = [],
+    viewerPlayerId?: string,
   ): Promise<MatchState> {
     const [seatA, seatB] = seats;
     const playerA = seatA.player!;
     const playerB = seatB.player!;
-    const played = { a: moves[playerA.id], b: moves[playerB.id] };
+    // Read rather than passed in: both call sites would otherwise have to fetch
+    // firings they do not otherwise need, and an auto-picked round has none.
+    const firings = await this.repo.listAbilityFirings(matchId);
+    const played: PlayedRound = {
+      a: moves[playerA.id],
+      b: moves[playerB.id],
+      firedA: firedIn(firings, round, seatA.seatKey),
+      firedB: firedIn(firings, round, seatB.seatKey),
+    };
     // A round has one winner, but the two players can still read it differently —
     // Sharp Practice scores a Scissors mirror for whoever holds it, and both may.
     // `outcome` records the single winner; each score follows that player's reading.
@@ -537,7 +673,7 @@ export class GameService {
       const match = await this.repo.getMatch(matchId);
       if (match) await this.startPhase(matchId, match.gameMode, round + 1);
     }
-    return this.publishState(matchId);
+    return this.publishState(matchId, viewerPlayerId);
   }
 
   // --- Deadlines and the idle policy ---------------------------------------
@@ -761,6 +897,107 @@ function playerMoveSequence(results: RoundResult[], playerId: string): Move[] {
 function rulesForSeat(seat: Seat): PlayerRules {
   return rulesForSeats(seat, seat)[0];
 }
+
+/** Oracle is held and charged like any ability, but has no effect until JQ-150. */
+const ORACLE = 'oracle';
+
+/**
+ * One seat's firings per resolved round, in round order — the sequence
+ * `abilityMarks` folds. Rounds come from `results` rather than from the firings
+ * themselves: a round nobody fired in still takes a mark off every charge, so it
+ * has to appear in the sequence as an empty entry.
+ */
+function firingRounds(
+  firings: AbilityFiring[],
+  seatKey: string,
+  results: RoundResult[],
+): Firing[][] {
+  return [...results]
+    .sort((a, b) => a.round - b.round)
+    .map((r) => firedIn(firings, r.round, seatKey));
+}
+
+/** Every seat's own charge state, keyed by the player who may see it. */
+function chargesByPlayerId(
+  seats: Seat[],
+  results: RoundResult[],
+  firings: AbilityFiring[],
+  currentRound: number,
+): Record<string, AbilityMap> {
+  const byPlayer: Record<string, AbilityMap> = {};
+  for (const seat of seats) {
+    if (!seat.player) continue;
+    byPlayer[seat.player.id] = chargesNow(
+      seat.loadout,
+      firingRounds(firings, seat.seatKey, results),
+      firedIn(firings, currentRound, seat.seatKey),
+    );
+  }
+  return byPlayer;
+}
+
+/**
+ * What a firing may name, per ability, checked against the marks as they stand
+ * *entering* this round — which is what the firing player was looking at, and what
+ * `fireEffects` reads when the round resolves.
+ *
+ * Rejecting here matters because `rulesFor` deliberately ignores a firing it cannot
+ * honour: an unchecked bad target would not be a free mark, it would be a charge
+ * spent on nothing, and a spent charge does not come back.
+ */
+function namedMovesFor(
+  helperId: string,
+  named: { target?: unknown; source?: unknown },
+  delays: { own: DelayMap; opponent: DelayMap },
+): { target: Move | null; source: Move | null } {
+  const { target, source } = named;
+  const noSource = () => {
+    if (source != null) throw new ValidationError(`'${helperId}' takes no source`);
+  };
+
+  switch (helperId) {
+    // Fired blind, at a move the opponent has not chosen yet, so every move is a
+    // legal guess. That it may miss is the card's price, not a validation failure.
+    case 'quarantine': {
+      if (!isMove(target)) throw new ValidationError(`'${helperId}' must name a move`);
+      noSource();
+      return { target, source: null };
+    }
+    // Rust deepens a cooldown, so it needs one to deepen.
+    case 'rust': {
+      if (!isMove(target)) throw new ValidationError(`'${helperId}' must name a move`);
+      noSource();
+      if (delays.opponent[target] <= 0) {
+        throw new ValidationError(
+          `'${helperId}' needs a move they have on cooldown; '${target}' is clear`,
+        );
+      }
+      return { target, source: null };
+    }
+    // Thief moves a mark rather than adding one, so it names both ends: one of
+    // yours to lift, which must actually carry a mark, and one of theirs to land on.
+    case 'thief': {
+      if (!isMove(source)) throw new ValidationError(`'${helperId}' must name one of your moves`);
+      if (!isMove(target)) {
+        throw new ValidationError(`'${helperId}' must name one of their moves`);
+      }
+      if (delays.own[source] <= 0) {
+        throw new ValidationError(
+          `'${helperId}' needs a mark of your own to take; '${source}' is clear`,
+        );
+      }
+      return { target, source };
+    }
+    // Sacrifice and Freeze act on the round itself, not on a move. Anything an
+    // ability has no use for is refused rather than stored and ignored.
+    default: {
+      if (target != null) throw new ValidationError(`'${helperId}' takes no target`);
+      noSource();
+      return { target: null, source: null };
+    }
+  }
+}
+
 
 /**
  * Firings from rounds that have already resolved.

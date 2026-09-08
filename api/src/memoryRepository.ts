@@ -39,6 +39,7 @@ interface AbilityFiringRow {
   round: number;
   helperId: string;
   target: Move | null;
+  source: Move | null;
 }
 
 interface PlayerRow {
@@ -300,6 +301,7 @@ export class MemoryGameRepository implements GameRepository {
     round: number;
     helperId: string;
     target: Move | null;
+    source: Move | null;
   }): Promise<void> {
     const clash = this.abilityFirings.find(
       (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
@@ -320,6 +322,7 @@ export class MemoryGameRepository implements GameRepository {
         seatKey: seatKeyById.get(f.seatId) ?? f.seatId,
         helperId: f.helperId,
         target: f.target,
+        source: f.source,
       }));
   }
 

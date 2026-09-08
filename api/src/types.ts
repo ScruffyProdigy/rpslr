@@ -1,3 +1,4 @@
+import type { AbilityMap } from './helpers/abilities.js';
 import type { Move } from './game.js';
 import type { Loadout } from './helpers/loadout.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
@@ -110,6 +111,16 @@ export interface MatchState {
    */
   abilityFirings: AbilityFiring[];
   /**
+   * Where the *viewing* seat's own charges stand, per held ability.
+   *
+   * Seat-private, and the reason a snapshot is projected per viewer rather than
+   * broadcast as-is: a charge the viewer has already spent this round reads as
+   * unavailable here, and that is exactly the tell an opponent must not get — it
+   * says an unresolved firing happened. Empty for a viewer the server cannot
+   * identify, and for any seat holding no abilities.
+   */
+  abilities: AbilityMap;
+  /**
    * The server's clock when this snapshot was built, ISO. The client renders
    * `match.phaseDeadline` as an offset from this rather than trusting its own
    * clock, which may be minutes off.
@@ -147,4 +158,10 @@ export interface AbilityFiring {
    * something else.
    */
   target: Move | null;
+  /**
+   * The firing seat's *own* move, for Thief alone — it moves a mark rather than
+   * adding one, so it names where the mark comes from as well as where it goes.
+   * Null for every other ability.
+   */
+  source: Move | null;
 }

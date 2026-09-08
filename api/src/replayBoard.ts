@@ -46,6 +46,14 @@ export interface RecordedFiring {
   seatKey: string;
   helperId: string;
   target: Move | null;
+  /**
+   * Thief's own-side move — the mark it lifts. Null for every other ability.
+   *
+   * Carried for the same reason `target` is: `fireEffects` refuses a Thief firing
+   * that names no source, so dropping it here would not make Thief approximate, it
+   * would make Thief do nothing at all.
+   */
+  source: Move | null;
 }
 
 /** The rules each seat plays by, in seat order. */
@@ -89,11 +97,6 @@ export function playedRoundsFrom(
   a: ReconstructionSeat,
   b: ReconstructionSeat,
 ): PlayedRound[] {
-  const firedIn = (round: number, seatKey: string): Firing[] =>
-    firings
-      .filter((f) => f.round === round && f.seatKey === seatKey)
-      .map((f) => ({ id: f.helperId, target: f.target ?? undefined }));
-
   return [...results]
     .sort((x, y) => x.round - y.round)
     .flatMap((r) => {
@@ -104,11 +107,33 @@ export function playedRoundsFrom(
         {
           a: movedA,
           b: movedB,
-          firedA: firedIn(r.round, a.seatKey),
-          firedB: firedIn(r.round, b.seatKey),
+          firedA: firedIn(firings, r.round, a.seatKey),
+          firedB: firedIn(firings, r.round, b.seatKey),
         },
       ];
     });
+}
+
+/**
+ * One seat's firings in one round, as the engine takes them.
+ *
+ * Exported because the live round needs the same mapping the replay does: the round
+ * being resolved reads its firings here, and every earlier round reads them through
+ * `playedRoundsFrom`. Two spellings of "what did this seat fire" is how the board a
+ * player is shown drifts from the board they played on.
+ */
+export function firedIn(
+  firings: readonly RecordedFiring[],
+  round: number,
+  seatKey: string,
+): Firing[] {
+  return firings
+    .filter((f) => f.round === round && f.seatKey === seatKey)
+    .map((f) => ({
+      id: f.helperId,
+      target: f.target ?? undefined,
+      source: f.source ?? undefined,
+    }));
 }
 
 /** Both seats' marks at one moment in a match. */

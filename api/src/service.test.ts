@@ -375,6 +375,7 @@ describe('GameService — ability firings', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'rock',
+      source: null,
     });
 
     const state = await service.getState(code);
@@ -392,6 +393,7 @@ describe('GameService — ability firings', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'rock',
+      source: null,
     });
 
     await service.submitMove(code, hostId, 'paper');
@@ -399,7 +401,7 @@ describe('GameService — ability firings', () => {
 
     const state = await service.getState(code);
     expect(state.abilityFirings).toEqual([
-      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock' },
+      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock', source: null },
     ]);
   });
 
@@ -414,6 +416,7 @@ describe('GameService — ability firings', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'rock',
+      source: null,
     });
 
     await service.submitMove(code, hostId, 'paper');
@@ -426,7 +429,7 @@ describe('GameService — ability firings', () => {
 
   it('refuses a second firing from the same seat in the same round', async () => {
     const { matchId, seatId } = await playingMatch();
-    const firing = { matchId, seatId, round: 1, helperId: 'rust', target: null };
+    const firing = { matchId, seatId, round: 1, helperId: 'rust', target: null, source: null };
     await repo.recordAbilityFiring(firing);
     await expect(repo.recordAbilityFiring(firing)).rejects.toBeInstanceOf(ConflictError);
   });
@@ -439,9 +442,288 @@ describe('GameService — ability firings', () => {
       round: 1,
       helperId: 'freeze',
       target: null,
-    });
+      source: null,
+});
     expect(await repo.listAbilityFirings(matchId)).toEqual([
-      { round: 1, seatKey: '1', helperId: 'freeze', target: null },
+      { round: 1, seatKey: '1', helperId: 'freeze', target: null, source: null },
     ]);
+  });
+});
+
+/**
+ * JQ-220: the path from a player's decision to the round it changes.
+ *
+ * The loadouts here pair each ability with Poker Face, which binds no move and
+ * prices no round, so every delay number below is the ability's doing and not a
+ * partner card's. Copycat would have re-priced draws and made the arithmetic
+ * argue two things at once.
+ */
+describe('GameService — firing an ability', () => {
+  let repo: MemoryGameRepository;
+  let service: GameService;
+
+  beforeEach(() => {
+    repo = new MemoryGameRepository();
+    service = new GameService(repo, { rng: () => 0 });
+  });
+
+  async function helpersMatch(one: string[], two: string[], bestOf = 5) {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: one }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: two }] },
+      ],
+    });
+    const joined = await service.claimSeat(created.state.match.code, {
+      seatKey: '2',
+      name: 'Bob',
+    });
+    return {
+      code: created.state.match.code,
+      alice: created.you.playerId,
+      bob: joined.you.playerId,
+    };
+  }
+
+  /** Both moves of one round, in the order that resolves it. */
+  async function playRound(code: string, alice: string, a: string, bob: string, b: string) {
+    await service.submitMove(code, alice, a);
+    return service.submitMove(code, bob, b);
+  }
+
+  it('lets a seat fire for the round it is playing, and reports its own charge', async () => {
+    const { code, alice } = await helpersMatch(['freeze', 'poker-face'], ['rust', 'poker-face']);
+
+    const before = await service.getState(code, alice);
+    expect(before.abilities).toEqual({ freeze: { marks: 0, available: true } });
+
+    const after = await service.fireAbility(code, alice, { helperId: 'freeze' });
+    // The charge is spent the moment it is fired, before the round resolves — the
+    // recharge itself lands with the round, so `marks` has not moved yet.
+    expect(after.abilities).toEqual({ freeze: { marks: 0, available: false } });
+  });
+
+  it('is the only source of truth on reconnect — no charge state lives in the process', async () => {
+    const { code, alice } = await helpersMatch(['freeze', 'poker-face'], ['rust', 'poker-face']);
+    await service.fireAbility(code, alice, { helperId: 'freeze' });
+
+    // A brand-new service over the same rows: anything held in memory is gone.
+    const restarted = new GameService(repo, { rng: () => 0 });
+    const state = await restarted.getState(code, alice);
+    expect(state.abilities.freeze).toEqual({ marks: 0, available: false });
+  });
+
+  it('refuses an ability the seat does not hold', async () => {
+    const { code, alice } = await helpersMatch(['freeze', 'poker-face'], ['rust', 'poker-face']);
+    await expect(service.fireAbility(code, alice, { helperId: 'rust' })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  it('refuses a charge that is not yet available', async () => {
+    // Sacrifice opens on 3 marks, so round 1 is three rounds too early.
+    const { code, alice } = await helpersMatch(['sacrifice', 'poker-face'], ['rust', 'poker-face']);
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'sacrifice' }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('refuses a second firing in the same round', async () => {
+    const { code, alice } = await helpersMatch(['freeze', 'poker-face'], ['rust', 'poker-face']);
+    await service.fireAbility(code, alice, { helperId: 'freeze' });
+    await expect(service.fireAbility(code, alice, { helperId: 'freeze' })).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+  });
+
+  it('holds each ability to the target it actually names', async () => {
+    // Alice: Thief (binds lizard, so her lizard opens on 2). Bob: Rust (scissors).
+    const { code, alice } = await helpersMatch(['thief', 'poker-face'], ['rust', 'poker-face']);
+
+    // Sacrifice and Freeze name nothing; a target offered anyway is refused rather
+    // than stored and ignored.
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'thief', target: 'not-a-move', source: 'lizard' }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    // Thief takes from a mark of its owner's, so a clear source is not a firing.
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'thief', target: 'scissors', source: 'rock' }),
+    ).rejects.toThrow(/needs a mark of your own/);
+    // ...and it needs both ends named.
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'thief', target: 'scissors' }),
+    ).rejects.toThrow(/one of your moves/);
+  });
+
+  it('refuses Rust against a move the opponent has clear', async () => {
+    // Bob holds Thief, which binds lizard: lizard is his only move on cooldown.
+    const { code, alice } = await helpersMatch(['rust', 'poker-face'], ['thief', 'poker-face']);
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'rust', target: 'rock' }),
+    ).rejects.toThrow(/on cooldown/);
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'rust', target: 'lizard' }),
+    ).resolves.toBeTruthy();
+  });
+
+  it('lets Quarantine name any move, because it is fired blind', async () => {
+    const { code, alice } = await helpersMatch(
+      ['quarantine', 'poker-face'],
+      ['rust', 'poker-face'],
+    );
+    // Rock is clear for Bob and stays a legal guess — missing is the card's price.
+    const state = await service.fireAbility(code, alice, { helperId: 'quarantine', target: 'rock' });
+    expect(state.abilities.quarantine.available).toBe(false);
+  });
+
+  it('refuses a target for an ability that names none', async () => {
+    const { code, alice } = await helpersMatch(['freeze', 'poker-face'], ['rust', 'poker-face']);
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'freeze', target: 'rock' }),
+    ).rejects.toThrow(/takes no target/);
+  });
+
+  it("refuses Oracle, whose effect JQ-150 owns — a charge spent on nothing is worse than a no", async () => {
+    const { code, alice } = await helpersMatch(['oracle', 'poker-face'], ['rust', 'poker-face']);
+    await expect(service.fireAbility(code, alice, { helperId: 'oracle' })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    const state = await service.getState(code, alice);
+    expect(state.abilities.oracle.available).toBe(true);
+  });
+
+  it('carries the firing into resolution — Rust deepens the cooldown it named', async () => {
+    // Alice: Rust (binds scissors → her scissors opens on 2).
+    // Bob: Thief (binds lizard → his lizard opens on 2, which is what Rust can reach).
+    const { code, alice, bob } = await helpersMatch(
+      ['rust', 'poker-face'],
+      ['thief', 'poker-face'],
+    );
+    await service.fireAbility(code, alice, { helperId: 'rust', target: 'lizard' });
+    const state = await playRound(code, alice, 'rock', bob, 'paper');
+
+    expect(state.results[0].outcome).toBe('2');
+    // Bob's lizard: 2 entering, decremented to 1, then Rust's 2 on top.
+    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 0, lizard: 3, robot: 0 });
+    expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 1, lizard: 0, robot: 0 });
+  });
+
+  it('moves a mark rather than adding one, when the firing is Thief', async () => {
+    const { code, alice, bob } = await helpersMatch(
+      ['thief', 'poker-face'],
+      ['rust', 'poker-face'],
+    );
+    await service.fireAbility(code, alice, {
+      helperId: 'thief',
+      source: 'lizard',
+      target: 'scissors',
+    });
+    const state = await playRound(code, alice, 'rock', bob, 'paper');
+
+    // Alice's own lizard mark is lifted (2 → 1 by decay, then −1); Bob's scissors
+    // takes it (2 → 1 by decay, then +1).
+    expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 0, lizard: 0, robot: 0 });
+    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 2, lizard: 0, robot: 0 });
+  });
+
+  it('replays a firing from an earlier round — Freeze stops the decay it was fired against', async () => {
+    const { code, alice, bob } = await helpersMatch(
+      ['freeze', 'poker-face'],
+      ['rust', 'poker-face'],
+    );
+    await playRound(code, alice, 'rock', bob, 'paper');
+
+    await service.fireAbility(code, alice, { helperId: 'freeze' });
+    const state = await playRound(code, alice, 'paper', bob, 'rock');
+
+    // Bob's marks did not come off this round: scissors held at 1 and paper at 2,
+    // where an unfrozen round would have left 0 and 1.
+    expect(state.seats[1].delays).toEqual({ rock: 2, paper: 2, scissors: 1, lizard: 0, robot: 0 });
+    expect(state.seats[0].delays).toEqual({ rock: 1, paper: 2, scissors: 0, lizard: 0, robot: 0 });
+    // Read as Alice: `playRound` returns Bob's view, because Bob moved last — which
+    // is the projection doing its job. The recharge landed with the round rather
+    // than at firing time.
+    expect(state.abilities).toEqual({ rust: { marks: 0, available: true } });
+    const asAlice = await service.getState(code, alice);
+    expect(asAlice.abilities).toEqual({ freeze: { marks: 3, available: false } });
+  });
+
+  it("resolves a Sacrificed round as a draw and clears only the firing seat's marks", async () => {
+    const { code, alice, bob } = await helpersMatch(
+      ['sacrifice', 'poker-face'],
+      ['freeze', 'poker-face'],
+    );
+    // Three drawn rounds bring Sacrifice's opening 3 marks down to 0.
+    await playRound(code, alice, 'paper', bob, 'paper');
+    await playRound(code, alice, 'scissors', bob, 'scissors');
+    await playRound(code, alice, 'lizard', bob, 'lizard');
+    expect((await service.getState(code, alice)).abilities.sacrifice).toEqual({
+      marks: 0,
+      available: true,
+    });
+
+    await service.fireAbility(code, alice, { helperId: 'sacrifice' });
+    // Paper beats rock, so this round had a winner in it — Sacrifice replaces it.
+    const state = await playRound(code, alice, 'rock', bob, 'paper');
+
+    expect(state.results[3].outcome).toBe('draw');
+    expect(state.seats.map((s) => s.player!.score)).toEqual([0, 0]);
+    // Alice's board is wiped, then her own move takes its cost. Bob keeps his lizard.
+    expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 0, lizard: 0, robot: 0 });
+    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 0, lizard: 1, robot: 0 });
+  });
+
+  it('withholds an unresolved firing from the state, and discloses it once the round resolves', async () => {
+    const { code, alice, bob } = await helpersMatch(
+      ['quarantine', 'poker-face'],
+      ['rust', 'poker-face'],
+    );
+    await service.fireAbility(code, alice, { helperId: 'quarantine', target: 'rock' });
+
+    const midRound = await service.getState(code, bob);
+    expect(midRound.abilityFirings).toEqual([]);
+    // Bob is told about his own charge and nothing about Alice's.
+    expect(Object.keys(midRound.abilities)).toEqual(['rust']);
+
+    // Both hold a scissors-binding Major, so both open with scissors on cooldown.
+    const resolved = await playRound(code, alice, 'rock', bob, 'rock');
+    expect(resolved.abilityFirings).toEqual([
+      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock', source: null },
+    ]);
+  });
+});
+
+describe('GameService — a round nobody fired in', () => {
+  it('auto-picks at the deadline and leaves the charge unspent', async () => {
+    const repo = new MemoryGameRepository();
+    let now = Date.parse('2026-01-01T00:00:00.000Z');
+    const service = new GameService(repo, { now: () => now, rng: () => 0 });
+
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 5,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['freeze', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['rust', 'poker-face'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const alice = created.you.playerId;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+
+    await service.submitMove(code, alice, 'rock');
+    // Bob never answers; the deadline settles the round for him.
+    now = Date.parse(created.state.match.phaseDeadline ?? '2026-01-01T00:01:00.000Z') + 60_000;
+    const state = await service.getState(code, alice);
+
+    expect(state.results).toHaveLength(1);
+    expect(state.results[0].autoPicked).toEqual([joined.you.playerId]);
+    expect(state.abilityFirings).toEqual([]);
+    // A round played for you spends nothing: Freeze took its mark off and is now live.
+    expect(state.abilities).toEqual({ freeze: { marks: 0, available: true } });
   });
 });

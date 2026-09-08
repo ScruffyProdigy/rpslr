@@ -1,16 +1,20 @@
 import { EventEmitter } from 'node:events';
-import type { MatchState } from './types.js';
+import type { MatchSnapshot } from './matchView.js';
 
 /**
  * In-process pub/sub for live match updates, keyed by match id (uuid). The
- * service publishes the fresh state after any mutation; WebSocket connections
+ * service publishes the fresh snapshot after any mutation; WebSocket connections
  * subscribe per match and forward it to the browser.
+ *
+ * What travels is a `MatchSnapshot`, not a `MatchState`: one match has as many
+ * views as it has seats once charge state is in play, and a subscriber has to say
+ * whose it is asking for. `viewSnapshotAs` is the only way to get a state out.
  *
  * NOTE: this is single-process. For multi-replica deployments, back this with a
  * fan-out (Redis pub/sub, NATS, Postgres LISTEN/NOTIFY). Documented as future
  * work — the interface stays the same.
  */
-export type MatchListener = (state: MatchState) => void;
+export type MatchListener = (snapshot: MatchSnapshot) => void;
 
 export class MatchHub {
   private readonly emitter = new EventEmitter();
@@ -25,8 +29,8 @@ export class MatchHub {
     return () => this.emitter.off(matchId, listener);
   }
 
-  publish(matchId: string, state: MatchState): void {
-    this.emitter.emit(matchId, state);
+  publish(matchId: string, snapshot: MatchSnapshot): void {
+    this.emitter.emit(matchId, snapshot);
   }
 
   /** Number of active listeners for a match (handy in tests/metrics). */

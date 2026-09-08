@@ -32,7 +32,7 @@ export interface AbilityState {
 export type AbilityMap = Record<string, AbilityState>;
 
 /** All this fold needs of a firing. `PlayedRound`'s `Firing` satisfies it. */
-interface Fired {
+export interface Fired {
   id: string;
 }
 
@@ -83,4 +83,29 @@ export function abilityMarks(
   firings: readonly (readonly Fired[])[],
 ): AbilityMap {
   return slotMarks(slotsFor(loadout), firings);
+}
+
+/**
+ * A seat's charges as they stand *now* — the fold over resolved rounds, with an
+ * unresolved firing in the round being played marked spent.
+ *
+ * The fold cannot simply be handed the pending round. `slotMarks` takes a mark off
+ * per round and then charges that round's recharge, and the round being played has
+ * earned neither: its decrement lands when it resolves. But a charge already spent
+ * in it must not read `available`, or a client would offer a card the repository's
+ * one-firing-per-round constraint is about to refuse. Suppressing availability says
+ * exactly that much and leaves the arithmetic alone.
+ */
+export function chargesNow(
+  loadout: Loadout | null,
+  resolved: readonly (readonly Fired[])[],
+  pending: readonly Fired[] = [],
+): AbilityMap {
+  const map = abilityMarks(loadout, resolved);
+  for (const { id } of pending) {
+    // A pending firing naming an ability this seat does not hold is the caller's to
+    // reject, exactly as in `slotMarks`. Ignoring it keeps this total too.
+    if (map[id]) map[id] = { ...map[id], available: false };
+  }
+  return map;
 }

@@ -394,12 +394,13 @@ export class PgGameRepository implements GameRepository {
     round: number;
     helperId: string;
     target: Move | null;
+    source: Move | null;
   }): Promise<void> {
     try {
       await this.pool.query(
-        `INSERT INTO ability_firings (match_id, seat_id, round, helper_id, target)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [input.matchId, input.seatId, input.round, input.helperId, input.target],
+        `INSERT INTO ability_firings (match_id, seat_id, round, helper_id, target, source)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [input.matchId, input.seatId, input.round, input.helperId, input.target, input.source],
       );
     } catch (err) {
       // The unique index is the authority on one firing per seat per round; a
@@ -414,7 +415,7 @@ export class PgGameRepository implements GameRepository {
 
   async listAbilityFirings(matchId: string): Promise<AbilityFiring[]> {
     const res = await this.pool.query(
-      `SELECT f.round, f.helper_id, f.target, s.seat_key
+      `SELECT f.round, f.helper_id, f.target, f.source, s.seat_key
          FROM ability_firings f JOIN seats s ON s.id = f.seat_id
         WHERE f.match_id = $1
         ORDER BY f.round ASC, s.position ASC`,
@@ -426,6 +427,7 @@ export class PgGameRepository implements GameRepository {
         seatKey: row.seat_key,
         helperId: row.helper_id,
         target: row.target ?? null,
+        source: row.source ?? null,
       }),
     );
   }

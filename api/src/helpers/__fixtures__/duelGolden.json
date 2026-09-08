@@ -2586,6 +2586,7 @@
   "duel": {
     "perRound": [
       {
+        "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
@@ -2681,6 +2682,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
@@ -2785,6 +2787,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
@@ -2898,6 +2901,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
@@ -3020,6 +3024,7 @@
         "submittedPlayerIds": []
       },
       {
+        "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
         "match": {
@@ -3152,6 +3157,7 @@
       }
     ],
     "final": {
+      "abilities": {},
       "abilityFirings": [],
       "currentRoundMoves": {},
       "match": {
