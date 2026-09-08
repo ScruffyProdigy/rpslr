@@ -9,11 +9,12 @@ import type { AppConfig } from '../config.js';
 import type { GameService } from '../service.js';
 import { withAvatars } from './avatars.js';
 import { TtlCache } from './cache.js';
-import { renderCardPng } from './cardImage.js';
+import { renderCardPng, renderStoryPng } from './cardImage.js';
 import { buildCardModel, genericCardModel, type CardModel } from './cardModel.js';
 import { cardSvg } from './cardSvg.js';
 import { FALLBACK_SHELL, getClientShell } from './clientTemplate.js';
 import { injectMeta } from './metaHtml.js';
+import { storySvg } from './storySvg.js';
 
 export interface ReplayCardDeps {
   service: Pick<GameService, 'getState'>;
@@ -29,9 +30,22 @@ const NO_STORE = 'no-store, no-cache, must-revalidate';
 export function registerReplayCardRoutes(app: Express, deps: ReplayCardDeps): void {
   const models = new TtlCache<CardModel>(MODEL_TTL_MS);
   const images = new TtlCache<Buffer>(MODEL_TTL_MS);
+  // Stories are ten times the pixels of a link card; a smaller shelf keeps the
+  // two from together holding more than a card server has any business holding.
+  const stories = new TtlCache<Buffer>(MODEL_TTL_MS, 60);
   const origin = deps.config.playUrl.replace(/\/$/, '');
 
-  app.get('/replay/:ref', async (req: Request, res: Response) => {
+  /**
+   * The short link the story card prints and encodes. It resolves the same way
+   * every other ref does — `getState` has always taken a join code — so it
+   * serves the page rather than redirecting to the long URL. A redirect would
+   * move the og: card onto the long URL, and the short one is the one people
+   * type.
+   */
+  app.get('/r/:ref', replayPage);
+  app.get('/replay/:ref', replayPage);
+
+  async function replayPage(req: Request, res: Response): Promise<void> {
     const ref = req.params.ref;
     const by = seatParam(req);
     const query = by ? `?by=${encodeURIComponent(by)}` : '';
@@ -52,10 +66,45 @@ export function registerReplayCardRoutes(app: Express, deps: ReplayCardDeps): vo
       .send(
         injectMeta(shell, {
           model,
-          pageUrl: `${origin}/replay/${encodeURIComponent(ref)}${query}`,
+          // The URL the reader is actually on. A short link shared onward stays
+          // short, and the two forms cache apart on every platform rather than
+          // one of them previewing as the other.
+          pageUrl: `${origin}${req.path}${query}`,
           imageUrl: `${origin}/api/v1/replay/${encodeURIComponent(ref)}/card.png${query}`,
         }),
       );
+  }
+
+  /**
+   * The story card. Not an og:image — nothing crawls this — but the file the
+   * share sheet hands to Instagram, so the same rule applies: it may never fail.
+   * A share button that reports an error is worse than one that shares a
+   * generic card.
+   */
+  app.get('/replay/:ref/story.png', async (req: Request, res: Response) => {
+    const ref = req.params.ref;
+    const by = seatParam(req);
+    const key = cacheKey(ref, by);
+
+    let png = stories.get(key);
+    let cacheable = png !== undefined;
+
+    if (!png) {
+      try {
+        const model = await withAvatars(await modelFor(ref, by), { fetchImpl: deps.fetchImpl });
+        png = renderStoryPng(storySvg(model, { origin }));
+        cacheable = model.cacheable;
+        if (cacheable) stories.set(key, png);
+      } catch {
+        png = renderStoryPng(storySvg(genericCardModel(ref), { origin }));
+        cacheable = false;
+      }
+    }
+
+    res
+      .type('image/png')
+      .set('Cache-Control', cacheable ? IMMUTABLE : NO_STORE)
+      .send(png);
   });
 
   app.get('/api/v1/replay/:ref/card.png', async (req: Request, res: Response) => {
