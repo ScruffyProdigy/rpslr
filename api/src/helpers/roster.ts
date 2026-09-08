@@ -12,17 +12,34 @@ import type { Move } from '../game.js';
 export type Tier = 'Major' | 'Minor' | 'Trinket';
 
 /**
- * How a helper spends itself. `passive` is always on; `charge` is fired by choice.
- * `per-round` is on its way out — Quarantine was its only user and now recharges
- * like everything else, so Task 1.6 collapses this to passive-or-ability.
+ * How a helper spends itself.
  *
- * A charge is not spent once and gone: it sits on its own slot on the cooldown
- * track with opening and recharge marks, in the same delay marks a move uses, and
- * "once per match" is a recharge of never. Those numbers land in Task 1.6 — until
- * then this stays a bare string, because inventing the structure before the effects
- * exist would be structure nothing reads.
+ * A `passive` is always on. An `ability` is fired by choice and occupies its own slot
+ * on the cooldown track, counted in the same delay marks a move uses: `opening` is
+ * how many marks it starts with, and so how long before it is first available, and
+ * `recharge` is what firing costs, and so how often it comes back.
+ *
+ * `recharge: null` means it never does — "once per match" is a value here rather than
+ * a separate kind. There is no per-round kind either: Quarantine names its move when
+ * it fires, like any other ability.
+ *
+ * The effects themselves are not implemented (Task 1.6). The numbers are declared
+ * here anyway, because they are data the picker has to render rather than signatures
+ * anyone is waiting on — and because they are all first guesses, meant to move as
+ * JQ-152's telemetry comes in rather than to be argued to a conclusion first.
  */
-export type Load = 'passive' | 'charge' | 'per-round';
+export type Load =
+  | { kind: 'passive' }
+  | { kind: 'ability'; opening: number; recharge: number | null };
+
+export type AbilityLoad = { kind: 'ability'; opening: number; recharge: number | null };
+
+/** Written once so the roster below reads as a table rather than as boilerplate. */
+const PASSIVE = { kind: 'passive' } as const;
+
+export function isAbility(load: Load): load is AbilityLoad {
+  return load.kind === 'ability';
+}
 
 /** Marks a helper places on its bound move at the start of the match. */
 export const MARK_COST: Record<Tier, number> = { Major: 2, Minor: 1, Trinket: 0 };
@@ -37,7 +54,7 @@ export interface HelperDef<T extends Tier = Tier> {
   name: string;
   tier: T;
   boundMove: T extends 'Trinket' ? null : Move;
-  load: T extends 'Major' ? Load : 'passive';
+  load: T extends 'Major' ? Load : { kind: 'passive' };
   /**
    * Player-facing copy; also the `blurb` in the queue-options roster.
    *
@@ -51,47 +68,51 @@ export interface HelperDef<T extends Tier = Tier> {
 
 const MAJORS = [
   { id: 'good-old-rock', name: 'Good Old Rock', tier: 'Major', boundMove: 'rock',
-    load: 'passive', blurb: 'When you play Rock, a loss becomes a draw.' },
+    load: PASSIVE, blurb: 'When you play Rock, a loss becomes a draw.' },
   { id: 'chimera', name: 'Chimera', tier: 'Major', boundMove: 'lizard',
-    load: 'passive', blurb: 'Your Lizard also beats Scissors, all match.' },
+    load: PASSIVE, blurb: 'Your Lizard also beats Scissors, all match.' },
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
-    load: 'passive', blurb: 'When you play Robot, the move they played takes an extra mark.' },
+    load: PASSIVE, blurb: 'When you play Robot, the move they played takes an extra mark.' },
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: 'per-round', blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 },
+    blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
-    load: 'charge', blurb: 'Learn one live move they did not play, then re-pick.' },
-  // The four below have no effect yet. They are named here because the roster
-  // endpoint and the ladder test need all 22; JQ-147 Task 1.6 implements them, at
-  // which point `load` carries their opening and recharge marks rather than the
-  // bare string 'charge'. Sacrifice and Oracle are gated to arrive late; the rest
-  // are available from round 1.
+    load: { kind: 'ability', opening: 0, recharge: 3 },
+    blurb: 'Learn one live move they did not play, then re-pick.' },
+  // The four below carry their marks but no effect yet — Task 1.6 implements those.
+  // Sacrifice opens on 3 so it cannot fire before round 4: its early line is
+  // degenerate rather than merely weak, which is the only reason to gate a card.
   { id: 'sacrifice', name: 'Sacrifice', tier: 'Major', boundMove: 'rock',
-    load: 'charge', blurb: 'Declare the round a draw before picking, and clear all your marks.' },
+    load: { kind: 'ability', opening: 3, recharge: 3 },
+    blurb: 'Declare the round a draw before picking, and clear all your marks.' },
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
-    load: 'charge', blurb: 'Add 2 marks to a move they currently have live.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 },
+    blurb: 'Add 2 marks to a move they currently have live.' },
   { id: 'thief', name: 'Thief', tier: 'Major', boundMove: 'lizard',
-    load: 'charge', blurb: 'Move one mark from one of your moves onto one of theirs.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 },
+    blurb: 'Move one mark from one of your moves onto one of theirs.' },
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
-    load: 'charge', blurb: "Their marks don't decrement this round." },
+    load: { kind: 'ability', opening: 0, recharge: 3 },
+    blurb: "Their marks don't decrement this round." },
   // A Major because cancelling their first win is worth ~+15.6pp — first-to-3
   // against first-to-4 is a six-round race you take with three wins, 42/64. A tier
   // step is only worth ~3pp, so this is the defensible price rather than the right
   // one; the effect itself is what wants revisiting. See JQ-209.
   { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
-    load: 'passive', blurb: 'The first round you lose is a draw instead.' },
+    load: PASSIVE, blurb: 'The first round you lose is a draw instead.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
   { id: 'echo-chamber', name: 'Echo Chamber', tier: 'Minor', boundMove: 'paper',
-    load: 'passive', blurb: "On a drawn round, their move takes an extra mark and yours doesn't." },
+    load: PASSIVE, blurb: "On a drawn round, their move takes an extra mark and yours doesn't." },
   { id: 'sharp-practice', name: 'Sharp Practice', tier: 'Minor', boundMove: 'scissors',
-    load: 'passive', blurb: 'A Scissors mirror is a win for you, not a draw.' },
+    load: PASSIVE, blurb: 'A Scissors mirror is a win for you, not a draw.' },
   { id: 'grudge', name: 'Grudge', tier: 'Minor', boundMove: 'scissors',
-    load: 'passive', blurb: 'The move that beat you last round takes an extra mark for them.' },
+    load: PASSIVE, blurb: 'The move that beat you last round takes an extra mark for them.' },
   { id: 'tempered', name: 'Tempered', tier: 'Minor', boundMove: 'lizard',
-    load: 'passive', blurb: 'Your winning move takes 3 marks; your losing move takes 1.' },
+    load: PASSIVE, blurb: 'Your winning move takes 3 marks; your losing move takes 1.' },
   { id: 'featherweight', name: 'Featherweight', tier: 'Minor', boundMove: 'lizard',
-    load: 'passive', blurb: 'Your Lizard takes 1 mark instead of 2.' },
+    load: PASSIVE, blurb: 'Your Lizard takes 1 mark instead of 2.' },
   // Blind Spot was cut here. It hid a cooldown that is fully derivable from the
   // public move history, so it did nothing to an opponent doing the arithmetic and
   // only obstructed one who wasn't — the inverse of the design doc's own case
@@ -105,17 +126,17 @@ const TRINKETS = [
   // honestly priced at nothing. Unlike Blind Spot it is at least not derivable —
   // lock-in is live state, absent from the move history.
   { id: 'poker-face', name: 'Poker Face', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: 'The opponent is never told you have locked in.' },
+    load: PASSIVE, blurb: 'The opponent is never told you have locked in.' },
   { id: 'small-mercy', name: 'Small Mercy', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: 'The first round you lose, the move that beat you takes an extra mark.' },
+    load: PASSIVE, blurb: 'The first round you lose, the move that beat you takes an extra mark.' },
   { id: 'copycat', name: 'Copycat', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: 'On a drawn round, your move takes 1 mark instead of 2.' },
+    load: PASSIVE, blurb: 'On a drawn round, your move takes 1 mark instead of 2.' },
   { id: 'bookend', name: 'Bookend', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: 'Your first move of the match takes 1 mark instead of 2.' },
+    load: PASSIVE, blurb: 'Your first move of the match takes 1 mark instead of 2.' },
   { id: 'old-habits', name: 'Old Habits', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: 'You are shown which move the opponent has played most this match.' },
+    load: PASSIVE, blurb: 'You are shown which move the opponent has played most this match.' },
   { id: 'watchful', name: 'Watchful', tier: 'Trinket', boundMove: null,
-    load: 'passive', blurb: "You are shown the opponent's cooldowns as they will stand next round." },
+    load: PASSIVE, blurb: "You are shown the opponent's cooldowns as they will stand next round." },
 ] as const satisfies readonly HelperDef<'Trinket'>[];
 
 export const HELPERS: readonly HelperDef[] = [...MAJORS, ...MINORS, ...TRINKETS];

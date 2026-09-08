@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELPERS, MARK_COST, getHelper } from './roster.js';
+import { HELPERS, MARK_COST, getHelper, isAbility } from './roster.js';
 
 describe('helper roster', () => {
   it('holds 21 helpers at the current tier counts', () => {
@@ -23,10 +23,50 @@ describe('helper roster', () => {
     }
   });
 
-  it('gives only Majors a non-passive load', () => {
+  it('gives only Majors an ability', () => {
     for (const h of HELPERS) {
-      if (h.tier !== 'Major') expect(h.load, h.id).toBe('passive');
+      if (h.tier !== 'Major') expect(h.load, h.id).toEqual({ kind: 'passive' });
     }
+  });
+
+  it('gives every ability an opening and a recharge in delay marks', () => {
+    const abilities = HELPERS.filter((h) => isAbility(h.load));
+    expect(abilities.map((h) => h.id).sort()).toEqual([
+      'freeze',
+      'oracle',
+      'quarantine',
+      'rust',
+      'sacrifice',
+      'thief',
+    ]);
+    for (const h of abilities) {
+      const load = h.load;
+      if (!isAbility(load)) throw new Error('filtered above');
+      expect(load.opening, h.id).toBeGreaterThanOrEqual(0);
+      // A recharge of 0 would be "every round", which is what Quarantine was
+      // repriced away from; null is the deliberate "once per match".
+      if (load.recharge !== null) expect(load.recharge, h.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('starts every ability uniform except the one deliberate exception', () => {
+    // Uniform on purpose: the first telemetry read should vary one thing at a time.
+    // Sacrifice is gated late because its early line is degenerate, not just weak.
+    const marks = Object.fromEntries(
+      HELPERS.filter((h) => isAbility(h.load)).map((h) => {
+        const load = h.load;
+        if (!isAbility(load)) throw new Error('filtered above');
+        return [h.id, `${load.opening}/${load.recharge}`];
+      }),
+    );
+    expect(marks).toEqual({
+      quarantine: '0/3',
+      oracle: '0/3',
+      rust: '0/3',
+      thief: '0/3',
+      freeze: '0/3',
+      sacrifice: '3/3',
+    });
   });
 
   it('looks a helper up by id', () => {
