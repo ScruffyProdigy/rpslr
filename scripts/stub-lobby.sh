@@ -10,8 +10,9 @@
 #   ./scripts/stub-lobby.sh duplicate-helper    expect a 400
 #   ./scripts/stub-lobby.sh --all               run every fixture, check each expectation
 #
-# Fixtures live in docs/fixtures/prequeue and are the contract's specification:
-# see docs/prequeue-options-contract.md.
+# Fixtures live in docs/fixtures/prequeue and are the specification; their README
+# points at the wire contract, which is JoinQuest platform documentation rather than
+# this repo's (lobby developer integration guide, §13 Pre-queue options).
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_env
 
