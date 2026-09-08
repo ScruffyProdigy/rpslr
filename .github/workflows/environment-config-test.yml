@@ -111,3 +111,29 @@ jobs:
           echo "$out" | grep -q 'https://rps.staging.example/api' \
             || { echo "::error::env.js missing injected GAME_API_BASE_URL"; exit 1; }
           echo "ok: runtime env injection works"
+
+      # 7. index.html must never be cacheable. It is the only thing naming which
+      #    hashed bundle to load, and those are immutable for a year — so a
+      #    stale index.html means a browser quietly runs the previous release
+      #    with nothing visibly broken. Assets must stay immutable.
+      - name: Cache headers let a deploy actually reach a browser
+        run: |
+          set -e
+          docker build -t rps-client-cachetest ./client
+          cid=$(docker run -d -p 8099:80 rps-client-cachetest)
+          sleep 4
+          html_cc=$(curl -sI http://localhost:8099/ | tr -d '\r' | grep -i '^cache-control:' || true)
+          spa_cc=$(curl -sI http://localhost:8099/replay/x | tr -d '\r' | grep -i '^cache-control:' || true)
+          asset=$(curl -s http://localhost:8099/ | grep -o '/assets/index-[A-Za-z0-9_-]*\.js' | head -1)
+          asset_cc=$(curl -sI "http://localhost:8099$asset" | tr -d '\r' | grep -i '^cache-control:' || true)
+          docker rm -f "$cid" >/dev/null
+          echo "html:  $html_cc"
+          echo "spa:   $spa_cc"
+          echo "asset: $asset_cc"
+          echo "$html_cc" | grep -q 'no-cache' \
+            || { echo "::error::index.html is cacheable — a deploy may not reach browsers"; exit 1; }
+          echo "$spa_cc" | grep -q 'no-cache' \
+            || { echo "::error::SPA fallback HTML is cacheable"; exit 1; }
+          echo "$asset_cc" | grep -q 'immutable' \
+            || { echo "::error::hashed assets lost immutable caching"; exit 1; }
+          echo "ok: html revalidates, assets stay immutable"
