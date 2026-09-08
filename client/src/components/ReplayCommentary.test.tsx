@@ -95,7 +95,9 @@ describe('<ReplayCommentary>', () => {
 
   it('adds the notes the sentence has no room for', () => {
     renderAt(0);
-    expect(screen.getByText("Ben's Paper is now out for 2 rounds.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ben's Paper is out for the rest of the match."),
+    ).toBeInTheDocument();
   });
 
   it('shows the rule this round is the first to demonstrate, until it is dismissed', async () => {

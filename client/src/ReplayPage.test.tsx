@@ -201,7 +201,9 @@ describe('<ReplayPage> commentary', () => {
         'Ana plays Rock, Ben plays Scissors — Rock crushes Scissors. Ana leads 1–0.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Ana's Rock is now out for 2 rounds.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ana's Rock is out for the rest of the match."),
+    ).toBeInTheDocument();
   });
 
   it('explains a rule the first round it is visible, and lets it be dismissed', async () => {
