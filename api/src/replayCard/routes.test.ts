@@ -4,6 +4,7 @@ import { createApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { MemoryGameRepository } from '../memoryRepository.js';
 import { GameService } from '../service.js';
+import { MAX_STORY_BYTES, pngSize } from './cardImage.js';
 import { resetShellCache } from './clientTemplate.js';
 
 const SHELL =
@@ -115,5 +116,101 @@ describe('GET /api/v1/replay/:ref/card.png', () => {
     const res = await request(app).get('/api/v1/replay/nope/card.png').responseType('blob');
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toContain('no-store');
+  });
+});
+
+describe('GET /replay/:ref/story.png', () => {
+  it('hands back a 1080×1920 PNG for a finished match', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const res = await request(app).get(`/replay/${code}/story.png`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(pngSize(res.body)).toEqual({ width: 1080, height: 1920 });
+    expect(res.body.byteLength).toBeLessThanOrEqual(MAX_STORY_BYTES);
+  });
+
+  it('caches a finished match immutably and an unfinished one not at all', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const done = await request(app).get(`/replay/${code}/story.png`);
+    expect(done.headers['cache-control']).toContain('immutable');
+
+    const live = await service.createStandaloneMatch({ hostName: 'Ana', bestOf: 3 });
+    const open = await request(app).get(`/replay/${live.state.match.code}/story.png`);
+    expect(open.status).toBe(200);
+    expect(open.headers['cache-control']).toContain('no-store');
+  });
+
+  // The share sheet is already open by the time this is fetched. An error here
+  // is a button that appears broken, so there is no error to be had.
+  it('answers with a card rather than an error for an unknown ref', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/replay/RPS-NOPE/story.png');
+    expect(res.status).toBe(200);
+    expect(pngSize(res.body)).toEqual({ width: 1080, height: 1920 });
+  });
+
+  it('answers with a card when the database is gone', async () => {
+    const { app, service } = buildApp();
+    vi.spyOn(service, 'getState').mockRejectedValue(new Error('no database'));
+    const res = await request(app).get('/replay/anything/story.png');
+    expect(res.status).toBe(200);
+    expect(pngSize(res.body)).toEqual({ width: 1080, height: 1920 });
+  });
+
+  it('draws the winner’s own card apart from the neutral one', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const mine = await request(app).get(`/replay/${code}/story.png?by=1`);
+    const neutral = await request(app).get(`/replay/${code}/story.png`);
+    expect(mine.status).toBe(200);
+    expect(neutral.status).toBe(200);
+    // Different headlines, so different pixels — and different cache entries.
+    expect(mine.body.equals(neutral.body)).toBe(false);
+  });
+
+  it('does not swallow the replay page itself', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const page = await request(app).get(`/replay/${code}`);
+    expect(page.headers['content-type']).toMatch(/text\/html/);
+  });
+});
+
+describe('GET /r/:code', () => {
+  it('serves the replay page for a match join code', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const res = await request(app).get(`/r/${code}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('og:title" content="Ana beat Ben 2–0 in RPSLR"');
+    expect(res.text).toContain('<script src="/assets/x.js"></script>');
+  });
+
+  // The short URL is the one printed on the story card, so it is the one people
+  // paste. It must preview as itself, not redirect the card onto the long form.
+  it('names itself as the canonical URL rather than the long one', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const res = await request(app).get(`/r/${code}`);
+    expect(res.text).toContain(`og:url" content="https://rpsls-duel.win/r/${code}"`);
+    expect(res.text).not.toContain(`og:url" content="https://rpsls-duel.win/replay/${code}"`);
+  });
+
+  it('carries ?by= through, as the long route does', async () => {
+    const { app, service } = buildApp();
+    const code = await finishedMatch(service);
+    const res = await request(app).get(`/r/${code}?by=1`);
+    expect(res.text).toContain('og:title" content="Ana wins 2–0!"');
+    expect(res.text).toContain(`og:url" content="https://rpsls-duel.win/r/${code}?by=1"`);
+  });
+
+  it('answers with the generic card for a code that means nothing', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/r/RPS-ZZZZ');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('og:title" content="RPSLR on JoinQuest"');
   });
 });

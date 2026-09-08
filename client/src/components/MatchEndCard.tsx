@@ -31,6 +31,7 @@ export function MatchEndCard({
   activeRound = null,
   onSelectRound,
   replayUrl = null,
+  storyImageUrl = null,
   playCtaUrl = null,
   called = null,
 }: {
@@ -55,6 +56,8 @@ export function MatchEndCard({
   onSelectRound?: (round: number) => void;
   /** Link to this match's replay — offered to the players who just played it. */
   replayUrl?: string | null;
+  /** The story card for this match, for share sheets that take a file. */
+  storyImageUrl?: string | null;
   /** Link to JoinQuest — offered to whoever is watching the replay. */
   playCtaUrl?: string | null;
   /** How a play-along watcher's calls went, when they made any. */
@@ -138,7 +141,7 @@ export function MatchEndCard({
         />
       </div>
 
-      {replayUrl && <ShareReplayButton url={replayUrl} />}
+      {replayUrl && <ShareReplayButton url={replayUrl} imageUrl={storyImageUrl} />}
 
       {playCtaUrl && (
         <div className="match-end__cta">

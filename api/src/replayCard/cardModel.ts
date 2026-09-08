@@ -3,6 +3,7 @@
  * SVG and the meta tags alike. Pure: no fetching, no rendering, no Express.
  */
 import type { Move } from '../game.js';
+import { showdownCaption } from './moveVerbs.js';
 import type { MatchState, RoundResult, Seat } from '../types.js';
 
 export type CardKind = 'match' | 'generic';
@@ -20,6 +21,18 @@ export interface CardPlayer {
   winner: boolean;
 }
 
+/**
+ * The round that won the match, as the story card draws it. Null whenever no
+ * single round did — a draw, a forfeit, or moves we cannot pair up.
+ */
+export interface Showdown {
+  round: number;
+  winnerMove: Move;
+  loserMove: Move;
+  /** "Robot vaporizes Rock". */
+  caption: string;
+}
+
 export interface CardModel {
   kind: CardKind;
   ref: string;
@@ -31,6 +44,14 @@ export interface CardModel {
   players: CardPlayer[];
   /** false for generic and unfinished — those must not be cached by a platform. */
   cacheable: boolean;
+  /**
+   * The two fields only the story card draws. They live here rather than in a
+   * parallel model so the two cards can differ in how they draw a match but
+   * never in what they know about it.
+   */
+  showdown: Showdown | null;
+  /** The match's join code, which doubles as the /r/:code short link. */
+  shortCode: string | null;
 }
 
 const MAX_DESCRIPTION = 200;
@@ -48,6 +69,8 @@ export function genericCardModel(ref: string): CardModel {
       'Rock, paper, scissors, lizard, robot — every move goes on cooldown after you play it.',
     players: [],
     cacheable: false,
+    showdown: null,
+    shortCode: null,
   };
 }
 
@@ -105,7 +128,41 @@ export function buildCardModel(
     ogDescription: describeRounds(state, ordered, first.name, decided),
     players,
     cacheable: true,
+    showdown: decidingShowdown(state, ordered, winnerSeatKey, decided),
+    shortCode: state.match.code || null,
   };
+}
+
+/**
+ * The last round the match winner took — the one that ended it. Not the final
+ * round, which may well have been a draw, and not any round at all when the
+ * match was drawn or forfeited: neither has a move worth drawing.
+ */
+function decidingShowdown(
+  state: MatchState,
+  seats: Seat[],
+  winnerSeatKey: string | null,
+  decided: boolean,
+): Showdown | null {
+  if (!decided || winnerSeatKey === null) return null;
+  if (state.match.endReason && state.match.endReason !== 'played') return null;
+
+  const winner = seats.find((s) => s.seatKey === winnerSeatKey);
+  const loser = seats.find((s) => s.seatKey !== winnerSeatKey);
+
+  for (let i = state.results.length - 1; i >= 0; i -= 1) {
+    const result = state.results[i];
+    if (result.outcome !== winnerSeatKey) continue;
+    const winnerMove = moveOf(result, winner);
+    const loserMove = moveOf(result, loser);
+    if (!winnerMove || !loserMove) return null;
+    const caption = showdownCaption(winnerMove, loserMove);
+    // A pair with no verb is a pair the rules do not decide; drawing it would
+    // put a contradiction on the card.
+    if (!caption) return null;
+    return { round: result.round, winnerMove, loserMove, caption };
+  }
+  return null;
 }
 
 function displayName(seat: Seat): string {

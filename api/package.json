@@ -15,7 +15,8 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "card:preview": "tsx scripts/cardPreview.ts"
+    "card:preview": "tsx scripts/cardPreview.ts",
+    "story:preview": "tsx scripts/storyPreview.ts"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -24,6 +25,7 @@
     "express": "^4.21.2",
     "jose": "^5.9.6",
     "pg": "^8.13.1",
+    "qrcode-generator": "^2.0.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -36,6 +38,7 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
+    "jsqr": "^1.4.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",

@@ -146,3 +146,34 @@ The card's fonts live in `api/assets/fonts` as TTF: resvg cannot read the
 recognise rather than complaining, so a card set in the wrong face is a silent
 failure. `cardImage.test.ts` renders two families and fails if they come out
 identical.
+
+### Story cards and the short link
+
+Instagram Stories, Snapchat and TikTok render no link preview at all, so the
+card above never appears on any of them. What works there is handing over the
+image itself: `navigator.share({ files })` drops a PNG into the share sheet, and
+the person lands in the Stories composer with the card already placed.
+
+```bash
+open http://localhost:3001/replay/RPS-ABCD/story.png     # 1080×1920
+curl -s localhost:3001/r/RPS-ABCD | grep og:url          # the short route
+```
+
+`npm run story:preview -- /tmp/story.png` in `api/` renders one with no match
+behind it. Pass `nowin` or `generic` as a second argument for the drawn-match
+and fallback layouts.
+
+Two rules the tests keep, both of which have already been broken once:
+
+- **Instagram's chrome covers the top and bottom 250px.** `storyLayout.test.ts`
+  checks the declared boxes, but a box only says where we *meant* to draw —
+  `storySvg.test.ts` rasterises the card and looks for ink outside the safe
+  area, which is what caught the short URL running past the gutter.
+- **The QR has to actually scan.** `qrSvg.test.ts` renders it and reads it back
+  with a decoder rather than asserting the shape of the path.
+
+`/r/:code` takes the match's own `RPS-XXXX` join code — `getMatch` has always
+resolved it — and serves the replay page rather than redirecting, so the short
+URL previews as itself. It needs an ingress rule in **both**
+`k8s/base/ingress.yaml` and `k8s/env/production-ingress.yaml`: the production
+overlay replaces the base rules wholesale.

@@ -37,6 +37,16 @@ spec:
                 name: rps-game-api
                 port:
                   number: 3001
+          # The short replay link printed and QR-encoded on the story card
+          # (JQ-122). Prefix matching is element-wise, so this takes /r/RPS-K7M2
+          # and leaves /replay alone.
+          - path: /r
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-api
+                port:
+                  number: 3001
           - path: /healthz
             pathType: Prefix
             backend:
