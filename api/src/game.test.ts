@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   availableMoves,
+  BASE_RULES,
+  BEATS,
   computeDelays,
   decideRound,
   INITIAL_DELAYS,
+  replayMatch,
+  seatWinner,
+  type Move,
+  type PlayerRules,
   isMove,
   matchWinner,
   winsNeeded,
@@ -93,5 +99,130 @@ describe('winsNeeded / matchWinner', () => {
     expect(matchWinner(2, 1, 3)).toBeNull();
     expect(matchWinner(3, 1, 3)).toBe('a');
     expect(matchWinner(0, 3, 3)).toBe('b');
+  });
+});
+
+describe('decideRound with a per-player graph', () => {
+  it('is unchanged when no table is passed', () => {
+    expect(decideRound('rock', 'scissors')).toBe('a');
+    expect(decideRound('scissors', 'rock')).toBe('b');
+    expect(decideRound('rock', 'rock')).toBe('draw');
+  });
+
+  it('reads the table it is handed, without changing the shared one', () => {
+    const sixEdges = { ...BEATS, lizard: [...BEATS.lizard, 'scissors' as const] };
+    expect(decideRound('lizard', 'scissors', sixEdges)).toBe('a');
+    expect(decideRound('lizard', 'scissors')).toBe('b');
+    expect(BEATS.lizard).toEqual(['robot', 'paper']);
+  });
+});
+
+describe('replayMatch', () => {
+  it('reproduces the duel cooldown sequence', () => {
+    const rounds = [
+      { a: 'rock' as const, b: 'paper' as const },
+      { a: 'scissors' as const, b: 'lizard' as const },
+    ];
+    const { a } = replayMatch(rounds, BASE_RULES, BASE_RULES);
+    // rock played round 1 (2 marks, then one decrement), scissors played round 2 (2).
+    expect(a).toEqual({ rock: 1, paper: 0, scissors: 2, lizard: 0, robot: 0 });
+  });
+
+  it('agrees with computeDelays for every duel sequence', () => {
+    const rounds = [
+      { a: 'rock' as const, b: 'paper' as const },
+      { a: 'paper' as const, b: 'rock' as const },
+      { a: 'scissors' as const, b: 'scissors' as const },
+    ];
+    const { a, b } = replayMatch(rounds, BASE_RULES, BASE_RULES);
+    expect(a).toEqual(computeDelays(rounds.map((r) => r.a)));
+    expect(b).toEqual(computeDelays(rounds.map((r) => r.b)));
+  });
+
+  it("lets one player's rules reach across and mark the other's moves", () => {
+    // A's rules add a mark to whatever move beat them.
+    const vindictive: PlayerRules = {
+      ...BASE_RULES,
+      adjustAfterRound: ({ opponent, outcome }) =>
+        outcome === 'loss' ? { own: {}, opponent: { [opponent]: 1 } } : { own: {}, opponent: {} },
+    };
+    const rounds = [{ a: 'paper' as const, b: 'scissors' as const }];
+    const { b } = replayMatch(rounds, vindictive, BASE_RULES);
+    expect(b.scissors).toBe(3); // 2 for playing it, +1 reaching across
+  });
+
+  it("lets an added edge take the round off the graph everyone else shares", () => {
+    // A sees a sixth edge; B's graph still says scissors beats lizard. One winner:
+    // the added edge, so A wins and B is charged for a loss.
+    const chimeric: PlayerRules = {
+      ...BASE_RULES,
+      beats: { ...BASE_RULES.beats, lizard: [...BASE_RULES.beats.lizard, 'scissors'] },
+      delayOnChoice: ({ outcome }) => (outcome === 'win' ? 3 : 2),
+    };
+    const plain: PlayerRules = {
+      ...BASE_RULES,
+      delayOnChoice: ({ outcome }) => (outcome === 'loss' ? 1 : 2),
+    };
+    const { a, b } = replayMatch([{ a: 'lizard', b: 'scissors' }], chimeric, plain);
+    expect(a.lizard).toBe(3); // A read it as a win
+    expect(b.scissors).toBe(1); // B read it as a loss
+  });
+
+  it('starts from the marks the rules bring, not the duel opening', () => {
+    const loaded: PlayerRules = {
+      ...BASE_RULES,
+      initialDelays: { rock: 0, paper: 0, scissors: 0, lizard: 2, robot: 1 },
+    };
+    const { a } = replayMatch([], loaded, BASE_RULES);
+    expect(a).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 2, robot: 1 });
+  });
+
+  it('floors marks at zero rather than going negative', () => {
+    const rounds = [
+      { a: 'rock' as const, b: 'rock' as const },
+      { a: 'paper' as const, b: 'paper' as const },
+      { a: 'scissors' as const, b: 'scissors' as const },
+      { a: 'rock' as const, b: 'rock' as const },
+    ];
+    const { a } = replayMatch(rounds, BASE_RULES, BASE_RULES);
+    expect(Object.values(a).every((n) => n >= 0)).toBe(true);
+  });
+});
+
+describe('seatWinner', () => {
+  const withEdge = (from: Move, to: Move): PlayerRules => ({
+    ...BASE_RULES,
+    beats: { ...BASE_RULES.beats, [from]: [...BASE_RULES.beats[from], to] },
+  });
+
+  it('falls through to the shared graph when nobody added an edge', () => {
+    expect(seatWinner({ a: 'rock', b: 'scissors' }, BASE_RULES, BASE_RULES)).toBe('a');
+    expect(seatWinner({ a: 'scissors', b: 'rock' }, BASE_RULES, BASE_RULES)).toBe('b');
+    expect(seatWinner({ a: 'rock', b: 'rock' }, BASE_RULES, BASE_RULES)).toBe('draw');
+  });
+
+  it("lets A's added edge overturn the edge B already had", () => {
+    const chimera = withEdge('lizard', 'scissors');
+    expect(seatWinner({ a: 'lizard', b: 'scissors' }, chimera, BASE_RULES)).toBe('a');
+    // Held by B instead, the same round goes the other way.
+    expect(seatWinner({ a: 'scissors', b: 'lizard' }, BASE_RULES, chimera)).toBe('b');
+  });
+
+  it('leaves rounds the added edge does not touch alone', () => {
+    const chimera = withEdge('lizard', 'scissors');
+    expect(seatWinner({ a: 'lizard', b: 'rock' }, chimera, BASE_RULES)).toBe('b');
+    expect(seatWinner({ a: 'scissors', b: 'lizard' }, chimera, BASE_RULES)).toBe('a');
+  });
+
+  it('is still a draw when both hold the same added edge and mirror', () => {
+    const chimera = withEdge('lizard', 'scissors');
+    expect(seatWinner({ a: 'lizard', b: 'lizard' }, chimera, chimera)).toBe('draw');
+  });
+
+  it('gives the round to whichever side the added edge actually applies to', () => {
+    const chimera = withEdge('lizard', 'scissors');
+    // Both hold it, but only A's lizard is on the table.
+    expect(seatWinner({ a: 'lizard', b: 'scissors' }, chimera, chimera)).toBe('a');
+    expect(seatWinner({ a: 'scissors', b: 'lizard' }, chimera, chimera)).toBe('b');
   });
 });
