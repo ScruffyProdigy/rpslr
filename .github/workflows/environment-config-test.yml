@@ -63,6 +63,32 @@ jobs:
             echo "ok: $file"
           done
 
+      # 3b. Every env ingress overlay replaces the base rules wholesale, so a
+      # path added only to the base never reaches that environment. JQ-120
+      # shipped exactly that way: /replay routed to the API everywhere except
+      # production, where the overlay quietly put it back on the client.
+      - name: Ingress overlays route every path the base does
+        run: |
+          python3 - <<'PY'
+          import glob, sys, yaml
+
+          def paths(path):
+              doc = yaml.safe_load(open(path))
+              rules = doc["spec"]["rules"][0]["http"]["paths"]
+              return {p["path"]: p["backend"]["service"]["name"] for p in rules}
+
+          base = paths("k8s/base/ingress.yaml")
+          ok = True
+          for overlay in sorted(glob.glob("k8s/env/*-ingress.yaml")):
+              have = paths(overlay)
+              for route, service in base.items():
+                  if have.get(route) != service:
+                      print(f"::error::{overlay} routes {route} to {have.get(route)!r}, base says {service!r}")
+                      ok = False
+              print(f"checked: {overlay}")
+          sys.exit(0 if ok else 1)
+          PY
+
       # 4. Base client uses the ConfigMap + envFrom pattern (no hardcoded env).
       - name: Base client uses ConfigMap envFrom
         run: |

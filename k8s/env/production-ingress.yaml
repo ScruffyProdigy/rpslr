@@ -27,6 +27,16 @@ spec:
                 name: rps-game-api
                 port:
                   number: 3001
+          # Kept in step with k8s/base/ingress.yaml: this overlay replaces the
+          # base rules wholesale, so a path added only there never reaches
+          # production (JQ-120).
+          - path: /replay
+            pathType: Prefix
+            backend:
+              service:
+                name: rps-game-api
+                port:
+                  number: 3001
           - path: /healthz
             pathType: Prefix
             backend:
