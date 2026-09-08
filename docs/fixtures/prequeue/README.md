@@ -1,34 +1,41 @@
 # Pre-queue options fixtures
 
-Golden bodies for [`../../prequeue-options-contract.md`](../../prequeue-options-contract.md)
-(**v4**, negotiated with the JQ-163 session 2026-09-08).
+Golden request and response bodies for JoinQuest's **pre-queue options** capability.
 **These are the specification.** Code is checked against them, never the reverse.
-A change here is a contract change: it lands in the lobby repo too, and the
-contract version goes up.
 
-Three shapes:
+## Where the prose lives — not here
+
+- **The wire contract** is JoinQuest platform documentation, not RPSLR documentation:
+  the lobby repo's developer integration guide, **§13 Pre-queue options**. That is
+  where an external game author looks, and there should be exactly one copy of it.
+- **The epic plan and decisions** are in Notion:
+  [RPSLR — Helpers mode epic plan (JQ-146)](https://app.notion.com/p/3d5c637d78a581688334e58da61c049a).
+- **The design rationale** is in Notion:
+  [RPSLR — Helpers mode design](https://app.notion.com/p/3d3c637d78a5816a82e5d0090b5c986c).
+
+These files stay in the repo because they are **executable**: JQ-148's byte-for-byte
+test reads them, and a golden file that is not next to the test it feeds is a file
+that drifts. It already did once, when JQ-209 moved the tier split.
+
+## Shapes
 
 - **Response fixtures** (`game-modes.*`, `queue-options.duel*`) are the exact
   response body the game must produce.
 - **Provision fixtures** (`provision.*`) are `{ request, expect }` — the body the
-  lobby sends and what the game must do with it. `expect.status` is the HTTP
-  status; `expect.reason` is a substring the error must contain, not the whole
-  message, so wording can improve without breaking the lobby's tests.
-- **Behaviour fixtures** (`queue-options.unavailable.json`) describe a contract
-  that has no single body — here, that the roster endpoint does not fail open.
+  lobby sends and what the game must do with it. `expect.reason` is a substring the
+  error must contain, not the whole message, so wording can improve without breaking
+  the lobby's tests. Four are rejections; `provision.valid.json` is the one success.
+- **Behaviour fixtures** (`queue-options.unavailable.json`) describe a contract with
+  no single body — here, that the roster endpoint does not fail open.
 
-## The roster is 21 choices, and settled
+## The roster fixture is generated
 
-`queue-options.duel-helpers.json` carries 21 helpers, giving 210 loadouts. It is
-**generated from `api/src/helpers/roster.ts`** — never hand-edit it. The tier split
-moves under JQ-209; regenerate rather than patching by hand. Blind Spot was cut (Ryan, 2026-09-08: its ability
-did not look fun), which also removed the only card that needed `exclusionKey`.
-That field keeps its specification in contract §2 but has no consumer and is not
-to be built.
-
-Nothing about these fixtures is provisional any more.
+`queue-options.duel-helpers.json` is generated from `api/src/helpers/roster.ts`.
+**Do not hand-edit it.** Regenerate when the roster moves; the byte-for-byte test in
+JQ-148 is what keeps the two honest.
 
 ## Running them
 
 `../../../scripts/stub-lobby.sh <name>` replays a provision fixture against a
-locally-running game API, so neither repo needs the other running.
+locally-running game API; `--all` runs every one and checks its expectation. Neither
+repo needs the other running.

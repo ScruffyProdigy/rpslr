@@ -157,8 +157,9 @@ function decidingShowdown(
     const loserMove = moveOf(result, loser);
     if (!winnerMove || !loserMove) return null;
     const caption = showdownCaption(winnerMove, loserMove);
-    // A pair with no verb is a pair the rules do not decide; drawing it would
-    // put a contradiction on the card.
+    // Only a move against itself goes uncaptioned, and the loop above already
+    // skipped every round the winner did not take. Drawing one anyway would put
+    // a contradiction on the card.
     if (!caption) return null;
     return { round: result.round, winnerMove, loserMove, caption };
   }
