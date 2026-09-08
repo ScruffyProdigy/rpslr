@@ -126,7 +126,8 @@ describe('calloutsFor safe picks', () => {
       kind: 'safe-pick',
       text:
         'Rock crushes Lizard and Scissors decapitates it, but Ben had both on cooldown ' +
-        "— nothing could beat Ana's Lizard. A safe pick.",
+        "— nothing could beat Ana's Lizard. A safe pick: two of Ben's three options " +
+        'lose to it, and the third is the same move.',
     });
   });
 
@@ -197,7 +198,7 @@ describe('ruleCardSchedule', () => {
 
   it('teaches each rule once, in the order a watcher meets it', () => {
     const placed = ruleCardSchedule(long.frames).filter((id): id is RuleCardId => id !== null);
-    expect(placed).toEqual(['cooldown', 'unlock', 'safe']);
+    expect(placed).toEqual(['three', 'cooldown', 'unlock', 'safe']);
   });
 
   it('never lands two cards on the same round', () => {
@@ -208,8 +209,9 @@ describe('ruleCardSchedule', () => {
 
   it('waits for a played move to actually be resting before explaining cooldowns', () => {
     // Round 1 is played into the opening state, where nothing has been played
-    // yet — the lock on lizard and robot there is the starting one.
-    expect(ruleCardSchedule(long.frames)[0]).toBeNull();
+    // yet — the lock on lizard and robot there is the starting one, so round
+    // one carries the rule that is true of every round instead.
+    expect(ruleCardSchedule(long.frames)[0]).toBe('three');
     expect(ruleCardSchedule(long.frames)[1]).toBe('cooldown');
   });
 
@@ -218,9 +220,97 @@ describe('ruleCardSchedule', () => {
     expect(ruleCardSchedule(short.frames)).not.toContain('safe');
   });
 
+  it('always has a rule for round one, which demonstrates none of the others', () => {
+    const short = replayOf([round(1, 'rock', 'paper', 'b')]);
+    expect(ruleCardSchedule(short.frames)).toEqual(['three']);
+  });
+
   it('has copy for every card it can schedule', () => {
     for (const id of ruleCardSchedule(long.frames)) {
       if (id) expect(RULE_CARDS[id].body.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('calloutsFor the opening round', () => {
+  it('says the game starts as the one everybody already knows', () => {
+    const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
+    expect(calloutsFor(replay.frames[0], replay)).toContainEqual({
+      kind: 'opening',
+      text:
+        'Nothing has been played yet, so both open with the same three: Rock, Paper and ' +
+        'Scissors. Lizard and Robot are still locked.',
+    });
+  });
+
+  it('drops it as soon as anyone has played', () => {
+    const replay = replayOf([round(1, 'rock', 'paper', 'b'), round(2, 'scissors', 'rock', 'b')]);
+    expect(calloutsFor(replay.frames[1], replay).some((c) => c.kind === 'opening')).toBe(false);
+  });
+});
+
+/**
+ * Entering round 4 Ben is resting Lizard and Scissors — which are exactly the
+ * two moves Rock beats, so Ana's Rock has nothing to win against. The same two
+ * resting moves are the pair that beats Paper, so Paper is the move Ben cannot
+ * answer at all — and Ana is resting it.
+ */
+const TRAPPED = [
+  round(1, 'rock', 'paper', 'b'),
+  round(2, 'paper', 'lizard', 'b'),
+  round(3, 'scissors', 'scissors', 'draw'),
+  round(4, 'rock', 'rock', 'draw'),
+];
+
+describe('calloutsFor a move with nothing left to beat', () => {
+  it('says the best that pick could have got was a draw', () => {
+    const replay = replayOf(TRAPPED);
+    expect(calloutsFor(replay.frames[3], replay)).toContainEqual({
+      kind: 'trap',
+      text:
+        'Rock only beats Scissors and Lizard, and Ben had both on cooldown — the best ' +
+        'Ana could get from it was a draw.',
+    });
+  });
+
+  it('says nothing when the pick still had something to beat', () => {
+    const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
+    expect(calloutsFor(replay.frames[0], replay).some((c) => c.kind === 'trap')).toBe(false);
+  });
+});
+
+describe('calloutsFor a safe move out of reach', () => {
+  it('names the move the other player could not have answered', () => {
+    const replay = replayOf(TRAPPED);
+    expect(replay.frames[3].a.safeMoves).toEqual(['paper']);
+    expect(replay.frames[3].a.delaysBefore.paper).toBeGreaterThan(0);
+    expect(calloutsFor(replay.frames[3], replay)).toContainEqual({
+      kind: 'safe-out-of-reach',
+      text: 'Paper was the one move Ben had no answer to, and it was resting for Ana.',
+    });
+  });
+
+  it('says nothing when the safe move was there to be played', () => {
+    const replay = replayOf([
+      round(1, 'paper', 'rock', 'a'),
+      round(2, 'rock', 'scissors', 'a'),
+      round(3, 'lizard', 'paper', 'a'),
+    ]);
+    const kinds = calloutsFor(replay.frames[2], replay).map((c) => c.kind);
+    expect(kinds).toContain('safe-pick');
+    expect(kinds).not.toContain('safe-out-of-reach');
+  });
+});
+
+describe('calloutsFor keeps the list readable', () => {
+  it('caps the strategy notes but never drops the round bookkeeping', () => {
+    const replay = replayOf(TRAPPED);
+    const callouts = calloutsFor(replay.frames[3], replay);
+    const insights = callouts.filter(
+      (c) => c.kind !== 'cooldown' && c.kind !== 'match-point',
+    );
+    expect(insights).toHaveLength(2);
+    expect(callouts.map((c) => c.kind)).toContain('cooldown');
+    expect(callouts.map((c) => c.kind)).toContain('match-point');
   });
 });

@@ -209,8 +209,9 @@ describe('<ReplayPage> commentary', () => {
     render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
 
-    // Round 1 is played into the opening state, so nothing is resting yet.
-    expect(screen.queryByRole('button', { name: 'Got it' })).not.toBeInTheDocument();
+    // Round 1 demonstrates none of the rules that need a played move, so it
+    // carries the one that is true of every round instead.
+    expect(screen.getByText(/exactly three moves they can play/)).toBeVisible();
 
     await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
     expect(screen.getByText('Every move you play goes on cooldown for 2 rounds')).toBeVisible();

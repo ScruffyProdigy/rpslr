@@ -208,15 +208,6 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         />
       )}
 
-      {!over && (
-        <ReplayCommentary
-          frame={frame}
-          replay={replay}
-          card={schedule[frameIndex] ?? null}
-          settled={settled}
-        />
-      )}
-
       <ReplayControls
         playing={playback.playing}
         speed={playback.speed}
@@ -228,6 +219,22 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         onNext={playback.next}
         onSpeed={playback.setSpeed}
       />
+
+      {/*
+        Under the transport rather than between it and the board. The commentary
+        is the tallest thing on the page — a rule card and four notes is a real
+        round, not a contrived one — and putting that much reading above the
+        controls pushed play/pause off a phone screen. The board is watched, the
+        transport is reached for, and the words are read: that is the order.
+      */}
+      {!over && (
+        <ReplayCommentary
+          frame={frame}
+          replay={replay}
+          card={schedule[frameIndex] ?? null}
+          settled={settled}
+        />
+      )}
 
       {!over && (
         <div className="replay__rounds">
