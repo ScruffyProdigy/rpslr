@@ -15,12 +15,17 @@
       "maxPlayers": 2,
       "seatTemplate": { "count": 2 },
       "preQueue": {
-        "kind": "Loadout",
-        "label": "Choose your two helpers",
-        "select": { "min": 2, "max": 2, "distinct": true },
-        "groupOrder": ["Major", "Minor", "Trinket"],
-        "locking": "none",
-        "rosterPath": "/api/v1/players/{lobbyUserId}/queue-options?modeKey=duel-helpers"
+        "groups": [
+          {
+            "key": "helpers",
+            "kind": "Loadout",
+            "label": "Choose your two helpers",
+            "min": 2,
+            "max": 2,
+            "sectionOrder": ["Major", "Minor", "Trinket"],
+            "locking": "none"
+          }
+        ]
       }
     }
   ]

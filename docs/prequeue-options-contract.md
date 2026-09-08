@@ -1,34 +1,45 @@
 # Pre-Queue Options — Lobby ↔ Game Contract
 
-**Contract version:** 1
-**Status:** Proposed — sent to the JQ-163 session 2026-09-08, not yet agreed
+**Contract version:** 2
+**Status:** Agreed with the JQ-163 session 2026-09-08, except the two items in
+§8 that need Ryan
 **Game side:** [JQ-146 epic](https://linear.app/joinquest/issue/JQ-146), primarily
 [JQ-148](https://linear.app/joinquest/issue/JQ-148)
-**Lobby side:** [JQ-163](https://linear.app/joinquest/issue/JQ-163)
+**Lobby side:** [JQ-163](https://linear.app/joinquest/issue/JQ-163) — **already
+implemented**, PR #45, CI green
 
 How a game declares that a mode has a pre-queue pick, how the lobby fetches the
 roster of choices, and how a player's selection reaches the game.
 
-RPSLR's `duel-helpers` is the **first real consumer** of this. Ryan has confirmed
-the contract is not frozen — where the prototype's shape does not survive contact
-with a real game, the change is made here rather than worked around. Five such
-changes are marked **[CHANGE]** and are the open items in the negotiation.
+RPSLR's `duel-helpers` is the first real consumer. The lobby side shipped first, so
+where the two designs disagreed the shipped shape generally wins — noted per section.
 
-This is the reference companion to [`lobby-protocol-handoff.md`](./lobby-protocol-handoff.md),
-which covers discovery, provisioning, link-out and claim. Read that first; this
-document only adds the options layer.
+Companion to [`lobby-protocol-handoff.md`](./lobby-protocol-handoff.md), which covers
+discovery, provisioning, link-out and claim. Read that first; this only adds options.
 
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1 | 2026-09-08 | First draft, from the JQ-146 epic plan. Proposed, not agreed. |
+| 2 | 2026-09-08 | Negotiated with JQ-163. `group`→`section` to resolve a collision; `select`→per-group `min`/`max`; `rosterPath` dropped for the conventional path; `capabilities` dropped; `blurb`→`description`; provision options become an array of per-group selections. |
+| 1 | 2026-09-08 | First draft from the JQ-146 epic plan. |
+
+## Vocabulary — the one collision worth knowing about
+
+Both sides independently used **"group"** for different things. Resolved:
+
+- **Selection group** (`preQueue.groups[]`) — an *independent roster with its own
+  arity*. A mode can ask for a weapon **and** an armour set: two groups, picked
+  separately. This is the lobby's shipped meaning and it keeps the name.
+- **Section** (`choices[].section`) — a *display heading inside one roster*. RPSLR
+  has one selection group whose 22 choices fall under three sections: Major, Minor,
+  Trinket.
+
+RPSLR is therefore **one group, three sections** — not three groups.
 
 ---
 
 ## 1. Mode manifest — `GET /api/v1/game-modes`
-
-A mode that has a pre-queue pick declares it:
 
 ```json
 {
@@ -38,146 +49,125 @@ A mode that has a pre-queue pick declares it:
   "maxPlayers": 2,
   "seatTemplate": { "count": 2 },
   "preQueue": {
-    "kind": "Loadout",
-    "label": "Choose your two helpers",
-    "select": { "min": 2, "max": 2, "distinct": true },
-    "groupOrder": ["Major", "Minor", "Trinket"],
-    "locking": "none",
-    "rosterPath": "/api/v1/players/{lobbyUserId}/queue-options?modeKey=duel-helpers"
+    "groups": [
+      {
+        "key": "helpers",
+        "kind": "Loadout",
+        "label": "Choose your two helpers",
+        "min": 2,
+        "max": 2,
+        "sectionOrder": ["Major", "Minor", "Trinket"],
+        "locking": "none"
+      }
+    ]
   }
 }
 ```
 
-`kind` and `label` are the prototype's. `locking` is `none` or `some`.
+- `min`/`max` live **on the group**, not the block, so a weapon+armour mode is two
+  groups with their own arity. Both default to `1`, so a champion picker is just
+  `{key, kind, label}`. `min: 0` makes a group optional.
+- **Duplicates are rejected within a group** — the validator already enforces it and
+  there is no `distinct` field. Correct for RPSLR: two helpers bound to the same
+  *move* are legal, the same *helper* twice is not.
+- `sectionOrder` sits on the group because sections subdivide a group's choices.
+  Order is meaningful — RPSLR's reads as a price ladder — and neither alphabetical
+  nor roster order produces it.
 
-**[CHANGE 1] `select` replaces the prototype's `options` string.** The prototype
-carries `options: "22 helpers"`, which is display copy. The lobby cannot derive how
-many a player must pick from it, and `label` is a prompt, not a rule. Without
-`select` there is no lobby-side arity validation and every game hardcodes its own.
-It is generic: a champion picker is `{ "min": 1, "max": 1, "distinct": true }`.
+**The manifest is also the capability signal.** The lobby sends `options` only for a
+mode whose own manifest declares `preQueue`. A game deployment that declares it
+necessarily understands it; one that doesn't never receives the field. No version
+table, no separate flag, and it self-synchronises in either deploy order. (v1
+proposed a `capabilities` array on `/api/v1/status` for this; it isn't needed and
+was dropped.)
 
-**[CHANGE 2] `rosterPath` — the roster is fetched live, at a path the game
-declares.** This resolves JQ-163's open question (static in the manifest vs live
-from the game). Declaring the path means the lobby learns where to look without
-hardcoding a game-specific URL, and a game that prefers static can inline `choices`
-here instead. **Exactly one of `rosterPath` or `choices` is present.**
-
-**[CHANGE 5] `groupOrder` — section order is data, not convention.** See §2.
-
-A mode without a pre-queue pick omits `preQueue` entirely, or sends `null`.
+A mode without a pre-queue pick omits `preQueue`.
 
 ---
 
 ## 2. Roster — `GET /api/v1/players/{lobbyUserId}/queue-options?modeKey=…`
 
+A **fixed conventional path**, not one the game declares. It matches the shipped
+mode-eligibility endpoint, so integrators learn one rule, and the lobby
+SSRF-validates `apiBaseUrl` once rather than having to prove a game-declared path
+stayed on its own origin. (v1 proposed `rosterPath`; withdrawn — the security
+argument is better than the flexibility one.)
+
+There is **no static/inline roster mode**. Live won outright: a CCG's roster is "the
+decks you built", which no manifest can express.
+
 ```json
 {
   "modeKey": "duel-helpers",
-  "select": { "min": 2, "max": 2, "distinct": true },
   "choices": [
     {
       "id": "ferrus",
       "label": "Ferrus",
-      "group": "Major",
+      "section": "Major",
       "badge": "2 marks",
-      "blurb": "Your Robot takes 1 mark instead of 2.",
+      "description": "Your Robot takes 1 mark instead of 2.",
       "locked": false
     }
   ]
 }
 ```
 
-- `select` is repeated here so the endpoint is self-describing when read alone.
+- `section`, `badge` and `description` are rendered **verbatim, uninterpreted**. The
+  lobby never learns what a "mark" is. A champion picker uses `section: "Assassin"`,
+  `badge: "Free"`.
+- `description` is the shipped name for what v1 called `blurb`, documented in
+  integration guide §13. Kept so the docs don't fork.
 - A mode with no pre-queue pick returns `{ "modeKey": "duel", "choices": [] }` with
   **200**, not `404`.
-- `locked` follows the mode-eligibility vocabulary already shipped by JQ-11/12/13 —
-  a locked choice carries a requirement (`label`, `current`, `target`, `all`/`any`)
-  rather than vanishing. RPSLR sends `locked: false` for every choice; `locking` is
-  `none` and there is no progression in the mode.
+- `locked` follows the mode-eligibility vocabulary from JQ-11/12/13 — a locked
+  choice carries a requirement rather than vanishing. RPSLR sends `false` throughout.
 
-**[CHANGE 3] `group`, `badge` and `blurb`.** JQ-148 requires each choice to carry
-its tier and mark cost, and Ryan has confirmed the picker must **separate the Major,
-Minor and Trinket sections**. Modelling tier and cost as first-class fields would
-teach the lobby what a "mark" is. Instead:
+### This endpoint does not fail open
 
-- `group` — a section-header key. The lobby groups by it and renders it verbatim.
-- `badge` — a short string rendered verbatim beside the label.
-- `blurb` — one sentence of player-facing description.
-
-None of the three needs the lobby to understand the game. A champion picker uses
-`group: "Assassin"`, `badge: "Free"`.
-
-**[CHANGE 5] `groupOrder` on the `preQueue` block** gives section order, because it
-is meaningful — RPSLR's reads as a price ladder, most expensive first — and neither
-alphabetical nor roster order produces it.
-
-**Open with the lobby:** whether the picker can render `group` as real sections or
-only a flat list with a tag. If flat-only, the fallback is folding the tier into
-`label` ("Ferrus · Major"), which is worse but survivable. The game needs to know
-before it freezes the fixture.
+If it errors, times out, or returns unreadable JSON, the mode becomes **unjoinable**
+and the player is told why. There is no safe default roster, so the lobby will not
+invent one. A slow or flaky `queue-options` is therefore a full outage of the mode,
+not a degraded experience — worth knowing before it is served off anything with a
+cold start.
 
 ---
 
 ## 3. Queue join
 
-The selection travels on `joinQueue` alongside `queuePath`:
-
-```json
-{
-  "preQueueSelection": {
-    "modeKey": "duel-helpers",
-    "choiceIds": ["ferrus", "chimera"]
-  }
-}
-```
-
-The lobby validates arity (`select.min`/`max`), distinctness, membership of the
-roster it fetched, and `locked`. Rejection is server-side, not merely a disabled
-control.
-
-**[CHANGE 4 — open] Parameterised choices.** RPSLR has one helper, Blind Spot,
-whose effect is *"name one of your moves; its cooldown is hidden all match"*. With
-the pick happening pre-queue there is no in-game moment to name it, and
-`choiceIds: string[]` cannot carry the parameter. Three options, unresolved:
-
-- **(a)** Widen to `choices: [{ id, param? }]`, with the roster declaring a
-  per-choice param spec. Keeps the card as designed and would also serve a
-  character picker with a skin or colour sub-choice.
-- **(b)** Explode into one roster entry per parameter (`blind-spot:rock`, …). No
-  contract change; the roster grows from 22 to 26 and the picker gets noisier.
-- **(c)** Cut the card.
-
-Ryan decides; the JQ-163 side's view on whether (a) is generically useful is what
-the decision needs.
+The selection travels on `joinQueue` alongside `queuePath`, mirroring §4's array
+shape — one entry per selection group.
 
 ---
 
 ## 4. Provision — `POST /api/v1/matches`
 
-`assignment.seats[]` gains an optional `options`:
+`assignment.seats[]` gains an optional `options`, an **array of per-group
+selections**:
 
 ```json
 {
-  "lobbyId": "https://lobby.example",
-  "lobby": { "returnUrl": "…", "graphqlUrl": "…" },
-  "assignment": {
-    "externalMatchId": "m_123",
-    "gameMode": "duel-helpers",
-    "bestOf": 5,
-    "seats": [
-      { "seatKey": "1", "lobbyUserId": "u_1",
-        "options": { "kind": "Loadout", "choiceIds": ["ferrus", "chimera"] } },
-      { "seatKey": "2", "lobbyUserId": "u_2",
-        "options": { "kind": "Loadout", "choiceIds": ["oracle", "copycat"] } }
-    ]
-  }
+  "seatKey": "1",
+  "lobbyUserId": "u_1",
+  "options": [
+    { "groupKey": "helpers",
+      "optionIds": ["ferrus", "chimera"],
+      "labels": ["Ferrus", "Chimera"] }
+  ]
 }
 ```
 
+- An **array** because an object cannot carry a weapon *and* an armour selection.
+  RPSLR's is a one-element array — cheap now, and a second mode with two groups
+  needs no contract change.
+- **No `kind`** on the selection. It is already in the manifest; repeating it on
+  every seat of every provision only invites the two copies to disagree.
+- `labels` are the game's own strings captured at pick time, stored so a waiting
+  player still reads "Ferrus" if the game is unreachable. **The game ignores them**
+  — they are not authoritative and must never be read back as identity.
+
 **The game re-validates every selection** — arity, distinctness, membership. Not
-distrust of the lobby: a lobby that could report helper state could report a win,
-exactly as a client could. The lobby's validation is the good UX; the game's is the
-authority.
+distrust: a lobby that could report helper state could report a win, exactly as a
+client could. The lobby's validation is the good UX; the game's is the authority.
 
 ### Rejections are `400`, never `403`
 
@@ -186,68 +176,106 @@ authority.
   "reason": "a loadout needs two different helpers" }
 ```
 
-`403` is reserved by [`lobby-protocol-handoff.md`](./lobby-protocol-handoff.md) for
-the banlist handshake and seat-reservation violations, and the lobby is told to
-treat `403` as "re-matchmake, don't surface it". A malformed selection returning
-`403` would make the lobby loop forever on a request that will never succeed.
+`403` is reserved for the banlist handshake and seat-reservation violations; the
+shipped lobby parses `403` specifically as the banlist shape and treats every other
+non-2xx as a hard error, so there is no re-matchmake loop on a `400`.
+
+Two properties worth stating explicitly:
+
+- **A `400` fails the whole provision, not one seat.** Every player in that match is
+  affected. `seatKey` in the body is for diagnosis; the lobby cannot salvage the
+  other seats.
+- **A `400` should be unreachable in practice**, because the lobby already validated
+  the selection against the roster this game served this player. If one fires, it is
+  a bug on one side or the other. The game's re-validation stays — authority belongs
+  with the game — but neither side should design around `400` as a routine path.
 
 ---
 
-## 5. Capability advertisement — `GET /api/v1/status`
+## 5. Deploying the two sides
 
-**[CHANGE 4]** The status body gains `capabilities`:
+The manifest self-synchronises (§1), so no capability flag and no ordering
+constraint. What remains on the game side:
 
-```json
-{ "game": "rock-paper-scissors-lizard-robot", "version": "…", "appEnv": "…",
-  "standalone": false, "capabilities": ["preQueueOptions"] }
-```
+A `duel-helpers` provision with **no** `options` on a seat gets a default loadout of
+Ferrus + Featherweight — 2 marks on Robot, 1 on Lizard, exactly RPSLR's existing
+`lizard: 1, robot: 2` opening. Every defaulted seat logs a warning, and
+`REQUIRE_PREQUEUE_OPTIONS=true` turns it into a `400`.
 
-The lobby needs to know whether a given game *deployment* understands `options`
-before it sends them. `version` cannot express that without the lobby maintaining a
-per-game version table, which is exactly the coupling the manifest design exists to
-avoid. A game that omits `capabilities` is read as supporting nothing new.
-
----
-
-## 6. Deploying the two sides — default, then tighten
-
-Neither repo should have to deploy in the same minute as the other.
-
-1. **Game ships first.** A `duel-helpers` provision with no `options` on a seat gets
-   a **default loadout**: Ferrus + Featherweight, which places 2 marks on Robot and
-   1 on Lizard — exactly RPSLR's existing `lizard: 1, robot: 2` opening. The mode is
-   therefore correct and playable the moment the game ships, before the lobby knows
-   it exists. Every defaulted seat logs a warning.
-2. **Lobby ships second**, reads `capabilities`, sends real `options`.
-3. **Then tighten.** `REQUIRE_PREQUEUE_OPTIONS=true` on the game turns a missing
-   selection into a `400`. Rolling back is one environment variable, not a deploy.
-
-A silent fallback is normally a bad idea. It is acceptable here only because the
-fallback is a known-good, already-shipped position rather than an invented one, and
-because the env var makes the window closeable and the warning makes it visible.
+This is now a **narrow** safety net rather than the deploy mechanism it was in v1:
+it covers standalone mode, the stub-lobby harness, and any provision that omits
+options for a reason neither side anticipated.
 
 ---
 
-## 7. Fixtures
+## 6. Fixtures
 
-`docs/fixtures/prequeue/` holds golden request and response bodies. **They are the
-specification**; both repos test against them, and code is checked against the
-fixture rather than the reverse.
+`docs/fixtures/prequeue/` holds golden bodies. **They are the specification**; both
+repos test against them and code is checked against the fixture, never the reverse.
+A fixture change is a contract change: it lands in both repos, and the version at the
+top of this document goes up.
 
 | File | Covers |
 | --- | --- |
 | `game-modes.duel-helpers.json` | §1 |
-| `queue-options.duel-helpers.json` | §2, all 22 choices |
+| `queue-options.duel-helpers.json` | §2, full roster |
 | `queue-options.duel.json` | §2 empty-choices case |
-| `status.capabilities.json` | §5 |
+| `queue-options.unavailable.json` | §2 fail-closed behaviour |
 | `provision.valid.json` | §4 happy path |
-| `provision.missing-options.json` | §6 default-loadout path |
+| `provision.missing-options.json` | §5 default-loadout path |
 | `provision.duplicate-helper.json` | §4 → `400` |
 | `provision.unknown-helper.json` | §4 → `400` |
 | `provision.wrong-arity.json` | §4 → `400` |
 
-A fixture change is a contract change: it lands in both repos or neither, and the
-version at the top of this document goes up.
-
 `scripts/stub-lobby.sh` replays a provision fixture against a locally-running game
 API, so the game repo's tests and CI never need a lobby.
+
+---
+
+## 7. Open — needs Ryan
+
+### Blind Spot's representation
+
+Blind Spot's effect is *"name one of your moves; its cooldown is hidden from them all
+match"*. Picked pre-queue, there is no in-game moment to name it, and `optionIds` is
+a flat list of strings.
+
+**Both sides recommend (b): explode it into one roster entry per move.** JQ-163's
+argument is that (a) — a parameterised choice — is not one field but a conditional
+sub-selection: a param spec in the roster, a dependent control in the picker, and
+validation over the param's domain. Real contract and UI surface for one card in one
+game. And (b) migrates to (a) cleanly later, since only ids change.
+
+The clutter objection to (b) is also weaker than it looked: five neighbours inside a
+sectioned **Minor** heading reads far better than five in a flat 26-card grid, which
+is what v1 was picturing before sections existed.
+
+**Game-side refinement — (b′), explode at the wire only.** The five entries need not
+reach the engine. `api/src/helpers/roster.ts` keeps **22** helpers with Blind Spot
+carrying a move parameter; the `queue-options` endpoint serialises it as five
+choices, and provision parsing maps `blind-spot:rock` back to
+`{ id: 'blind-spot', param: 'rock' }`. This matters concretely: plain (b) would take
+the engine to 26 helpers and **325** loadouts, changing the constant in JQ-147's
+ladder test from 231 — a live ripple into work already in progress. (b′) has (b)'s
+zero-contract-change property and leaves the engine untouched.
+
+### The exclusivity hole (b) opens — needs JQ-163 too
+
+Under (b) or (b′), `blind-spot:rock` and `blind-spot:paper` are distinct ids, so the
+lobby would accept both as a legal two-choice loadout. The game would then reject it
+as the same helper twice — **a `400` on a selection the lobby validated**, which is
+exactly the unreachable-in-practice case §4 says should not happen.
+
+So (b) needs a way for the roster to say "at most one of these". Proposed:
+
+```json
+{ "id": "blind-spot:rock", "label": "Blind Spot: Rock", "section": "Minor",
+  "badge": "1 mark", "exclusionKey": "blind-spot", "locked": false }
+```
+
+At most one choice per `exclusionKey` may be selected within a group. It is a much
+smaller addition than (a), and it is the kind of thing any "pick 2 of these variants"
+roster will want. **Not yet agreed** — sent to JQ-163.
+
+Until both are settled, `queue-options.duel-helpers.json` carries the 22-choice
+roster with Blind Spot unexploded, and is marked provisional.

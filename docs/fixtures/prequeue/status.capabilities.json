@@ -1,7 +1,0 @@
-{
-  "game": "rock-paper-scissors-lizard-robot",
-  "version": "0.0.0",
-  "appEnv": "local",
-  "standalone": false,
-  "capabilities": ["preQueueOptions"]
-}

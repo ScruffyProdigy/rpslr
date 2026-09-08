@@ -1,18 +1,55 @@
 {
   "request": {
     "lobbyId": "https://lobby.local",
-    "lobby": { "returnUrl": "http://localhost:5173", "graphqlUrl": "http://localhost:8080/query" },
+    "lobby": {
+      "returnUrl": "http://localhost:5173",
+      "graphqlUrl": "http://localhost:8080/query"
+    },
     "assignment": {
       "externalMatchId": "fixture-duplicate",
       "gameMode": "duel-helpers",
       "bestOf": 5,
       "seats": [
-        { "seatKey": "1", "lobbyUserId": "u_1",
-          "options": { "kind": "Loadout", "choiceIds": ["ferrus", "ferrus"] } },
-        { "seatKey": "2", "lobbyUserId": "u_2",
-          "options": { "kind": "Loadout", "choiceIds": ["oracle", "copycat"] } }
+        {
+          "seatKey": "1",
+          "lobbyUserId": "u_1",
+          "options": [
+            {
+              "groupKey": "helpers",
+              "optionIds": [
+                "ferrus",
+                "ferrus"
+              ],
+              "labels": [
+                "Ferrus",
+                "Ferrus"
+              ]
+            }
+          ]
+        },
+        {
+          "seatKey": "2",
+          "lobbyUserId": "u_2",
+          "options": [
+            {
+              "groupKey": "helpers",
+              "optionIds": [
+                "oracle",
+                "copycat"
+              ],
+              "labels": [
+                "Oracle",
+                "Copycat"
+              ]
+            }
+          ]
+        }
       ]
     }
   },
-  "expect": { "status": 400, "seatKey": "1", "reason": "two different helpers" }
+  "expect": {
+    "status": 400,
+    "seatKey": "1",
+    "reason": "two different helpers"
+  }
 }

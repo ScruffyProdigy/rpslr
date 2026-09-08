@@ -71,8 +71,16 @@ yet reflect. Each is handled by a task below.
    counter-pick, so the design doc's blind-simultaneous machinery is unnecessary.
    Mirror loadouts remain legal for the same reason.
 4. **Blind Spot needs a home.** "At draft, name one of your moves" has no draft to
-   happen at. It becomes a second-order selection inside the pre-queue pick, which
-   the current `choiceIds: string[]` contract cannot express. See §Contract, note 3.
+   happen at. **Both sides now recommend exploding it into one choice per move**
+   rather than adding parameterised choices to the contract — see
+   [the contract](../../prequeue-options-contract.md) §7 for the reasoning and for
+   the two things still open: Ryan's call, and an `exclusionKey` so the lobby can
+   stop a player picking two Blind Spot variants.
+
+   **Watch this one if you are working on JQ-147.** The game-side refinement (b′)
+   keeps `roster.ts` at 22 helpers and explodes only at the wire, so the ladder
+   test's 231 stands. Plain (b) would take the engine to 26 helpers and **325**
+   loadouts. The constant in `ladder.test.ts` depends on which way Ryan goes.
 
 ### Open, and blocking JQ-147
 
@@ -120,7 +128,35 @@ consistency test either fails or has to be weakened.
 
 ## The wire contract
 
-This is the artifact to agree with the JQ-163 agent **before either side writes
+> **SUPERSEDED 2026-09-08.** The contract was negotiated with the JQ-163 session and
+> now lives, agreed, at [`docs/prequeue-options-contract.md`](../../prequeue-options-contract.md)
+> **v2**. Read that, not this section. What changed, and why it matters to the tasks
+> below:
+>
+> - JQ-163 is **already implemented and merged-ready** (PR #45, CI green), so this
+>   was a diff against a shipped shape, not a greenfield design.
+> - **`group` → `section`.** Both sides used "group" for different things: theirs is
+>   an independent selection roster with its own arity (weapon *and* armour), mine
+>   was a display heading. RPSLR is one group, three sections.
+> - **`select` → per-group `min`/`max`.** Arity belongs on the group, or the
+>   two-group case is impossible. `distinct` is hardcoded true, no field.
+> - **`rosterPath` withdrawn.** The path is a fixed convention. A game-declared path
+>   would mean re-proving it stayed on its own origin; their SSRF argument beats my
+>   flexibility one.
+> - **`capabilities` withdrawn.** The manifest already *is* the per-deployment
+>   signal — the lobby only sends `options` for a mode whose manifest declares
+>   `preQueue`, so it self-synchronises in either deploy order.
+> - **`blurb` → `description`**, which shipped and is documented.
+> - **Provision `options` is an array** of `{groupKey, optionIds, labels}`, not an
+>   object, and carries no `kind`.
+> - The default-loadout rule survives but is now a narrow safety net (standalone,
+>   the stub harness), not the deploy mechanism.
+> - New: the roster endpoint **does not fail open** — a flaky `queue-options` is a
+>   full outage of the mode.
+
+The original v1 draft follows, kept only for the reasoning behind each ask.
+
+This was the artifact to agree with the JQ-163 agent **before either side writes
 code**. It lives at `docs/prequeue-options-contract.md` with golden fixtures under
 `docs/fixtures/prequeue/`, and both repos test against those fixtures.
 
