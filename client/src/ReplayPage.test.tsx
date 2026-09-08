@@ -275,3 +275,137 @@ describe('<ReplayPage> first-visit rules', () => {
     expect(screen.getByRole('button', { name: 'Previous round' })).toBeDisabled();
   });
 });
+
+describe('<ReplayPage> play along', () => {
+  beforeEach(() => markSeen('howToPlay'));
+
+  /** Turn the replay into a game: the toggle, then the two-tap call. */
+  async function playAlong() {
+    await userEvent.click(screen.getByRole('button', { name: 'Play along' }));
+  }
+
+  async function call(move: string) {
+    await userEvent.click(screen.getByRole('button', { name: move }));
+    await userEvent.click(screen.getByRole('button', { name: move }));
+  }
+
+  it('watches until the watcher asks to play', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    expect(screen.getByRole('button', { name: 'Watch' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Play along' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('holds the round on the board until a move is called', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+
+    expect(screen.getByText('What does Ana play?')).toBeInTheDocument();
+    expect(container.querySelector('.reveal-card')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Rock' })).toBeEnabled();
+  });
+
+  it('keeps the round it is asking about to itself', async () => {
+    // The whole game is not knowing. A strip chip, a scoreline or a line of
+    // commentary that has already resolved the round gives it away.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+
+    expect(container.querySelector('.replay-commentary__line')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Round 1:/ })).not.toBeInTheDocument();
+    expect(screen.getByText('0–0')).toBeInTheDocument();
+  });
+
+  it('shows a call that came off against what was played', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    await call('Rock');
+
+    expect(screen.getByText('You called it.')).toBeInTheDocument();
+  });
+
+  it('shows a call that missed against what was played', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    await call('Paper');
+
+    expect(screen.getByText('You said Paper — Ana played Rock.')).toBeInTheDocument();
+  });
+
+  it('lets a round go by uncalled', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this round' }));
+
+    expect(container.querySelector('.reveal-card')).toBeInTheDocument();
+    expect(screen.queryByText('You called it.')).not.toBeInTheDocument();
+  });
+
+  it('counts the rounds that were called on the end card', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+
+    await call('Paper'); // Ana played Rock — missed
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    await call('Paper'); // Ana played Paper — called
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this round' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+
+    expect(await screen.findByText('Ana wins the match.')).toBeInTheDocument();
+    expect(screen.getByText('You called 1 of 2 rounds.')).toBeInTheDocument();
+  });
+
+  it('remembers play-along for the next replay opened', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const first = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    first.unmount();
+
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    expect(screen.getByText('What does Ana play?')).toBeInTheDocument();
+  });
+
+  it('calls for the other player when the side is switched', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    await userEvent.click(screen.getByRole('button', { name: 'Play as Ben' }));
+
+    expect(screen.getByText('What does Ben play?')).toBeInTheDocument();
+    await call('Scissors');
+    expect(screen.getByText('You called it.')).toBeInTheDocument();
+  });
+
+  it('forgets the calls made for the player just switched away from', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await playAlong();
+    await call('Rock');
+    await userEvent.click(screen.getByRole('button', { name: 'Play as Ben' }));
+
+    expect(screen.getByText('What does Ben play?')).toBeInTheDocument();
+    expect(screen.queryByText('You called it.')).not.toBeInTheDocument();
+  });
+});

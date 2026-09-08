@@ -55,6 +55,8 @@ export interface Playback {
   toggle: () => void;
   next: () => void;
   prev: () => void;
+  /** Start playing again from where the replay stands, without rewinding. */
+  resume: () => void;
   setSpeed: (speed: PlaybackSpeed) => void;
   jumpTo: (index: number) => void;
 }
@@ -73,17 +75,23 @@ export function useReplayPlayback(
   /**
    * Something on top of the replay has the watcher's attention — the rules
    * panels, opened on a first visit over a replay that has already started
-   * playing. The replay stops where it is without being paused, so closing
-   * whatever it was resumes exactly what it interrupted and nothing has to
-   * remember what that was.
+   * playing, or a round waiting to be called in play-along. The replay stops
+   * where it is without being paused, so closing whatever it was resumes
+   * exactly what it interrupted and nothing has to remember what that was.
+   *
+   * A predicate rather than a flag when what holds the replay depends on which
+   * round is on screen: the hook owns that index, so a caller cannot compute
+   * the answer before calling it.
    */
-  held: boolean = false,
+  held: boolean | ((index: number) => boolean) = false,
 ): Playback {
   const stepping = useRef(prefersReducedMotion()).current;
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(!stepping && frameCount > 1);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [elapsed, setElapsed] = useState<Exclude<RoundBeat, 'settled'>>('reveal');
+
+  const holding = typeof held === 'function' ? held(index) : held;
 
   const last = Math.max(0, frameCount - 1);
   const atEnd = index >= last;
@@ -103,7 +111,7 @@ export function useReplayPlayback(
   // A round is only an arc while it is going past on its own. A watcher who
   // paused or stepped here is reading, not watching, and gets the whole round
   // at once rather than a frame of an animation they stopped.
-  const moving = playing && !stepping && !held;
+  const moving = playing && !stepping && !holding;
   const beat: RoundBeat = !moving ? 'settled' : elapsed;
 
   // Two hand-offs inside a round: the card starts dissolving, then it is gone
@@ -121,14 +129,14 @@ export function useReplayPlayback(
   }, [moving, index, speed]);
 
   useEffect(() => {
-    if (stepping || !playing || held) return;
+    if (stepping || !playing || holding) return;
     if (index >= last) {
       setPlaying(false);
       return;
     }
     const timer = setTimeout(() => setIndex((cur) => Math.min(last, cur + 1)), ROUND_MS / speed);
     return () => clearTimeout(timer);
-  }, [stepping, playing, held, index, last, speed]);
+  }, [stepping, playing, holding, index, last, speed]);
 
   const play = useCallback(() => {
     if (stepping) return;
@@ -137,6 +145,14 @@ export function useReplayPlayback(
   }, [stepping, last]);
 
   const pause = useCallback(() => setPlaying(false), []);
+
+  // Not `play`: that rewinds a finished replay, which is right for a transport
+  // button and wrong for handing control back after a hold.
+  const resume = useCallback(() => {
+    if (stepping) return;
+    setPlaying(true);
+  }, [stepping]);
+
   const toggle = useCallback(() => (playing ? pause() : play()), [playing, pause, play]);
 
   // Taking a step is taking control; the replay should not resume underneath.
@@ -170,6 +186,7 @@ export function useReplayPlayback(
     toggle,
     next,
     prev,
+    resume,
     setSpeed,
     jumpTo,
   };

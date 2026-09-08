@@ -1,8 +1,13 @@
-import type { RoundResult } from '../api';
+import type { Move, RoundResult } from '../api';
 import type { RevealPhase } from '../lib/useRoundReveal';
 import type { Identity } from '../lib/seatProfile';
 import { PLAYER_VOICE, ranOutOfTime, takesRound, type Voice } from '../lib/voice';
-import { describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
+import {
+  MOVE_META,
+  describeOutcome,
+  describeRoundMatchup,
+  opponentMoveFromResult,
+} from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
 import MoveIcon from './MoveIcon';
 
@@ -24,6 +29,7 @@ export function RevealCard({
   you,
   opponent,
   voice = PLAYER_VOICE,
+  call,
   onSkip,
 }: {
   result: RoundResult;
@@ -35,6 +41,11 @@ export function RevealCard({
   opponent: Identity;
   /** How to refer to the you-side: second person, or by name on a replay. */
   voice?: Voice;
+  /**
+   * What the watcher called for the you-side this round, in play-along:
+   * a move, `null` if they let the round go by, absent if they are watching.
+   */
+  call?: Move | null;
   onSkip: () => void;
 }) {
   const { myMove, oppMove } = opponentMoveFromResult(result.moves, myPlayerId);
@@ -95,6 +106,16 @@ export function RevealCard({
       </div>
       {myMove && oppMove && (
         <p className="reveal-card__verb">{describeRoundMatchup(myMove, oppMove)}</p>
+      )}
+      {/* The call before the verdict: the watcher's own round is the one they
+          came for, and it is answered by the same card that answers the
+          players'. A skipped round says nothing — they chose not to play it. */}
+      {call && myMove && (
+        <p className={`reveal-card__call reveal-card__call--${call === myMove ? 'hit' : 'miss'}`}>
+          {call === myMove
+            ? 'You called it.'
+            : `You said ${MOVE_META[call].label} \u2014 ${you.name} played ${MOVE_META[myMove].label}.`}
+        </p>
       )}
       <p className="reveal-card__verdict">{verdictLine}</p>
       {timedOut && <p className="reveal-card__timeout">{timedOut}</p>}

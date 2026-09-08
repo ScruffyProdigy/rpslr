@@ -1,5 +1,6 @@
 import type { MatchEndReason, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
+import type { GuessScore } from '../lib/usePlayAlong';
 import { PLAYER_VOICE, winsMatch, youLabel, type Voice } from '../lib/voice';
 import { LobbyReturnButton } from './LobbyReturnButton';
 import { ShareReplayButton } from './ShareReplayButton';
@@ -31,6 +32,7 @@ export function MatchEndCard({
   onSelectRound,
   replayUrl = null,
   playCtaUrl = null,
+  called = null,
 }: {
   iWon: boolean;
   /** No winner seat — the match ended without one (abandoned, or all draws). */
@@ -55,6 +57,8 @@ export function MatchEndCard({
   replayUrl?: string | null;
   /** Link to JoinQuest — offered to whoever is watching the replay. */
   playCtaUrl?: string | null;
+  /** How a play-along watcher's calls went, when they made any. */
+  called?: GuessScore | null;
 }) {
   const winner = drawn ? null : iWon ? you : opponent;
   const verdict = drawn
@@ -110,6 +114,16 @@ export function MatchEndCard({
           {oppScore}
         </span>
       </p>
+
+      {/* Alongside the match result rather than instead of it: the match had
+          its own winner, and this is the watcher's score in a game of their
+          own played on top of it. */}
+      {called && called.called > 0 && (
+        <p className="match-end__called">
+          You called {called.hits} of {called.called} round
+          {called.called === 1 ? '' : 's'}.
+        </p>
+      )}
 
       <div className="match-end__rounds">
         <RoundStrip
