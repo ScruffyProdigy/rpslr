@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DelayMap } from '@game/game';
 import {
   ALL_MOVES,
   MOVE_META,
@@ -147,18 +148,37 @@ describe('winningEdgeOf', () => {
 
 
 describe('cooldownCause', () => {
+  /** What a duel opens on. A loadout opens on something else. */
+  const duel: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
+
   it('blames your last round when that is where it came from', () => {
-    expect(cooldownCause('rock', ['rock', 'paper'])).toBe('You played Rock last round');
+    expect(cooldownCause('rock', ['rock', 'paper'], duel)).toBe('You played Rock last round');
   });
 
   it('reaches back a second round', () => {
-    expect(cooldownCause('paper', ['rock', 'paper'])).toBe('You played Paper two rounds ago');
+    expect(cooldownCause('paper', ['rock', 'paper'], duel)).toBe('You played Paper two rounds ago');
   });
 
   // Round 1: nothing has been played, so Lizard and Robot are down by the rules.
   it('falls back to the opening when you have not played it', () => {
-    expect(cooldownCause('robot', [])).toBe('Robot starts the match on cooldown');
-    expect(cooldownCause('robot', ['rock'])).toBe('Robot starts the match on cooldown');
+    expect(cooldownCause('robot', [], duel)).toBe('Robot starts the match on cooldown');
+    expect(cooldownCause('robot', ['rock'], duel)).toBe('Robot starts the match on cooldown');
+  });
+
+  it('does not blame an opening this match never had', () => {
+    // Scissors is clear at the start of a Grudge + Copycat loadout, so a mark on
+    // it came from somewhere else — an opponent's card, most likely. Naming the
+    // opening would be a confident answer to a question this function cannot see.
+    const grudge: DelayMap = { rock: 0, paper: 0, scissors: 1, lizard: 0, robot: 0 };
+    expect(cooldownCause('robot', ['rock'], grudge)).toBe('Robot is on cooldown');
+  });
+
+  it('stops blaming the opening once the opening marks would have gone', () => {
+    // Robot opens a duel on 2, so by the third pick that mark is long spent and
+    // whatever is holding it down now is not the opening.
+    expect(cooldownCause('robot', ['scissors', 'paper', 'rock'], duel)).toBe(
+      'Robot is on cooldown',
+    );
   });
 });
 

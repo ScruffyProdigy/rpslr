@@ -1,3 +1,4 @@
+import type { DelayMap } from '@game/game';
 import type { Move } from './api';
 
 /**
@@ -135,15 +136,26 @@ export function winningEdgeOf(myMove: Move, oppMove: Move): WinningEdge | null {
 }
 
 /**
- * Why one of your moves is unavailable. Read off your own last two picks
- * rather than inferred from the mark count, so it stays true if helpers ever
- * change what a move costs. `recent` is most-recent-first.
+ * Why one of your moves is unavailable. Read off your own last two picks rather
+ * than inferred from the mark count, so it stays true whatever a loadout charges
+ * for a pick. `recent` is most-recent-first.
+ *
+ * The opening is the one cause that has to be *checked* rather than assumed. It
+ * used to be the fallback — in a duel, a move you have not just played and cannot
+ * play is Lizard or Robot still coming free. Helpers give it rivals: Rust,
+ * Quarantine, Grudge and Freeze all put marks on moves their owner never touched,
+ * and a loadout that binds neither Lizard nor Robot has no opening lock to blame
+ * in the first place. So the opening is named only where the opening marks could
+ * still be there — `openingDelays[move]` of them, one coming off per round played
+ * — and otherwise the honest answer is that the move is down, without a story
+ * about why (JQ-207).
  */
-export function cooldownCause(move: Move, recent: Move[]): string {
+export function cooldownCause(move: Move, recent: Move[], openingDelays: DelayMap): string {
   const name = MOVE_META[move].label;
   if (recent[0] === move) return `You played ${name} last round`;
   if (recent[1] === move) return `You played ${name} two rounds ago`;
-  return `${name} starts the match on cooldown`;
+  if (openingDelays[move] > recent.length) return `${name} starts the match on cooldown`;
+  return `${name} is on cooldown`;
 }
 
 /** Spoken form of an opponent cooldown, for the preview caption. */

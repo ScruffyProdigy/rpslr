@@ -17,6 +17,8 @@ function seat(position: number, seatKey: string, playerId: string, name: string)
     player: { id: playerId, name, lobbyUserId: null, score: 0, profile: null, expiryStrikes: 0 },
     lobbyProfile: null,
     delays: {},
+    loadout: null,
+    loadoutRoll: null,
   };
 }
 
@@ -55,6 +57,7 @@ function finishedState(overrides: Partial<MatchState['match']> = {}): MatchState
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: 'a',
+    abilityFirings: [],
     serverNow: '2026-09-07T00:05:00.000Z',
   };
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DelayMap } from '@game/game';
 import type { Move } from '../api';
 import {
   ARROW_INSET,
@@ -49,6 +50,7 @@ export function MovePicker({
   disabled,
   round,
   myRecentMoves,
+  myOpeningDelays,
   onPlay,
   secondsLeft = null,
   centerSlot,
@@ -65,6 +67,12 @@ export function MovePicker({
   round: number;
   /** Your last two picks, most recent first — explains your cooldowns. */
   myRecentMoves: Move[];
+  /**
+   * The marks your side opened the match on. Only the opening lock is read off
+   * it: `cooldownCause` needs to know whether a move it cannot otherwise account
+   * for started down, and a loadout decides that (JQ-207).
+   */
+  myOpeningDelays: DelayMap;
   onPlay: (move: Move) => void;
   /**
    * Seconds left in the round, or null when no clock is running. Used only to
@@ -318,7 +326,7 @@ export function MovePicker({
           const label = [
             MOVE_META[m].label,
             onCooldown ? cooldownPhrase(myDelay) : '',
-            onCooldown ? cooldownCause(m, myRecentMoves).toLowerCase() : '',
+            onCooldown ? cooldownCause(m, myRecentMoves, myOpeningDelays).toLowerCase() : '',
             oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
           ]
             .filter(Boolean)
@@ -390,6 +398,7 @@ export function MovePicker({
               myChosenMove={myChosenMove}
               myDelays={myDelays}
               myRecentMoves={myRecentMoves}
+              myOpeningDelays={myOpeningDelays}
               oppDelays={oppDelays}
               onCommit={commit}
               voice={voice}
@@ -462,6 +471,7 @@ function PickerCenter({
   myChosenMove,
   myDelays,
   myRecentMoves,
+  myOpeningDelays,
   oppDelays,
   onCommit,
   voice,
@@ -473,6 +483,7 @@ function PickerCenter({
   myChosenMove: Move | null;
   myDelays: Record<string, number>;
   myRecentMoves: Move[];
+  myOpeningDelays: DelayMap;
   oppDelays: Record<string, number>;
   onCommit: (move: Move) => void;
   /** How to refer to the you-side: second person, or by name on a replay. */
@@ -513,7 +524,7 @@ function PickerCenter({
       <div className="picker-center picker-center--why">
         <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
         <p className="picker-center__why">
-          {cooldownCause(shown, myRecentMoves)} — back in {myDelay} turn
+          {cooldownCause(shown, myRecentMoves, myOpeningDelays)} — back in {myDelay} turn
           {myDelay === 1 ? '' : 's'}
         </p>
       </div>

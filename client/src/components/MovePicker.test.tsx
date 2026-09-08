@@ -1,10 +1,14 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DelayMap } from '@game/game';
 import { MovePicker } from './MovePicker';
 import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
 import { threatsTo } from '../moves';
+
+/** What a duel opens on; every fixture here is a duel unless it says otherwise. */
+const DUEL_OPENING: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
 
 function renderPicker(
   over: {
@@ -15,6 +19,7 @@ function renderPicker(
     disabled?: boolean;
     round?: number;
     myRecentMoves?: Move[];
+    myOpeningDelays?: DelayMap;
     onPlay?: (m: Move) => void;
     winningEdge?: { from: Move; to: Move; role: 'you' | 'opp' } | null;
     secondsLeft?: number | null;
@@ -30,6 +35,7 @@ function renderPicker(
       disabled={over.disabled ?? false}
       round={over.round ?? 3}
       myRecentMoves={over.myRecentMoves ?? []}
+      myOpeningDelays={over.myOpeningDelays ?? DUEL_OPENING}
       onPlay={onPlay}
       secondsLeft={over.secondsLeft ?? null}
       winningEdge={over.winningEdge ?? null}
@@ -127,6 +133,7 @@ describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
         disabled
         round={3}
         myRecentMoves={[]}
+        myOpeningDelays={DUEL_OPENING}
         onPlay={() => {}}
       />,
     );
@@ -356,6 +363,7 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
         disabled={false}
         round={3}
         myRecentMoves={[]}
+        myOpeningDelays={DUEL_OPENING}
         onPlay={() => {}}
         winningEdge={null}
       />,
@@ -427,6 +435,7 @@ describe('<MovePicker> auto-commit at the deadline (JQ-156)', () => {
         disabled={false}
         round={3}
         myRecentMoves={[]}
+        myOpeningDelays={DUEL_OPENING}
         onPlay={props.onPlay}
         secondsLeft={secondsLeft}
         winningEdge={null}
@@ -554,6 +563,7 @@ function boardEl(centerSlot?: React.ReactNode) {
       disabled={false}
       round={3}
       myRecentMoves={[]}
+      myOpeningDelays={DUEL_OPENING}
       onPlay={() => {}}
       secondsLeft={null}
       winningEdge={null}

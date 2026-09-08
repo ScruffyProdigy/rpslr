@@ -1,6 +1,15 @@
 import type { MatchEndReason, MatchState, Move, RoundResult, Seat } from './api';
 import { seatIdentity, type Identity } from './lib/seatProfile';
 import { ALL_MOVES, threatsTo } from './moves';
+import {
+  boardsThroughMatch,
+  playedRoundsFrom,
+  reconstructionBlockedReason,
+  rulesForSeats,
+  type Board,
+  type ReconstructionSeat,
+} from '@game/replayBoard';
+import type { DelayMap } from '@game/game';
 
 /**
  * Rebuilding a finished match, round by round, from nothing but what
@@ -9,43 +18,20 @@ import { ALL_MOVES, threatsTo } from './moves';
  * `results[]` records what was played and who took each round, but not the
  * cooldown state a round was played *into* — that is never stored, because in
  * a live match it is just the current seat state. It does not need to be:
- * cooldowns are a pure function of the move sequence, so this file re-derives
- * them the way the server does.
+ * the board is a pure function of the move sequence, the abilities spent in it
+ * and the two loadouts, all three of which the state carries.
  *
- * The rule is mirrored from `api/src/game.ts`. If it changes there, the
- * arithmetic here and its tests change with it — that duplication is the price
- * of replaying a match the server no longer holds.
+ * The arithmetic itself is the server's, imported rather than mirrored. It used
+ * to be copied here, back when a pick always cost 2 and every match opened on
+ * lizard 1 / robot 2 — three lines are cheap to keep in step. A loadout ends
+ * that: Ferrus, Featherweight, Tempered, Copycat and Bookend change what a move
+ * costs, Quarantine, Rust, Thief, Grudge, Echo Chamber and Small Mercy change
+ * the *other* player's marks, and Freeze stops marks coming off at all. Mirrored,
+ * that is a second rules engine, and a replay drawn from it would be a board that
+ * never existed (JQ-207).
  */
 
-export type DelayMap = Record<Move, number>;
-
-/**
- * Delay marks each move starts a match with — `INITIAL_DELAYS` in game.ts.
- * Exported with `advanceDelays` so anything that needs to reason about the
- * cooldown clock reads it from here rather than writing the rule down again.
- */
-export const INITIAL_DELAYS: DelayMap = {
-  rock: 0,
-  paper: 0,
-  scissors: 0,
-  lizard: 1,
-  robot: 2,
-};
-
-/**
- * How many marks the chosen move gains — `DELAY_ON_CHOICE` in game.ts.
- * Exported so the commentary can say how long a move rests without writing
- * the number down a second time.
- */
-export const DELAY_ON_CHOICE = 2;
-
-/** Every move −1 floored at 0, then the pick +2. The order is the rule. */
-export function advanceDelays(delays: DelayMap, chosen: Move): DelayMap {
-  const next = { ...delays };
-  for (const move of ALL_MOVES) next[move] = Math.max(0, next[move] - 1);
-  next[chosen] += DELAY_ON_CHOICE;
-  return next;
-}
+export type { DelayMap };
 
 /** One player's standing at one round, as they entered it. */
 export interface ReplaySide {
@@ -54,6 +40,14 @@ export interface ReplaySide {
   move: Move;
   /** Marks held entering the round — before this round's pick is charged. */
   delaysBefore: DelayMap;
+  /** Marks held leaving it, which is what the next round was entered on. */
+  delaysAfter: DelayMap;
+  /**
+   * Marks this player's loadout opened the match on — duel's lizard 1, robot 2,
+   * or wherever this loadout's two cards are bound. Read to tell an opening lock
+   * apart from a mark something else put there.
+   */
+  openingDelays: DelayMap;
   /** Moves the other player had no live attacker for: these could not lose. */
   safeMoves: Move[];
   /** Rounds won so far, including this one. */
@@ -92,6 +86,12 @@ export interface Replay {
   winnerSeatKey: string | null;
   endReason: MatchEndReason | null;
   finalScore: { a: number; b: number };
+  /**
+   * True once either seat brought helpers. The commentary reads it before saying
+   * anything that is only true of a plain duel — what a pick costs, which moves
+   * start locked — rather than asserting the duel numbers at a helpers match.
+   */
+  hasLoadouts: boolean;
 }
 
 /** Seats in board order, so the same player is blue on every load. */
@@ -99,9 +99,24 @@ function orderedSeats(state: MatchState): Seat[] {
   return [...state.seats].sort((x, y) => x.position - y.position);
 }
 
+/** A claimed seat as the shared reconstruction wants it. */
+function reconstructionSeat(seat: Seat): ReconstructionSeat {
+  return {
+    seatKey: seat.seatKey,
+    playerId: seat.player?.id ?? '',
+    loadout: seat.loadout ?? null,
+    loadoutRoll: seat.loadoutRoll ?? null,
+  };
+}
+
 /**
  * Why this match cannot be replayed, or null when it can. A replay is only
  * ever of a finished match — a live one would leak the current round's picks.
+ *
+ * A helpers match adds one more way to be unreplayable: a loadout whose two cards
+ * bound the same move was settled by a roll, and without the stored roll there is
+ * no route back to the board it opened on. Saying so is the honest answer; drawing
+ * a plausible board instead is the failure this whole module exists to avoid.
  */
 export function replayBlockedReason(state: MatchState): string | null {
   if (state.match.status !== 'finished') return "This match isn't over yet";
@@ -110,30 +125,36 @@ export function replayBlockedReason(state: MatchState): string | null {
   if (seats.length < 2 || !seats[0].player || !seats[1].player) {
     return 'This match has no rounds to replay';
   }
-  return null;
+  return reconstructionBlockedReason(seats[0], seats[1]);
 }
 
 export function buildReplay(state: MatchState): Replay {
   const seats = orderedSeats(state);
   const [seatA, seatB] = seats;
-  const idA = seatA.player?.id ?? '';
-  const idB = seatB.player?.id ?? '';
+  const a = reconstructionSeat(seatA);
+  const b = reconstructionSeat(seatB);
 
-  let delaysA: DelayMap = { ...INITIAL_DELAYS };
-  let delaysB: DelayMap = { ...INITIAL_DELAYS };
+  const rounds = playedRoundsFrom(state.results, state.abilityFirings ?? [], a, b);
+  const boards = boardsThroughMatch(rounds, ...rulesForSeats(seatA, seatB));
+  const [opening] = boards;
+
+  // The rounds the boards were built from, in the same order, so a round the
+  // reconstruction discarded for want of a pick is discarded from the strip too
+  // rather than shifting every board after it onto the wrong round.
+  const played = [...state.results]
+    .sort((x, y) => x.round - y.round)
+    .filter((r) => r.moves[a.playerId] && r.moves[b.playerId]);
+
   let scoreA = 0;
   let scoreB = 0;
   const playedA: Move[] = [];
   const playedB: Move[] = [];
 
-  const frames: ReplayFrame[] = [];
-
-  for (const result of [...state.results].sort((x, y) => x.round - y.round)) {
-    const moveA = result.moves[idA];
-    const moveB = result.moves[idB];
-    // A round the server recorded without both picks cannot be drawn; skipping
-    // it keeps the cooldown chain honest rather than inventing a move.
-    if (!moveA || !moveB) continue;
+  const frames: ReplayFrame[] = played.map((result, index) => {
+    const moveA = result.moves[a.playerId];
+    const moveB = result.moves[b.playerId];
+    const before: Board = boards[index];
+    const after: Board = boards[index + 1];
 
     const beforeA = scoreA;
     const beforeB = scoreB;
@@ -141,49 +162,52 @@ export function buildReplay(state: MatchState): Replay {
     else if (result.outcome === seatB.seatKey) scoreB += 1;
 
     const autoPicked = result.autoPicked ?? [];
-
-    frames.push({
+    const frame: ReplayFrame = {
       round: result.round,
       outcome: result.outcome,
       result,
       a: {
         seatKey: seatA.seatKey,
-        playerId: idA,
+        playerId: a.playerId,
         move: moveA,
-        delaysBefore: delaysA,
-        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, delaysB).safe),
+        delaysBefore: before.a,
+        delaysAfter: after.a,
+        openingDelays: opening.a,
+        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.b).safe),
         score: scoreA,
         scoreBefore: beforeA,
         recentMoves: [...playedA].reverse(),
-        autoPicked: autoPicked.includes(idA),
+        autoPicked: autoPicked.includes(a.playerId),
       },
       b: {
         seatKey: seatB.seatKey,
-        playerId: idB,
+        playerId: b.playerId,
         move: moveB,
-        delaysBefore: delaysB,
-        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, delaysA).safe),
+        delaysBefore: before.b,
+        delaysAfter: after.b,
+        openingDelays: opening.b,
+        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.a).safe),
         score: scoreB,
         scoreBefore: beforeB,
         recentMoves: [...playedB].reverse(),
-        autoPicked: autoPicked.includes(idB),
+        autoPicked: autoPicked.includes(b.playerId),
       },
-    });
+    };
 
-    delaysA = advanceDelays(delaysA, moveA);
-    delaysB = advanceDelays(delaysB, moveB);
     playedA.push(moveA);
     playedB.push(moveB);
-  }
+    return frame;
+  });
 
   return {
     frames,
-    a: { seatKey: seatA.seatKey, playerId: idA, identity: seatIdentity(seatA, 'Player 1') },
-    b: { seatKey: seatB.seatKey, playerId: idB, identity: seatIdentity(seatB, 'Player 2') },
+    a: { seatKey: seatA.seatKey, playerId: a.playerId, identity: seatIdentity(seatA, 'Player 1') },
+    b: { seatKey: seatB.seatKey, playerId: b.playerId, identity: seatIdentity(seatB, 'Player 2') },
     bestOf: state.match.bestOf,
     winnerSeatKey: state.match.winnerSeatKey ?? state.matchWinnerSeatKey,
     endReason: state.match.endReason,
     finalScore: { a: scoreA, b: scoreB },
+    hasLoadouts: Boolean(a.loadout || b.loadout),
   };
 }
 

@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import type { Loadout } from '@game/helpers/loadout';
 import type { MatchState, Move, RoundResult, Seat } from './api';
 import { buildReplay, flipReplay, replayBlockedReason } from './replay';
 
-function seat(position: number, seatKey: string, playerId: string, name: string): Seat {
+function seat(
+  position: number,
+  seatKey: string,
+  playerId: string,
+  name: string,
+  loadout: Loadout | null = null,
+  loadoutRoll: Move | null = null,
+): Seat {
   return {
     id: `seat-${seatKey}`,
     matchId: 'm1',
@@ -21,6 +29,8 @@ function seat(position: number, seatKey: string, playerId: string, name: string)
     },
     lobbyProfile: null,
     delays: {},
+    loadout,
+    loadoutRoll,
   };
 }
 
@@ -28,7 +38,11 @@ function round(n: number, a: Move, b: Move, outcome: string): RoundResult {
   return { round: n, outcome, moves: { pa: a, pb: b }, autoPicked: [] };
 }
 
-function state(results: RoundResult[], overrides: Partial<MatchState['match']> = {}): MatchState {
+function state(
+  results: RoundResult[],
+  overrides: Partial<MatchState['match']> = {},
+  seats: Seat[] = [seat(0, 'a', 'pa', 'Ana'), seat(1, 'b', 'pb', 'Ben')],
+): MatchState {
   return {
     match: {
       id: 'm1',
@@ -50,11 +64,12 @@ function state(results: RoundResult[], overrides: Partial<MatchState['match']> =
       createdAt: '2026-09-07T00:00:00.000Z',
       ...overrides,
     },
-    seats: [seat(0, 'a', 'pa', 'Ana'), seat(1, 'b', 'pb', 'Ben')],
+    seats,
     results,
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: overrides.winnerSeatKey ?? 'a',
+    abilityFirings: [],
     serverNow: '2026-09-07T00:05:00.000Z',
   };
 }
@@ -71,6 +86,20 @@ describe('replayBlockedReason', () => {
 
   it('refuses a finished match with no rounds to show', () => {
     expect(replayBlockedReason(state([]))).toBe('This match has no rounds to replay');
+  });
+
+  it('refuses a helpers match whose opening cannot be rebuilt', () => {
+    // Grudge and Sharp Practice both bind Scissors, so one of them was displaced
+    // onto a move drawn at random when the match began. Without that roll there is
+    // no route back to the board it opened on, and a plausible-looking board is
+    // worse than saying so.
+    const unrolled = state([round(1, 'rock', 'paper', 'b')], {}, [
+      seat(0, 'a', 'pa', 'Ana', ['grudge', 'sharp-practice']),
+      seat(1, 'b', 'pb', 'Ben'),
+    ]);
+    expect(replayBlockedReason(unrolled)).toBe(
+      "This match's helper setup can't be reconstructed",
+    );
   });
 });
 
@@ -271,5 +300,36 @@ describe('flipReplay', () => {
     const replay = buildReplay(state([round(1, 'rock', 'scissors', 'a')]));
     expect(flipReplay(replay).frames[0].result).toBe(replay.frames[0].result);
     expect(flipReplay(replay).frames[0].outcome).toBe('a');
+  });
+});
+
+describe('buildReplay with loadouts', () => {
+  // Grudge is a Minor bound to Scissors (1 mark); Copycat is a Trinket, so it
+  // binds nothing. Nothing about that opening resembles duel's lizard 1/robot 2.
+  const grudgeAndCopycat = (): Seat[] => [
+    seat(0, 'a', 'pa', 'Ana', ['grudge', 'copycat']),
+    seat(1, 'b', 'pb', 'Ben'),
+  ];
+
+  it('opens each seat on the marks its own loadout paid for', () => {
+    const [frame] = buildReplay(
+      state([round(1, 'rock', 'paper', 'b')], {}, grudgeAndCopycat()),
+    ).frames;
+
+    expect(frame.a.delaysBefore).toEqual({
+      rock: 0,
+      paper: 0,
+      scissors: 1,
+      lizard: 0,
+      robot: 0,
+    });
+    // The other seat brought nothing, so it still opens on the duel marks.
+    expect(frame.b.delaysBefore).toEqual({
+      rock: 0,
+      paper: 0,
+      scissors: 0,
+      lizard: 1,
+      robot: 2,
+    });
   });
 });

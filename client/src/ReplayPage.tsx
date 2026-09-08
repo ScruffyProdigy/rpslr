@@ -90,7 +90,7 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   // Which round first puts each rule on the board. Computed once for the whole
   // replay so a rule is explained where it belongs rather than wherever the
   // watcher happens to have stepped to.
-  const schedule = useMemo(() => (replay ? ruleCardSchedule(replay.frames) : []), [replay]);
+  const schedule = useMemo(() => (replay ? ruleCardSchedule(replay) : []), [replay]);
 
   const score = useMemo(
     () => scoreGuesses(replay?.frames ?? [], playAlong.guesses),
@@ -229,6 +229,7 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           disabled={!awaiting}
           round={frame.round}
           myRecentMoves={frame.a.recentMoves}
+          myOpeningDelays={frame.a.openingDelays}
           onPlay={(move) => {
             playAlong.call(frame.round, move);
             playback.resume();

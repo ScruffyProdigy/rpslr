@@ -40,6 +40,7 @@ function state(over: {
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: null,
+    abilityFirings: [],
     serverNow: new Date(serverNow).toISOString(),
   };
 }
