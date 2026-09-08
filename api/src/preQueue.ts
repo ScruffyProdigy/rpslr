@@ -11,6 +11,7 @@
  */
 
 import type { GameModeManifest, PreQueueGroup } from './gameModes.js';
+import { parseLoadout, type Loadout } from './helpers/loadout.js';
 import { validateSelection } from './helpers/queueOptions.js';
 import type { AssignmentSeat, SeatOptionSelection } from './tokens.js';
 
@@ -114,4 +115,30 @@ export function resolvePreQueueOptions(
     }
   }
   return resolved;
+}
+
+/**
+ * The `Loadout` a seat's resolved selections compile to, or null for a mode that
+ * asks for no loadout at all — which is `duel`, and is the null loadout rather than
+ * a special case in the engine.
+ *
+ * `parseLoadout` cannot fail on input `resolvePreQueueOptions` already accepted, so
+ * a failure here means the two disagree about what a valid selection is. That is a
+ * wiring bug and it throws, rather than quietly seating a player with no helpers.
+ */
+export function seatLoadout(
+  mode: GameModeManifest,
+  selections: ResolvedSelection[],
+  seatKey: string,
+): Loadout | null {
+  const group = mode.preQueue?.groups.find((g) => g.kind === 'Loadout');
+  if (!group) return null;
+  const picked = selections.find((s) => s.seatKey === seatKey && s.groupKey === group.key);
+  if (!picked) return null;
+
+  const loadout = parseLoadout(picked.optionIds);
+  if (typeof loadout === 'string') {
+    throw new Error(`resolved selection failed parseLoadout: ${loadout}`);
+  }
+  return loadout;
 }

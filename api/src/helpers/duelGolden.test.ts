@@ -10,6 +10,13 @@
  * A failure means one of two things. Either a duel rule changed, in which case the
  * diff names the exact move sequence, or `rulesFor(null, …)` stopped being the
  * rules this game already had — which is the whole back-compatibility strategy.
+ *
+ * The `duel` snapshot was re-captured once, for JQ-148: `MatchState` gained
+ * `abilityFirings`, and a seat gained `loadout` and `loadoutRoll`. That diff was
+ * thirty insertions and no deletions — no recorded value moved — and the test below
+ * pins those three fields at their duel values so the shape change cannot be a rules
+ * change wearing a new field's clothes. `opening`, `outcomes` and `engineTable` are
+ * untouched from the original capture, and they are where the guarantee really sits.
  */
 
 import { readFileSync } from 'node:fs';
@@ -48,6 +55,18 @@ describe('duel is byte-identical to the engine it had before loadouts', () => {
 });
 
 describe('the null loadout is the duel path, not a copy of it', () => {
+  it('leaves a duel seat carrying no loadout, and the match no firings', () => {
+    const state = FIXTURE.duel.final as {
+      abilityFirings: unknown[];
+      seats: { loadout: unknown; loadoutRoll: unknown }[];
+    };
+    expect(state.abilityFirings).toEqual([]);
+    for (const seat of state.seats) {
+      expect(seat.loadout).toBeNull();
+      expect(seat.loadoutRoll).toBeNull();
+    }
+  });
+
   it('hands back the very same rules object', () => {
     expect(rulesFor(null)).toBe(DUEL_RULES);
     expect(DUEL_RULES).toBe(BASE_RULES);

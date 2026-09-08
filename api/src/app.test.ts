@@ -21,6 +21,7 @@ function buildApp(env: Partial<NodeJS.ProcessEnv> = {}, verifier?: TokenVerifier
   const config = loadConfig({ GAME_APP_ENV: 'local', REQUIRE_LOBBY_AUTH: 'false', ...env } as NodeJS.ProcessEnv);
   const service = new GameService(new MemoryGameRepository(), {
     bannedLobbyUsers: config.bannedLobbyUsers,
+    requirePreQueueOptions: config.requirePreQueueOptions,
   });
   return createApp(service, config, verifier);
 }

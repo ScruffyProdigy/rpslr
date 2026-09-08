@@ -3,7 +3,6 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { GAME_NAME, GAME_VERSION, type AppConfig } from './config.js';
 import { buildGameModesPayload, getGameMode } from './gameModes.js';
 import { optionSourceFor } from './helpers/queueOptions.js';
-import { isPreQueueRejection, resolvePreQueueOptions } from './preQueue.js';
 import { buildLaunchUrlsForAssignment } from './launchUrls.js';
 import {
   ConflictError,
@@ -11,7 +10,12 @@ import {
   ReservationError,
 } from './repository.js';
 import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
-import { BannedPlayerError, ValidationError, type GameService } from './service.js';
+import {
+  BannedPlayerError,
+  PreQueueError,
+  ValidationError,
+  type GameService,
+} from './service.js';
 import { registerReplayCardRoutes } from './replayCard/routes.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';
 
@@ -106,29 +110,6 @@ export function createApp(
         const authErr = verifyLobbyProvisionAuth(req.header('authorization'), parsed.lobby.serviceToken);
         if (authErr) {
           return res.status(401).json({ error: authErr });
-        }
-        const mode = getGameMode(parsed.assignment.gameMode);
-        if (mode) {
-          const selections = resolvePreQueueOptions(mode, parsed.assignment.seats, {
-            require: config.requirePreQueueOptions,
-          });
-          if (isPreQueueRejection(selections)) {
-            // 400, never 403 — Lobby parses 403 as the banlist shape and would
-            // re-matchmake forever on a malformed selection.
-            return res.status(400).json(selections);
-          }
-          for (const selection of selections.filter((s) => s.defaulted)) {
-            console.warn(
-              JSON.stringify({
-                event: 'provision.prequeue_defaulted',
-                externalMatchId: parsed.assignment.externalMatchId,
-                gameMode: parsed.assignment.gameMode,
-                seatKey: selection.seatKey,
-                groupKey: selection.groupKey,
-                optionIds: selection.optionIds,
-              }),
-            );
-          }
         }
         const state = await service.ensureMatchFromAssignment(parsed);
         const launchUrls = buildLaunchUrlsForAssignment(config.playUrl, parsed.assignment);
@@ -226,6 +207,13 @@ export function createApp(
     if (err instanceof NotFoundError) return res.status(404).json({ error: err.message });
     if (err instanceof BannedPlayerError) {
       return res.status(403).json({ error: err.message, bannedLobbyUserIds: err.bannedLobbyUserIds });
+    }
+    // 400, never 403 — Lobby parses 403 as the banlist shape and would re-matchmake
+    // forever on a selection it can only fix by not sending it again.
+    if (err instanceof PreQueueError) {
+      return res
+        .status(400)
+        .json({ error: 'invalid pre-queue selection', seatKey: err.seatKey, reason: err.reason });
     }
     if (err instanceof ReservationError) return res.status(403).json({ error: err.message });
     if (err instanceof ConflictError) return res.status(409).json({ error: err.message });

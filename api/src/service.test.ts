@@ -219,3 +219,214 @@ describe('GameService — Lobby push (option 2)', () => {
     ).rejects.toMatchObject({ message: /iss/ });
   });
 });
+
+describe('GameService — duel-helpers loadouts', () => {
+  let repo: MemoryGameRepository;
+  let service: GameService;
+
+  beforeEach(() => {
+    repo = new MemoryGameRepository();
+    // A fixed source, so the same-move roll is a decision this test can name.
+    service = new GameService(repo, { rng: () => 0 });
+  });
+
+  function provision(
+    externalMatchId: string,
+    seats: { seatKey: string; optionIds?: string[] }[],
+  ) {
+    return service.ensureMatchFromAssignment({
+      lobbyId: 'https://lobby.local',
+      lobby: { returnUrl: 'http://localhost:5173', graphqlUrl: 'http://localhost:8080/query' },
+      assignment: {
+        externalMatchId,
+        gameMode: 'duel-helpers',
+        bestOf: 5,
+        seats: seats.map((s) => ({
+          seatKey: s.seatKey,
+          lobbyUserId: `u_${s.seatKey}`,
+          options: s.optionIds ? [{ groupKey: 'helpers', optionIds: s.optionIds }] : undefined,
+        })),
+      },
+    });
+  }
+
+  it('stores the loadout each seat was provisioned with', async () => {
+    const state = await provision('m-store', [
+      { seatKey: '1', optionIds: ['ferrus', 'chimera'] },
+      { seatKey: '2', optionIds: ['oracle', 'copycat'] },
+    ]);
+    expect(state.seats[0].loadout).toEqual(['ferrus', 'chimera']);
+    expect(state.seats[1].loadout).toEqual(['oracle', 'copycat']);
+  });
+
+  it('opens with the marks the loadouts imply, not the duel opening', async () => {
+    const state = await provision('m-marks', [
+      { seatKey: '1', optionIds: ['ferrus', 'chimera'] },
+      { seatKey: '2', optionIds: ['oracle', 'copycat'] },
+    ]);
+    // Ferrus binds Robot and Chimera binds Lizard; both are Majors, so 2 marks each.
+    expect(state.seats[0].delays).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 2, robot: 2 });
+    // Oracle binds Paper; Copycat is a Trinket and costs nothing.
+    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 0, lizard: 0, robot: 0 });
+  });
+
+  it('survives a reload — the loadout is read back, not re-derived', async () => {
+    const created = await provision('m-reload', [
+      { seatKey: '1', optionIds: ['ferrus', 'chimera'] },
+      { seatKey: '2', optionIds: ['oracle', 'copycat'] },
+    ]);
+    const reread = await service.getState('m-reload');
+    expect(reread.seats.map((s) => s.loadout)).toEqual(created.seats.map((s) => s.loadout));
+  });
+
+  it('rolls a same-move collision once, and the roll does not move on re-read', async () => {
+    // Ferrus and Freeze both bind Robot, so the second one's marks are displaced.
+    const created = await provision('m-roll', [
+      { seatKey: '1', optionIds: ['ferrus', 'freeze'] },
+      { seatKey: '2', optionIds: ['oracle', 'copycat'] },
+    ]);
+    const rolled = created.seats[0].loadoutRoll;
+    expect(rolled).not.toBeNull();
+    expect(created.seats[0].delays.robot).toBe(2);
+    expect(created.seats[0].delays[rolled!]).toBe(2);
+
+    const reread = await service.getState('m-roll');
+    expect(reread.seats[0].loadoutRoll).toBe(rolled);
+    expect(reread.seats[0].delays).toEqual(created.seats[0].delays);
+  });
+
+  it('defaults a seat that picked nothing to exactly the duel opening', async () => {
+    const state = await provision('m-default', [{ seatKey: '1' }, { seatKey: '2' }]);
+    for (const seat of state.seats) {
+      expect(seat.loadout).toEqual(['ferrus', 'featherweight']);
+      expect(seat.delays).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 });
+    }
+  });
+
+  it('refuses to seat an invalid selection', async () => {
+    await expect(
+      provision('m-bad', [
+        { seatKey: '1', optionIds: ['ferrus', 'ferrus'] },
+        { seatKey: '2', optionIds: ['oracle', 'copycat'] },
+      ]),
+    ).rejects.toMatchObject({ seatKey: '1', reason: 'a loadout needs two different helpers' });
+  });
+
+  it('rejects a missing selection when the deploy has tightened', async () => {
+    const strict = new GameService(new MemoryGameRepository(), { requirePreQueueOptions: true });
+    await expect(
+      strict.ensureMatchFromAssignment({
+        lobbyId: 'https://lobby.local',
+        lobby: { returnUrl: 'http://localhost:5173', graphqlUrl: 'http://localhost:8080/query' },
+        assignment: {
+          externalMatchId: 'm-strict',
+          gameMode: 'duel-helpers',
+          bestOf: 5,
+          seats: [
+            { seatKey: '1', lobbyUserId: 'u_1' },
+            { seatKey: '2', lobbyUserId: 'u_2' },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({ seatKey: '1' });
+  });
+
+  it('gives a standalone duel-helpers match the default loadout, tightening or not', async () => {
+    const strict = new GameService(new MemoryGameRepository(), { requirePreQueueOptions: true });
+    const created = await strict.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+    });
+    expect(created.state.seats[0].loadout).toEqual(['ferrus', 'featherweight']);
+  });
+
+  it('leaves a duel seat with no loadout at all', async () => {
+    const created = await service.createStandaloneMatch({ hostName: 'Alice' });
+    expect(created.state.seats[0].loadout).toBeNull();
+    expect(created.state.seats[0].loadoutRoll).toBeNull();
+  });
+});
+
+describe('GameService — ability firings', () => {
+  let repo: MemoryGameRepository;
+  let service: GameService;
+
+  beforeEach(() => {
+    repo = new MemoryGameRepository();
+    service = new GameService(repo);
+  });
+
+  async function playingMatch() {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 3,
+    });
+    const code = created.state.match.code;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    const state = await service.getState(code);
+    return {
+      code,
+      matchId: state.match.id,
+      seatId: state.seats[0].id,
+      hostId: created.you.playerId,
+      challengerId: joined.you.playerId,
+    };
+  }
+
+  it('withholds a firing from the round still being played', async () => {
+    const { code, matchId, seatId } = await playingMatch();
+    await repo.recordAbilityFiring({
+      matchId,
+      seatId,
+      round: 1,
+      helperId: 'quarantine',
+      target: 'rock',
+    });
+
+    const state = await service.getState(code);
+    expect(state.abilityFirings).toEqual([]);
+    // The named move must not be anywhere in the payload, not merely unrendered.
+    expect(JSON.stringify(state)).not.toContain('quarantine');
+  });
+
+  it('discloses the firing, and the move it named, once the round resolves', async () => {
+    const { code, matchId, seatId, hostId, challengerId } = await playingMatch();
+    await repo.recordAbilityFiring({
+      matchId,
+      seatId,
+      round: 1,
+      helperId: 'quarantine',
+      target: 'rock',
+    });
+
+    await service.submitMove(code, hostId, 'paper');
+    await service.submitMove(code, challengerId, 'scissors');
+
+    const state = await service.getState(code);
+    expect(state.abilityFirings).toEqual([
+      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock' },
+    ]);
+  });
+
+  it('refuses a second firing from the same seat in the same round', async () => {
+    const { matchId, seatId } = await playingMatch();
+    const firing = { matchId, seatId, round: 1, helperId: 'rust', target: null };
+    await repo.recordAbilityFiring(firing);
+    await expect(repo.recordAbilityFiring(firing)).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('survives a reload — a spent charge is not handed back', async () => {
+    const { matchId, seatId } = await playingMatch();
+    await repo.recordAbilityFiring({
+      matchId,
+      seatId,
+      round: 1,
+      helperId: 'freeze',
+      target: null,
+    });
+    expect(await repo.listAbilityFirings(matchId)).toEqual([
+      { round: 1, seatKey: '1', helperId: 'freeze', target: null },
+    ]);
+  });
+});

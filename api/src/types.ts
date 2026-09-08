@@ -1,4 +1,5 @@
 import type { Move } from './game.js';
+import type { Loadout } from './helpers/loadout.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Phase } from './roundPolicy.js';
 
@@ -61,6 +62,17 @@ export interface Seat {
   player: SeatPlayer | null;
   /** Current delay marks per move for this seat's player (cooldown system). */
   delays: Record<string, number>;
+  /**
+   * The two helpers this seat brought, settled at provision. Null in `duel`, which
+   * is the null loadout rather than a special case.
+   */
+  loadout: Loadout | null;
+  /**
+   * Where a same-move collision displaced the cheaper helper's marks, rolled once
+   * server-side when the match was created. Stored rather than re-thrown, because a
+   * replay has to reach the marks the match reached the first time.
+   */
+  loadoutRoll: Move | null;
 }
 
 export interface SeatPlayer {
@@ -93,6 +105,11 @@ export interface MatchState {
   /** Winning seat_key once decided, or 'draw'/null. */
   matchWinnerSeatKey: string | null;
   /**
+   * Abilities spent in rounds that have already resolved. An in-progress round's
+   * firing is deliberately absent — see `AbilityFiring.target`.
+   */
+  abilityFirings: AbilityFiring[];
+  /**
    * The server's clock when this snapshot was built, ISO. The client renders
    * `match.phaseDeadline` as an offset from this rather than trusting its own
    * clock, which may be minutes off.
@@ -107,4 +124,27 @@ export interface SeatReservation {
   role?: string | null;
   position: number;
   reservedForLobbyUser?: string | null;
+  /** Settled before the seat exists, so it is never a match without one. */
+  loadout?: Loadout | null;
+  loadoutRoll?: Move | null;
+}
+
+/**
+ * One ability a seat spent in one round.
+ *
+ * Everything else about a match replays from the move list. Firing does not: it is a
+ * choice, so a charge spent is only knowable if it was written down. Without this
+ * record a restart hands a player their abilities back.
+ */
+export interface AbilityFiring {
+  round: number;
+  seatKey: string;
+  helperId: string;
+  /**
+   * The move the ability named, for the ones that name a move. Quarantine's is
+   * withheld until the round resolves — naming it is a hedge against what the
+   * opponent is about to play, and an opponent who could read it would simply play
+   * something else.
+   */
+  target: Move | null;
 }
