@@ -858,7 +858,8 @@ settled even though the per-card numbers are not, and the numbers are only data.
 **Interfaces:**
 - Consumes: everything in 1.1–1.5.
 - Produces: `AbilityState`, `abilityMarks(loadout, firings)`, and a `fired` field on
-  the round record. JQ-149's picker and JQ-151's pentagon both read the first.
+  the round record. JQ-149's loadout reveal and JQ-151's pentagon both read the
+  first. (JQ-149 is no longer a draft screen — the pick moved to the lobby.)
 
 ### What changes, and the one thing that is not free
 
@@ -895,7 +896,8 @@ alongside the loadout columns rather than in a migration of its own.
 ### Order
 
 1. ~~**`Load` gains the two numbers.**~~ Done ahead of this task: the numbers were
-   settled, and the roster is the source of truth JQ-148's picker renders from, so
+   settled, and the roster is the source of truth behind the lobby's loadout
+   picker, which JQ-148's `queue-options` endpoint feeds, so
    leaving `'charge'` and `'per-round'` there meant declaring load kinds the design
    had stopped having. `isAbility` and the value table ship with it.
 2. **`abilityMarks`** — pure, in `helpers/`: given a loadout and the firings so far,

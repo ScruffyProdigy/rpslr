@@ -24,9 +24,10 @@ export type Tier = 'Major' | 'Minor' | 'Trinket';
  * it fires, like any other ability.
  *
  * The effects themselves are not implemented (Task 1.6). The numbers are declared
- * here anyway, because they are data the picker has to render rather than signatures
- * anyone is waiting on — and because they are all first guesses, meant to move as
- * JQ-152's telemetry comes in rather than to be argued to a conclusion first.
+ * here anyway, because the lobby's loadout picker has to show them — a player
+ * drafting Sacrifice needs to know it does nothing until round 4 — rather than
+ * because any signature is waiting on them. They are all first guesses, meant to
+ * move as JQ-152's telemetry comes in rather than be argued to a conclusion first.
  */
 export type Load =
   | { kind: 'passive' }
@@ -58,10 +59,10 @@ export interface HelperDef<T extends Tier = Tier> {
   /**
    * Player-facing copy; also the `blurb` in the queue-options roster.
    *
-   * Says what the helper does, never how often. An ability's cadence is its
-   * opening and recharge marks, and those are numbers the picker renders — putting
-   * them in prose too means two copies of a value that is expected to move, and the
-   * prose is the one that silently goes stale.
+   * Says what the helper does, never how often. How often is the `opening` and
+   * `recharge` marks above, which the lobby's loadout picker renders from the
+   * roster — putting them in prose as well means two copies of a value that is
+   * expected to move, and the prose is the copy that goes stale in silence.
    */
   blurb: string;
 }

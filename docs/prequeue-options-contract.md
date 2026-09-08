@@ -243,7 +243,26 @@ Two properties worth stating explicitly:
 ## 5. Deploying the two sides
 
 The manifest self-synchronises (§1), so no capability flag and no ordering
-constraint. What remains on the game side:
+constraint.
+
+**Merging the lobby side ships nothing.** JoinQuest deploys manually from a clean
+`origin/main` checkout, so JQ-163 being merged does not mean pre-queue options are
+live — that is a separate, deliberate step. Confirmed by the JQ-163 session,
+2026-09-08. The tandem sequence is therefore:
+
+1. Game ships `duel-helpers` **without** `preQueue` in its manifest, or does not ship
+   the mode yet. Nothing changes for anyone.
+2. Lobby is **deployed** from `origin/main` — the step that is easy to assume the
+   merge already did.
+3. Game's manifest declares `preQueue`. This is the moment the feature goes live,
+   and the moment §2's fail-closed roster starts mattering: from here a slow or
+   unreachable `queue-options` makes `duel-helpers` unjoinable rather than degraded.
+4. `REQUIRE_PREQUEUE_OPTIONS=true` once real selections are arriving.
+
+Step 3 is the risky one, not the merges. Do not put `queue-options` behind anything
+with a cold start.
+
+What remains on the game side:
 
 A `duel-helpers` provision with **no** `options` on a seat gets a default loadout of
 Ferrus + Featherweight — 2 marks on Robot, 1 on Lizard, exactly RPSLR's existing
