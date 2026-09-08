@@ -115,20 +115,33 @@ bottom of a story — the author header above, the reply bar and sticker row bel
 — so all content lives inside **y ∈ [250, 1670]**, and `storyLayout.test.ts`
 asserts it box by box, the way `cardLayout.test.ts` asserts the centre square.
 
-Reading down the safe zone:
+Reading down the safe zone (`storyLayout.ts` is authoritative; this is the shape
+of it):
 
 | Band | Content |
 |---|---|
-| 250–420 | Headline — "Ana wins 3–1" or "Ana vs Ben · 3–1" |
-| 440–800 | Two avatar discs, 260px, score between them |
-| 800–900 | Names, in `--you` and `--opp` |
-| 940–1190 | The showdown: two move icons and the verb between them |
-| 1190–1270 | The showdown caption — "Paper covers Rock" |
-| 1310–1570 | QR, 260px, and the short URL beside it in 46px type |
-| 1600–1670 | "RPSLR on JoinQuest" |
+| 270–370 | Headline — "Ana wins 3–1" or "Ana vs Ben · 3–1" |
+| 420–680 | Two avatar discs, 260px, with the score between them |
+| 700–756 | Names, in `--you` and `--opp` |
+| 830–1030 | The showdown: two move icons flanking the verb |
+| 1060–1130 | The showdown caption — "Round 4 · Robot vaporizes Rock" |
+| 1210–1470 | QR, 260px, centred |
+| 1490–1560 | The short URL under it, 52px |
+| 1590–1660 | "RPSLR on JoinQuest" |
 
-Nothing overlaps: `contentBoxes()` is checked pairwise, because a name drawn over
-a disc is unreadable and no safe-zone assertion would notice.
+The QR and the URL are stacked rather than side by side. The first draft put the
+URL beside the QR, in the 540px that left — and `rpsls-duel.win/r/RPS-K7M2`, set
+large enough to read across a room, does not fit in 540. Every box assertion
+passed, because a box only says where we meant to draw. Under the QR it gets the
+full width, which is the shape a 9:16 canvas wants anyway.
+
+Nothing overlaps: `storyContentBoxes()` is checked pairwise, because a name drawn
+over a disc is unreadable and no safe-zone assertion would notice.
+
+And because that whole family of assertion is blind to text overrunning its box,
+the rendered card is checked too: `storySvg.test.ts` rasterises it and looks for
+ink outside the safe area. Reverting the layout above makes it fail with 1247
+stray pixels.
 
 ## Budget
 
@@ -176,10 +189,14 @@ Same rule as JQ-120: **every path ends in an image.**
 ## Testing
 
 - `storyLayout.test.ts` — every box inside the safe zone; no two boxes overlap
-- `moveVerbs.test.ts` — every winning pair in `BEATS` has a verb; no losing pair does
-- `qrSvg.test.ts` — decodes back to the URL; a known string renders a stable path
-- `storySvg.test.ts` — names escaped; showdown absent on a draw and on a forfeit
-- `storyImage.test.ts` — renders 1080×1920 and lands under 1 MB
+- `moveVerbs.test.ts` — every matchup `decideRound` settles has a verb, and no
+  other pair does
+- `moveArt.test.ts` — every path is one the client's `MoveIcon` also draws
+- `qrSvg.test.ts` — rasterised and read back with a decoder, at card size and
+  scaled up
+- `storySvg.test.ts` — names escaped; showdown absent on a draw and on a
+  forfeit; renders 1080×1920 under 1 MB; **and no ink outside the safe area**,
+  which is the only check that sees text overrunning its box
 - `routes.test.ts` — `/replay/:ref/story.png` and `/r/:code` for: finished,
   unfinished, unknown, and `?by=` both ways. None may answer non-200.
 - `ShareReplayButton.test.tsx` — all four ways down, and the abort case

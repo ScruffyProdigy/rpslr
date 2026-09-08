@@ -20,7 +20,7 @@ import { seatIdentity } from './lib/seatProfile';
 import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
-import { buildReplayUrl, replayRef } from './lib/replayLink';
+import { buildReplayUrl, buildStoryImageUrl, replayRef } from './lib/replayLink';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
@@ -563,6 +563,11 @@ export function Board({
   // the other player's picks to anyone with the link.
   const shareRef = finished ? replayRef(match) : null;
   const replayUrl = shareRef ? buildReplayUrl(shareRef, undefined, { by: mySeatKey }) : null;
+  // Instagram Stories and Snapchat render no link preview, so the share sheet
+  // is handed the card itself as well as the link (JQ-122).
+  const storyImageUrl = shareRef
+    ? buildStoryImageUrl(shareRef, undefined, { by: mySeatKey })
+    : null;
   // The deciding round plays out before the match-end banner takes the screen.
   const revealingNow = reveal != null;
   // As the card dissolves, the graph asserts the same fact: the edge the round
@@ -589,6 +594,7 @@ export function Board({
           lobbyReturnUrl={lobbyReturnUrl}
           endReason={match.endReason}
           replayUrl={replayUrl}
+          storyImageUrl={storyImageUrl}
         />
       </div>
     );

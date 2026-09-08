@@ -50,3 +50,19 @@ export function withReplayAttribution(url: string): string {
     return `${url}${sep}ref=replay`;
   }
 }
+
+/**
+ * The story image for a replay — the file the share sheet hands to Instagram.
+ *
+ * Same `by` as the link: the sharer's own card celebrates, a forwarded one
+ * stays neutral, and the two spellings cache apart on the server.
+ */
+export function buildStoryImageUrl(
+  ref: string,
+  origin: string = typeof window !== 'undefined' ? window.location.origin : '',
+  opts: { by?: string | null } = {},
+): string {
+  const base = `${origin.replace(/\/$/, '')}/replay/${encodeURIComponent(ref)}/story.png`;
+  const by = opts.by?.trim();
+  return by ? `${base}?by=${encodeURIComponent(by)}` : base;
+}
