@@ -32,7 +32,8 @@ import type { LobbyPlayerProfile } from './lobbyProfile.js';
  * Lobby's cached display strings (`labels`) are deliberately absent — see
  * `parseLobbyProvision`.
  *
- * @see docs/prequeue-options-contract.md §4
+ * @see JoinQuest developer integration guide §13 "Pre-queue options"; golden
+ * bodies in `docs/fixtures/prequeue/`.
  */
 export interface SeatOptionSelection {
   groupKey: string;

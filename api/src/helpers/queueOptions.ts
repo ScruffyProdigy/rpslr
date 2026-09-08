@@ -3,15 +3,16 @@
  * back — both generated from `roster.ts` rather than re-typed.
  *
  * That is the point of the module. `docs/fixtures/prequeue/queue-options.duel-helpers.json`
- * is the contract's specification and the test compares this output against it, so a
- * card added, renamed or repriced in `roster.ts` either reaches the picker or fails
- * CI. Hand-writing the 21 entries here would let the two drift silently, which is
- * exactly what the fixture exists to prevent.
+ * is the specification and the test compares this output against it, so a card added,
+ * renamed or repriced in `roster.ts` either reaches the picker or fails CI.
+ * Hand-writing the 21 entries here would let the two drift silently, which is exactly
+ * what the fixture exists to prevent.
  *
  * Nothing in here teaches the lobby what a mark is: `section`, `badge` and
  * `description` are rendered verbatim and uninterpreted.
  *
- * @see docs/prequeue-options-contract.md §2
+ * @see JoinQuest developer integration guide §13 "Pre-queue options"; golden
+ * bodies in `docs/fixtures/prequeue/`.
  */
 
 import type { PreQueueGroup } from '../gameModes.js';

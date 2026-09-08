@@ -7,7 +7,8 @@
  * client: a lobby that could report helper state could report a win. The lobby's
  * validation is the good UX; this one is the authority.
  *
- * @see docs/prequeue-options-contract.md §4
+ * @see JoinQuest developer integration guide §13 "Pre-queue options"; golden
+ * bodies in `docs/fixtures/prequeue/`.
  */
 
 import type { GameModeManifest } from './gameModes.js';

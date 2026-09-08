@@ -13,8 +13,11 @@
  * A group is an *independent* roster with its own arity, so a mode wanting a weapon
  * and an armour set declares two. RPSLR declares one, whose choices fall under three
  * `sectionOrder` headings — a section is a display heading inside a group, not a
- * group of its own. Both sides used "group" for the other meaning once; see
- * `docs/prequeue-options-contract.md` §Vocabulary.
+ * group of its own. The two sides used "group" for the other meaning once, which is
+ * why the distinction is spelled out here rather than assumed.
+ *
+ * @see JoinQuest developer integration guide §13 "Pre-queue options"; golden
+ * bodies in `docs/fixtures/prequeue/`.
  */
 export interface PreQueueGroup {
   key: string;

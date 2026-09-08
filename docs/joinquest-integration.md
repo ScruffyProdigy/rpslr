@@ -73,8 +73,13 @@ which serves the same 21 helpers to every player. A mode with no pre-queue pick
 answers that path `200` with `{ "modeKey": "duel", "choices": [] }`, never `404`.
 Declaring `preQueue` is itself the capability signal: Lobby sends `options` only for a
 mode whose manifest carries it, so the two sides self-synchronise in either deploy
-order. Full shapes, the `400`-not-`403` rule, and the golden bodies both repos test
-against are in [`prequeue-options-contract.md`](./prequeue-options-contract.md).
+order.
+
+The wire contract itself is JoinQuest platform documentation rather than this game's:
+the lobby repo's developer integration guide, **§13 Pre-queue options**, carries the
+full shapes and the `400`-not-`403` rule. The golden bodies both repos test against
+are executable, so they stay here — [`docs/fixtures/prequeue/`](./fixtures/prequeue/),
+whose README points at the rest.
 
 > A chess or MOBA game would publish its own manifest with the same structure — no
 > contract change needed.
