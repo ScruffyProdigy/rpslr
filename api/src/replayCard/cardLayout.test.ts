@@ -8,6 +8,7 @@ import {
   cardLayout,
   contentBoxes,
   isInside,
+  overlaps,
 } from './cardLayout.js';
 
 const generic = genericCardModel('ref');
@@ -39,6 +40,16 @@ describe('cardLayout', () => {
     const layout = cardLayout(generic);
     for (const box of contentBoxes(layout)) {
       expect(isInside(layout.safe, box), JSON.stringify(box)).toBe(true);
+    }
+  });
+
+  it('lets nothing sit on top of anything else — the score used to cover both discs', () => {
+    const layout = cardLayout({ ...generic, kind: 'match' as const, players: twoPlayers() });
+    const boxes = contentBoxes(layout);
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        expect(overlaps(boxes[i], boxes[j]), `${JSON.stringify(boxes[i])} vs ${JSON.stringify(boxes[j])}`).toBe(false);
+      }
     }
   });
 

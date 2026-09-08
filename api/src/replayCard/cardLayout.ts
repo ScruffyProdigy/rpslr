@@ -31,7 +31,12 @@ export interface CardLayout {
 }
 
 const AVATAR = 160;
-const AVATAR_GAP = 96;
+/**
+ * Wide enough for the score to sit between the two discs without touching
+ * either. At 96 it overlapped both, which every box-inside-the-safe-square
+ * assertion happily allowed.
+ */
+const AVATAR_GAP = 200;
 const NAME_WIDTH = 220;
 const CENTRE = CARD_WIDTH / 2;
 
@@ -60,7 +65,12 @@ export function cardLayout(model: CardModel): CardLayout {
   return {
     safe,
     headline,
-    score: { x: CENTRE - AVATAR_GAP / 2, y: avatarY + 46, width: AVATAR_GAP, height: 68 },
+    score: {
+      x: CENTRE - AVATAR_GAP / 2 + 12,
+      y: avatarY + (AVATAR - 72) / 2,
+      width: AVATAR_GAP - 24,
+      height: 72,
+    },
     avatars: [left, right],
     names: [
       { x: left.x + left.width / 2 - NAME_WIDTH / 2, y: nameY, width: NAME_WIDTH, height: 44 },
@@ -72,6 +82,13 @@ export function cardLayout(model: CardModel): CardLayout {
 
 export function contentBoxes(layout: CardLayout): Box[] {
   return [layout.headline, layout.score, ...layout.avatars, ...layout.names, layout.wordmark];
+}
+
+/** Two boxes share space. Text that overlaps a disc is unreadable at thumbnail size. */
+export function overlaps(a: Box, b: Box): boolean {
+  return (
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  );
 }
 
 export function isInside(outer: Box, inner: Box): boolean {
