@@ -15,6 +15,7 @@ import {
   type ReplayFrame,
   type ReplaySide,
 } from './replay';
+import { roundEdge, roundValue } from './roundValue';
 
 /**
  * What a replay says out loud.
@@ -88,8 +89,12 @@ export function narrateRound(frame: ReplayFrame, replay: Replay): string {
 export type CalloutKind =
   | 'opening'
   | 'safe-pick'
-  | 'trap'
+  | 'safe-mirror-locked'
+  | 'punish'
+  | 'safe-unplayed'
   | 'safe-out-of-reach'
+  | 'trap'
+  | 'round-edge'
   | 'cooldown'
   | 'match-point';
 
@@ -97,6 +102,22 @@ export interface Callout {
   /** Stable across copy changes, so components and tests key on it. */
   kind: CalloutKind;
   text: string;
+}
+
+/**
+ * The mirror of a safe pick: a move with nothing left to beat.
+ *
+ * A move beats exactly two others and the opponent always rests exactly two,
+ * so when those are the same pair the pick cannot win. The opponent still
+ * holds the move itself, which is why a draw is on the table and losing is the
+ * only other way out.
+ */
+function trapText(mover: string, blocked: string, move: Move): string {
+  const [x, y] = beatsOf(move);
+  return (
+    `${label(move)} only beats ${label(x)} and ${label(y)}, and ${blocked} had both ` +
+    `on cooldown ${EM} the best ${mover} could get from it was a draw.`
+  );
 }
 
 /**
@@ -110,62 +131,49 @@ function liveMoves(delays: DelayMap): Move[] {
 }
 
 /**
- * Why a move could not lose: both of the moves that beat it were resting.
+ * The safe move, and what it is actually worth.
  *
- * Every move is beaten by exactly two others, so a move in `safeMoves` always
- * has exactly two attackers to name — and naming them with their verbs is the
- * whole lesson, because those are the two faded arrows on the board.
+ * A move is safe when both moves that beat it are resting for the opponent.
+ * The opponent always rests exactly two, and no two moves share an attacking
+ * pair, so a side never has more than one safe move — `safeMoves[0]` is the
+ * whole of it.
  *
- * The shape of the round is fixed too, and saying so is the point. A safe move
- * exists only when the opponent's two resting moves are exactly its two
- * attackers, which leaves them holding the move itself and the two it beats —
- * so a safe pick always wins two of their three options and draws the third.
- * It is the strongest a position ever gets here: nothing beats all three, ever,
- * because a move beats two and they always hold three.
+ * What it is worth is the part that is easy to get wrong, and the reason this
+ * returns more than a move. A safe move cannot lose, but the opponent can see
+ * it too, and their answer is to play the same move back for the draw — so the
+ * safe move on its own is worth nothing at all. It is worth something only
+ * when its owner also holds one of the two moves that beat it, which are
+ * exactly the two the opponent is resting. Then the mirror can be punished,
+ * the opponent cannot safely play it, and the round is worth a third of a win
+ * to the safe side — the largest edge this game ever offers. Solved over every
+ * position the game can reach: see `roundValue.test.ts`.
+ *
+ * `threatsTo` does the work twice over. Against the opponent's cooldowns it
+ * says which move is safe; against this player's own it says which of that
+ * move's attackers are still in hand, which is the punish.
  */
-function safePickText(
-  mover: string,
-  blocked: string,
-  side: ReplaySide,
-  oppDelays: DelayMap,
-): string {
-  const [x, y] = threatsTo(side.move, oppDelays).all;
-  return (
-    `${describeBeat(x, side.move)} and ${label(y)} ${beatVerb(y, side.move)} it, ` +
-    `but ${blocked} had both on cooldown ${EM} ` +
-    `nothing could beat ${mover}'s ${label(side.move)}. A safe pick: two of ` +
-    `${blocked}'s three options lose to it, and the third is the same move.`
-  );
+interface SafeRead {
+  move: Move;
+  /** In hand this round, rather than resting. */
+  reachable: boolean;
+  /** Live moves that beat `move` — the answer to the opponent's mirror. */
+  punish: Move[];
 }
 
-/**
- * The mirror of a safe pick: a move with nothing left to beat.
- *
- * A move beats exactly two others and the opponent always has exactly two
- * resting, so when those are the same pair the pick cannot win. The opponent
- * still holds the move itself, which is why a draw is on the table and losing
- * is the only other way out.
- */
-function trapText(mover: string, blocked: string, move: Move): string {
-  const [x, y] = beatsOf(move);
-  return (
-    `${label(move)} only beats ${label(x)} and ${label(y)}, and ${blocked} had both ` +
-    `on cooldown ${EM} the best ${mover} could get from it was a draw.`
-  );
+function safeRead(side: ReplaySide): SafeRead | null {
+  const move = side.safeMoves[0];
+  if (move === undefined) return null;
+  return {
+    move,
+    reachable: side.delaysBefore[move] === 0,
+    punish: threatsTo(move, side.delaysBefore).live,
+  };
 }
 
-/**
- * A safe move existed and its owner could not play it.
- *
- * Half of all rounds have a safe move somewhere; it is playable by the side it
- * would help only about three rounds in ten. Most of the rest is this — the
- * move nothing could answer, resting.
- */
-function outOfReachText(mover: string, blocked: string, move: Move): string {
-  return (
-    `${label(move)} was the one move ${blocked} had no answer to, ` +
-    `and it was resting for ${mover}.`
-  );
+/** "Rock crushes Lizard and Scissors decapitates it" — why a move is safe. */
+function whySafe(move: Move, oppDelays: DelayMap): string {
+  const [x, y] = threatsTo(move, oppDelays).all;
+  return `${describeBeat(x, move)} and ${label(y)} ${beatVerb(y, move)} it`;
 }
 
 /**
@@ -190,6 +198,61 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     { side: frame.b, oppDelays: frame.a.delaysBefore, mover: nameB, blocked: nameA },
   ];
 
+  // Tiered rather than one list: the note about how a round was won beats the
+  // note about what was merely available, whichever player each belongs to.
+  const played: Callout[] = [];
+  const missed: Callout[] = [];
+  const traps: Callout[] = [];
+
+  for (const { side, oppDelays, mover, blocked } of sides) {
+    const read = safeRead(side);
+    if (read) {
+      const { move: safe, reachable, punish } = read;
+      const safeName = label(safe);
+      if (!reachable) {
+        missed.push({
+          kind: 'safe-out-of-reach',
+          text: `${safeName} was the one move ${blocked} had no answer to, and it was resting for ${mover}.`,
+        });
+      } else if (side.move === safe && punish.length > 0) {
+        played.push({
+          kind: 'safe-pick',
+          text:
+            `${whySafe(safe, oppDelays)}, but ${blocked} had both resting ${EM} nothing ` +
+            `could beat ${mover}'s ${safeName}. The only answer left was ${safeName} back ` +
+            `for the draw, and ${mover} still held ${label(punish[0])}, which beats that: ` +
+            `the strongest edge this game offers.`,
+        });
+      } else if (side.move === safe) {
+        played.push({
+          kind: 'safe-mirror-locked',
+          text:
+            `Nothing ${blocked} could play beat ${mover}'s ${safeName} ${EM} but ${safeName} ` +
+            `back draws it, and ${mover} had nothing that beats ${safeName}. Played right, ` +
+            `this round was a draw either way.`,
+        });
+      } else if (punish.includes(side.move)) {
+        played.push({
+          kind: 'punish',
+          text:
+            `${safeName} was the one move ${blocked} could not beat, so ${safeName} is what ` +
+            `they had to expect ${EM} and ${mover} played ${label(side.move)}, which beats it.`,
+        });
+      } else {
+        missed.push({
+          kind: 'safe-unplayed',
+          text:
+            `Nothing ${blocked} could play beat ${safeName}, and ${mover} had it in hand ` +
+            `${EM} the pick was ${label(side.move)}.`,
+        });
+      }
+    }
+
+    if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
+      traps.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
+    }
+  }
+
   const insights: Callout[] = [];
 
   // Neither side has played, so the only locked moves are the two that start
@@ -205,28 +268,27 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     });
   }
 
-  // A safe move cannot lose, so only the winner of a round — or either player
-  // in a mirror — can have played one. Checked per side rather than assumed,
-  // because in a mirror the two sides face different cooldowns.
-  for (const { side, oppDelays, mover, blocked } of sides) {
-    if (side.safeMoves.includes(side.move)) {
-      insights.push({ kind: 'safe-pick', text: safePickText(mover, blocked, side, oppDelays) });
-    }
-  }
+  insights.push(...played, ...traps, ...missed);
 
-  for (const { side, oppDelays, mover, blocked } of sides) {
-    if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
-      insights.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
-    }
-  }
-
-  // At most one move is ever safe for a side in a round — no two moves share an
-  // attacking pair — so `safeMoves[0]` is the whole of it.
-  for (const { side, mover, blocked } of sides) {
-    const safe = side.safeMoves[0];
-    if (safe !== undefined && side.delaysBefore[safe] > 0) {
-      insights.push({ kind: 'safe-out-of-reach', text: outOfReachText(mover, blocked, safe) });
-    }
+  // Only when nothing more specific applied. These are the rounds that most
+  // look like guesswork from outside, and the ones where saying whether the
+  // position was even is worth more than saying nothing.
+  if (insights.length === 0) {
+    const value = roundValue(
+      liveMoves(frame.a.delaysBefore),
+      liveMoves(frame.b.delaysBefore),
+    );
+    const ahead = value > 0 ? nameA : nameB;
+    const edge = roundEdge(value);
+    insights.push({
+      kind: 'round-edge',
+      text:
+        edge === 'even'
+          ? 'Neither side had an edge going in — played perfectly, this round was a coin flip.'
+          : edge === 'slight'
+            ? `Going in, ${ahead} had a slight edge under best play.`
+            : `Going in, this round was ${ahead}'s under best play.`,
+    });
   }
 
   const always: Callout[] = [];

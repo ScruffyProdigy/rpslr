@@ -125,9 +125,10 @@ describe('calloutsFor safe picks', () => {
     expect(calloutsFor(frame, replay)).toContainEqual({
       kind: 'safe-pick',
       text:
-        'Rock crushes Lizard and Scissors decapitates it, but Ben had both on cooldown ' +
-        "— nothing could beat Ana's Lizard. A safe pick: two of Ben's three options " +
-        'lose to it, and the third is the same move.',
+        'Rock crushes Lizard and Scissors decapitates it, but Ben had both resting — ' +
+        "nothing could beat Ana's Lizard. The only answer left was Lizard back for the " +
+        'draw, and Ana still held Scissors, which beats that: the strongest edge this ' +
+        'game offers.',
     });
   });
 
@@ -312,5 +313,73 @@ describe('calloutsFor keeps the list readable', () => {
     expect(insights).toHaveLength(2);
     expect(callouts.map((c) => c.kind)).toContain('cooldown');
     expect(callouts.map((c) => c.kind)).toContain('match-point');
+  });
+});
+
+/**
+ * Both sides spend Paper and Robot on rounds 4 and 3, so by round 5 they hold
+ * the same three moves and Rock is safe for each of them — with neither
+ * holding anything that beats a Rock. The mirror is the whole round.
+ */
+const MIRROR_LOCK = [
+  round(1, 'paper', 'paper', 'draw'),
+  round(2, 'scissors', 'scissors', 'draw'),
+  round(3, 'robot', 'robot', 'draw'),
+  round(4, 'paper', 'paper', 'draw'),
+  round(5, 'rock', 'rock', 'draw'),
+];
+
+/** Ben opens Rock then Scissors, which leaves Ana a safe move every round. */
+const SAFE_IN_HAND = [
+  round(1, 'paper', 'rock', 'a'),
+  round(2, 'rock', 'scissors', 'a'),
+];
+
+describe('calloutsFor a safe move nobody can profit from', () => {
+  it('says the mirror draws it when there is nothing that beats the safe move', () => {
+    const replay = replayOf(MIRROR_LOCK);
+    expect(calloutsFor(replay.frames[4], replay)).toContainEqual({
+      kind: 'safe-mirror-locked',
+      text:
+        "Nothing Ben could play beat Ana's Rock — but Rock back draws it, and Ana had " +
+        'nothing that beats Rock. Played right, this round was a draw either way.',
+    });
+  });
+
+  it('says the round was even when neither side had anything to say about it', () => {
+    const replay = replayOf(MIRROR_LOCK);
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'round-edge',
+      text: 'Neither side had an edge going in — played perfectly, this round was a coin flip.',
+    });
+  });
+});
+
+describe('calloutsFor beating the answer to a safe move', () => {
+  it('reads the pick as the punish it is, not as a move away from safety', () => {
+    // Lizard is the move Ben cannot beat, so his only answer is Lizard back —
+    // and Ana holds Scissors, which beats that.
+    const replay = replayOf([...SAFE_IN_HAND, round(3, 'scissors', 'paper', 'a')]);
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'punish',
+      text:
+        'Lizard was the one move Ben could not beat, so Lizard is what they had to expect ' +
+        '— and Ana played Scissors, which beats it.',
+    });
+  });
+
+  it('names a safe move that was in hand and passed over', () => {
+    const replay = replayOf([...SAFE_IN_HAND, round(3, 'robot', 'paper', 'b')]);
+    expect(calloutsFor(replay.frames[2], replay)).toContainEqual({
+      kind: 'safe-unplayed',
+      text: 'Nothing Ben could play beat Lizard, and Ana had it in hand — the pick was Robot.',
+    });
+  });
+
+  it('keeps the round-strength note for rounds that had nothing else to say', () => {
+    const replay = replayOf([...SAFE_IN_HAND, round(3, 'scissors', 'paper', 'a')]);
+    const kinds = calloutsFor(replay.frames[2], replay).map((c) => c.kind);
+    expect(kinds).toContain('punish');
+    expect(kinds).not.toContain('round-edge');
   });
 });
