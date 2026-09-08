@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type MatchState, type Move, type RoundResult, type Seat } from './api';
+import { markSeen } from './lib/prefs';
 import { ReplayPage } from './ReplayPage';
 
 function seat(position: number, seatKey: string, playerId: string, name: string): Seat {
@@ -58,11 +59,31 @@ function finishedState(overrides: Partial<MatchState['match']> = {}): MatchState
   };
 }
 
+/**
+ * Everything on the page except the rules themselves.
+ *
+ * The how-to-play panels and the rule cards are the one place a replay says
+ * "you", and they mean "whoever is playing" rather than the watcher — they are
+ * the same copy a first match opens with. The no-second-person rule from
+ * JQ-117 is about the *match* being narrated, so it is checked against the
+ * match copy.
+ */
+function matchCopy(container: HTMLElement): string {
+  const clone = container.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('.htp-dialog, .replay-rule-card').forEach((el) => el.remove());
+  return clone.textContent ?? '';
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe('<ReplayPage>', () => {
+  // These cover the replay itself, not the first-visit intro over it — which
+  // has a describe of its own below.
+  beforeEach(() => markSeen('howToPlay'));
+
   it('shows both players by name once the match loads', async () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     render(<ReplayPage matchRef="ext-1" />);
@@ -76,7 +97,7 @@ describe('<ReplayPage>', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     const { container } = render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
-    expect(container.textContent).not.toMatch(/\bYou\b|\byour\b|\bOpponent\b/i);
+    expect(matchCopy(container)).not.toMatch(/\bYou\b|\byour\b|\bOpponent\b/i);
   });
 
   it('refuses a match that is still running', async () => {
@@ -161,5 +182,95 @@ describe('<ReplayPage>', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
 
     expect(await screen.findByText('Ana wins the match.')).toBeInTheDocument();
+  });
+});
+
+
+describe('<ReplayPage> commentary', () => {
+  beforeEach(() => markSeen('howToPlay'));
+
+  it('narrates the round under the board', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    // Paused, so the round is read rather than watched and shows all at once.
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+    expect(
+      screen.getByText(
+        'Ana plays Rock, Ben plays Scissors — Rock crushes Scissors. Ana leads 1–0.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Ana's Rock is now out for 2 rounds.")).toBeInTheDocument();
+  });
+
+  it('explains a rule the first round it is visible, and lets it be dismissed', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    // Round 1 is played into the opening state, so nothing is resting yet.
+    expect(screen.queryByRole('button', { name: 'Got it' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    expect(screen.getByText('Every move you play goes on cooldown for 2 rounds')).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(
+      screen.queryByText('Every move you play goes on cooldown for 2 rounds'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the round to itself until its card has landed', async () => {
+    // Auto-play is running, so the first round is mid-reveal: the sentence
+    // would otherwise call the round before the card gets there.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    expect(container.querySelector('.replay-commentary__line')).toHaveTextContent('');
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(container.querySelector('.replay-commentary__line')).toHaveTextContent(
+      /Ana plays Rock/,
+    );
+  });
+});
+
+describe('<ReplayPage> first-visit rules', () => {
+  it('opens the rules once for a watcher who has never seen them', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container, unmount } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    await waitFor(() => expect(container.querySelector('.htp-dialog')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(container.querySelector('.htp-dialog')).not.toBeInTheDocument();
+    unmount();
+
+    const second = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    expect(second.container.querySelector('.htp-dialog')).not.toBeInTheDocument();
+  });
+
+  it('reopens them from the header', async () => {
+    markSeen('howToPlay');
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    await userEvent.click(screen.getByRole('button', { name: 'How to play' }));
+    expect(container.querySelector('.htp-dialog')).toBeInTheDocument();
+  });
+
+  it('holds the replay where it is while the rules are up', async () => {
+    // The intro lands on a replay that is already playing itself. It should
+    // still be on round 1 when the panels close, not three rounds in.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await waitFor(() => expect(container.querySelector('.htp-dialog')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous round' })).toBeDisabled();
   });
 });

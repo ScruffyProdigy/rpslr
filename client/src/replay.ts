@@ -28,8 +28,12 @@ const INITIAL_DELAYS: DelayMap = {
   robot: 2,
 };
 
-/** How many marks the chosen move gains — `DELAY_ON_CHOICE` in game.ts. */
-const DELAY_ON_CHOICE = 2;
+/**
+ * How many marks the chosen move gains — `DELAY_ON_CHOICE` in game.ts.
+ * Exported so the commentary can say how long a move rests without writing
+ * the number down a second time.
+ */
+export const DELAY_ON_CHOICE = 2;
 
 /** Every move −1 floored at 0, then the pick +2. The order is the rule. */
 function advanceDelays(delays: DelayMap, chosen: Move): DelayMap {

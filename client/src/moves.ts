@@ -151,13 +151,20 @@ export function opponentCooldownPhrase(move: Move, turns: number): string {
   return `Opponent can't play ${MOVE_META[move].label} for ${turns} turn${turns === 1 ? '' : 's'}`;
 }
 
+/**
+ * The verb one move does to another, e.g. `robot` over `rock` is "vaporizes".
+ * "beats" for a pair with no edge between them, so callers can always build a
+ * sentence. Exported because the replay commentary names an attack that never
+ * happened — the move a cooldown kept off the board — and there is no winner
+ * and loser to hand to `describeBeat` for one of those.
+ */
+export function beatVerb(winner: Move, loser: Move): string {
+  return BEAT_VERBS[winner]?.[loser] ?? 'beats';
+}
+
 /** e.g. "Paper disproves Robot" */
 export function describeBeat(winner: Move, loser: Move): string {
-  const verb = BEAT_VERBS[winner]?.[loser];
-  if (!verb) {
-    return `${MOVE_META[winner].label} beats ${MOVE_META[loser].label}`;
-  }
-  return `${MOVE_META[winner].label} ${verb} ${MOVE_META[loser].label}`;
+  return `${MOVE_META[winner].label} ${beatVerb(winner, loser)} ${MOVE_META[loser].label}`;
 }
 
 /** Narration for a resolved round's two picks. */
