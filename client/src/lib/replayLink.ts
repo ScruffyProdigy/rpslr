@@ -18,12 +18,21 @@ export function replayRef(match: { externalMatchId: string | null; code: string 
   return code ? code : null;
 }
 
-/** Absolute, because the whole point is to paste it somewhere else. */
+/**
+ * Absolute, because the whole point is to paste it somewhere else.
+ *
+ * `by` names the person sharing, not the winner: the API reads it to decide
+ * whether the link-preview card celebrates or stays neutral, and the two
+ * spellings are separate URLs so the platforms' caches never collide.
+ */
 export function buildReplayUrl(
   ref: string,
   origin: string = typeof window !== 'undefined' ? window.location.origin : '',
+  opts: { by?: string | null } = {},
 ): string {
-  return `${origin.replace(/\/$/, '')}/replay/${encodeURIComponent(ref)}`;
+  const base = `${origin.replace(/\/$/, '')}/replay/${encodeURIComponent(ref)}`;
+  const by = opts.by?.trim();
+  return by ? `${base}?by=${encodeURIComponent(by)}` : base;
 }
 
 /**

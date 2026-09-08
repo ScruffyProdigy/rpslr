@@ -56,3 +56,26 @@ describe('withReplayAttribution', () => {
     expect(withReplayAttribution('/return')).toBe('/return?ref=replay');
   });
 });
+
+describe('buildReplayUrl with a sharer', () => {
+  it("appends the sharer's seat so their card reads as a win", () => {
+    expect(buildReplayUrl('ext-1', 'https://rpsls-duel.win', { by: '1' })).toBe(
+      'https://rpsls-duel.win/replay/ext-1?by=1',
+    );
+  });
+
+  it('leaves the link neutral when no seat is given', () => {
+    expect(buildReplayUrl('ext-1', 'https://rpsls-duel.win')).toBe(
+      'https://rpsls-duel.win/replay/ext-1',
+    );
+    expect(buildReplayUrl('ext-1', 'https://rpsls-duel.win', { by: null })).toBe(
+      'https://rpsls-duel.win/replay/ext-1',
+    );
+  });
+
+  it('escapes a seat key that would otherwise change the query', () => {
+    expect(buildReplayUrl('ext-1', 'https://x.test', { by: 'a&b=c' })).toBe(
+      'https://x.test/replay/ext-1?by=a%26b%3Dc',
+    );
+  });
+});
