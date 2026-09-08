@@ -861,7 +861,6 @@ type-level rule — only a Major may have one — survives unchanged:
 ```ts
 export type Load =
   | { kind: 'passive' }
-  | { kind: 'per-round' }
   /** `recharge: null` is "once per match"; there is no separate charge kind. */
   | { kind: 'ability'; opening: number; recharge: number | null };
 ```
@@ -896,8 +895,9 @@ alongside the loadout columns rather than in a migration of its own.
    identity element and the fixture still holds.
 4. **The four effects**, one commit each, each a pure state transition tested on its
    own: Rust, Thief, Freeze, Sacrifice.
-5. **Quarantine** — per-round, so it takes a named move per round rather than a
-   firing. Same `PlayedRound` extension, different field.
+5. **Quarantine** — an ability like the rest now, so `per-round` leaves `Load`
+   entirely. Firing it names a move, which rides the same `PlayedRound` extension as
+   a firing but carries the name with it. Naming spends the charge on a miss.
 6. **Service wiring and the round record.**
 
 Oracle stays out of this task: its mid-round reveal sub-phase is JQ-150. Its marks

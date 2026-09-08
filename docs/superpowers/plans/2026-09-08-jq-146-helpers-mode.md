@@ -575,11 +575,23 @@ Starting values to build against, all revisable:
 | Freeze | 0 | 3 | 2 | Standard |
 | Sacrifice | 3 | 3 | 1, late | Late-game only; see "Abilities recharge" |
 | Oracle | 0 | 3 | 1–2 | Not gated: its early use is weak, not degenerate |
+| Quarantine | 0 | 3 | 2 | Was per-round and worth ~26pp; a recharge brings it to ~9pp |
 
 Repeated edges compound superlinearly in the doc's model (+0.10 once is +1.9pp, +0.10
 sustained is +10.1pp — ~5× for three or four firings, not 3×), so 1 → 2 uses is likely
 worth ~2.5–3×, not 2×. That is why recharge 3 rather than 2: a 2-round recharge gives
 three uses and probably overshoots to 13–15pp.
+
+**Quarantine is the big correction here.** As a per-round ability it was worth about
++0.26 a round — a hit blocks their played move for four rounds instead of two, which at
+a ~1/3 guess rate costs them two-thirds of a live move every round. That is ~26pp,
+two and a half times a passive and the largest number in the design doc. Recharging it
+every third round brings it to ~9pp, retires the `per-round` load type it was the only
+user of, and closes the doc's open question about its load being a barrier for new
+players. Naming spends the charge whether or not it lands: the card is a hedge rather
+than a bet — you name the move that would beat what you are about to play — so a miss
+means the feared move did not arrive, and the charge bought insurance that did not need
+to pay out.
 
 Uniform on purpose. Five different cadences at launch would make the first telemetry
 read uninterpretable — a card that underperforms could be badly sized *or* badly paced,
