@@ -43,13 +43,27 @@ print(json.dumps(cur) if isinstance(cur, (dict, list)) else cur)
 " "$1" "$2"
 }
 
+# Provision is idempotent on externalMatchId: re-pushing an id that already exists
+# returns the existing match *before* any pre-queue validation runs. That is correct
+# for the lobby's retry contract, but it means a row left in a dev database answers
+# instead of the expectation you just changed — a fixture that flipped from 201 to
+# 400 will keep reporting 201. So every run gets its own id.
+fresh_request() {
+  python3 -c "
+import json, sys, time
+d = json.load(open(sys.argv[1]))['request']
+d['assignment']['externalMatchId'] += '-' + str(int(time.time() * 1000))
+print(json.dumps(d))
+" "$1"
+}
+
 run_fixture() {
   local name="$1" file="$FIXTURE_DIR/provision.$1.json"
   [ -f "$file" ] || die "No such fixture: $name (try: $(list_fixtures | tr '\n' ' '))"
 
   local want_status body status response
   want_status="$(fixture_field "$file" expect.status)"
-  body="$(fixture_field "$file" request)"
+  body="$(fresh_request "$file")"
 
   log "POST /api/v1/matches  ($name, expecting $want_status)"
   response="$(curl -sS -o /tmp/stub-lobby-body.$$ -w '%{http_code}' \
