@@ -37,7 +37,14 @@ export interface HelperDef<T extends Tier = Tier> {
   tier: T;
   boundMove: T extends 'Trinket' ? null : Move;
   load: T extends 'Major' ? Load : 'passive';
-  /** Player-facing copy; also the `blurb` in the queue-options roster. */
+  /**
+   * Player-facing copy; also the `blurb` in the queue-options roster.
+   *
+   * Says what the helper does, never how often. An ability's cadence is its
+   * opening and recharge marks, and those are numbers the picker renders — putting
+   * them in prose too means two copies of a value that is expected to move, and the
+   * prose is the one that silently goes stale.
+   */
   blurb: string;
 }
 
@@ -51,19 +58,20 @@ const MAJORS = [
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
     load: 'per-round', blurb: 'Name a move each round. If they play it, it takes 4 marks.' },
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
-    load: 'charge', blurb: 'Once per match, learn one live move they did not play, then re-pick.' },
+    load: 'charge', blurb: 'Learn one live move they did not play, then re-pick.' },
   // The four below have no effect yet. They are named here because the roster
   // endpoint and the ladder test need all 22; JQ-147 Task 1.6 implements them, at
   // which point `load` carries their opening and recharge marks rather than the
-  // bare string 'charge'.
+  // bare string 'charge'. Sacrifice and Oracle are gated to arrive late; the rest
+  // are available from round 1.
   { id: 'sacrifice', name: 'Sacrifice', tier: 'Major', boundMove: 'rock',
-    load: 'charge', blurb: 'Once per match, declare the round a draw and clear all your marks.' },
+    load: 'charge', blurb: 'Declare the round a draw before picking, and clear all your marks.' },
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
-    load: 'charge', blurb: 'Once per match, add 2 marks to a move they have live.' },
+    load: 'charge', blurb: 'Add 2 marks to a move they currently have live.' },
   { id: 'thief', name: 'Thief', tier: 'Major', boundMove: 'lizard',
-    load: 'charge', blurb: 'Once per match, move one mark from one of your moves onto one of theirs.' },
+    load: 'charge', blurb: 'Move one mark from one of your moves onto one of theirs.' },
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
-    load: 'charge', blurb: "Once per match, their marks don't decrement this round." },
+    load: 'charge', blurb: "Their marks don't decrement this round." },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
