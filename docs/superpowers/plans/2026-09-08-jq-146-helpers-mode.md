@@ -136,9 +136,14 @@ Metronome does not hold: Sacrifice's cost is paid **in the race itself**, since 
 draw is a round that cannot be a win, and that cost scales with every use. Metronome's
 did not. Keep Sacrifice slow for pacing, not for power.
 
-**Oracle keeps recharge = never.** The design doc has it correctly sized as a one-shot
-at ≈ +9pp, and a sustained edge is worth roughly 5× the same edge used once, so
-recharging it would break the one charge that already works. Quarantine is untouched —
+**Oracle is gated late and then recharges**, at 3 / 2 — first available round 4, then
+roughly every other round. The two halves compensate: Oracle's value already rises with
+the stakes, so a player who understands it was holding it late anyway and the gate costs
+them almost nothing, while the recharge only pays out past round 6, in the long close
+matches. Starting it at 0 *and* recharging it would double a card that is already
+correctly sized; gated to round 4 it is a different card, and it has a diminishing
+return the tempo abilities lack — using it tells the opponent it was used and which move
+was named, so the second use meets an opponent who has adapted. Quarantine is untouched —
 it is per-round, a different load type.
 
 #### The dynamic this creates, and what it costs to measure
@@ -156,6 +161,11 @@ Two consequences:
 - **The stall archetype is already taxed.** Its core is Good Old Rock + Sacrifice, both
   Rock-bound Majors, so it is a Major + Major loadout — the shape the tier ladder
   already sits at −3.8pp. Do not undo that by accident.
+- **Oracle + Sacrifice is the pairing to watch**, now that both are late-gated. Both
+  want the match long, and Oracle is unusually good at what a staller needs — a 75%
+  no-loss is survival, not victory. It pays the Major + Major tax, but that tax was
+  priced against tempo, not against two abilities that get better the longer a tempo
+  disadvantage is endured.
 - **There is no round cap.** `matchWinner` returns null until someone reaches
   `winsNeeded` and rounds simply increment. Unbounded matches were already possible in
   principle, since draws do not score; a deliberate draw-seeking archetype makes it
@@ -553,7 +563,7 @@ Starting values to build against, all revisable:
 | Thief | 0 | 3 | 2 | Standard |
 | Freeze | 0 | 3 | 2 | Standard |
 | Sacrifice | 3 | 3 | 1, late | Late-game only; see "Abilities recharge" |
-| Oracle | 0 | never | 1 | Already correctly sized as a one-shot; do not recharge |
+| Oracle | 3 | 2 | 1–2 | Late gate and recharge compensate; see "Abilities recharge" |
 
 Repeated edges compound superlinearly in the doc's model (+0.10 once is +1.9pp, +0.10
 sustained is +10.1pp — ~5× for three or four firings, not 3×), so 1 → 2 uses is likely

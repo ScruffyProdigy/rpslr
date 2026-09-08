@@ -900,8 +900,9 @@ alongside the loadout columns rather than in a migration of its own.
    firing. Same `PlayedRound` extension, different field.
 6. **Service wiring and the round record.**
 
-Oracle stays out: its mid-round reveal sub-phase is JQ-150, and it is the one ability
-whose recharge is `null` anyway.
+Oracle stays out of this task: its mid-round reveal sub-phase is JQ-150. Its marks
+(3 opening, 2 recharge) still come from `roster.ts` here, so JQ-150 inherits the
+cooldown rather than inventing one.
 
 ### What a failure here looks like
 
