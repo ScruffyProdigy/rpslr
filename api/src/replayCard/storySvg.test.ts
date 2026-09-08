@@ -1,8 +1,9 @@
+import jsQR from 'jsqr';
 import { describe, expect, it } from 'vitest';
 import { MAX_STORY_BYTES, pngSize, renderStoryPixels, renderStoryPng } from './cardImage.js';
 import type { CardModel } from './cardModel.js';
 import { genericCardModel } from './cardModel.js';
-import { SAFE_BOTTOM, SAFE_GUTTER, SAFE_TOP, STORY_HEIGHT, STORY_WIDTH } from './storyLayout.js';
+import { SAFE_BOTTOM, SAFE_GUTTER, SAFE_TOP, STORY_HEIGHT, STORY_WIDTH, storyLayout } from './storyLayout.js';
 import { shortLinkUrl, storySvg } from './storySvg.js';
 
 const ORIGIN = 'https://rpsls-duel.win';
@@ -161,5 +162,30 @@ describe('what actually lands on the canvas', () => {
   it('keeps the generic card inside it as well', () => {
     const ink = inkOutsideSafeArea(storySvg(genericCardModel('nope'), { origin: ORIGIN }));
     expect(ink.slice(0, 5), `${ink.length} stray pixels`).toEqual([]);
+  });
+});
+
+describe('the QR on the finished card', () => {
+  /**
+   * qrSvg.test.ts proves the symbol scans on its own. This proves it survives
+   * being placed: on its rounded plate, at the size the layout gives it, with
+   * the rest of the card drawn around it. That is the artefact a phone is
+   * actually pointed at.
+   */
+  it('reads back as the short link the card also prints', () => {
+    const model = matchModel({ shortCode: 'RPS-K7M2' });
+    const { pixels, width } = renderStoryPixels(storySvg(model, { origin: ORIGIN }));
+    const box = storyLayout(model).shortLink!.qr;
+
+    // Cropped to the plate: jsQR scans a 1080×1920 canvas happily enough, but
+    // there is no reason to make it hunt.
+    const side = box.width;
+    const crop = new Uint8ClampedArray(side * side * 4);
+    for (let y = 0; y < side; y += 1) {
+      const from = ((box.y + y) * width + box.x) * 4;
+      crop.set(pixels.subarray(from, from + side * 4), y * side * 4);
+    }
+
+    expect(jsQR(crop, side, side)?.data).toBe('https://rpsls-duel.win/r/RPS-K7M2');
   });
 });
