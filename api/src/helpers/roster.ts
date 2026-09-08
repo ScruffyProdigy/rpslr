@@ -1,9 +1,10 @@
 /**
- * The twenty-two helper cards, as pure data.
+ * The twenty-one helper cards, as pure data.
  *
  * This is the single source of truth for the roster: the queue-options endpoint
- * (JQ-148) and the pick/win-rate telemetry (JQ-152) both read it rather than
- * keeping their own list. `game.ts` deliberately does not — the engine takes the
+ * (`helpers/queueOptions.ts`) and the pick/win-rate telemetry (JQ-152) both read it
+ * rather than keeping their own list, and the contract's roster fixture is generated
+ * from it, so a card added here reaches the lobby's picker or fails CI. `game.ts` deliberately does not — the engine takes the
  * rules a loadout compiles to, never the cards themselves.
  */
 
@@ -57,7 +58,7 @@ export interface HelperDef<T extends Tier = Tier> {
   boundMove: T extends 'Trinket' ? null : Move;
   load: T extends 'Major' ? Load : { kind: 'passive' };
   /**
-   * Player-facing copy; also the `blurb` in the queue-options roster.
+   * Player-facing copy; served as `description` in the queue-options roster.
    *
    * Says what the helper does, never how often. How often is the `opening` and
    * `recharge` marks above, which the lobby's loadout picker renders from the
@@ -143,7 +144,7 @@ const TRINKETS = [
 export const HELPERS: readonly HelperDef[] = [...MAJORS, ...MINORS, ...TRINKETS];
 
 /**
- * The 22 ids as a union rather than `string`. `rules.ts` decides a card's effect
+ * The 21 ids as a union rather than `string`. `rules.ts` decides a card's effect
  * by matching its id, so a typo there would silently switch a helper off with
  * nothing failing — this makes it a build error instead.
  */
