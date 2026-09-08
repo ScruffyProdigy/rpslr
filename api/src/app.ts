@@ -1,7 +1,9 @@
 import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { GAME_NAME, GAME_VERSION, type AppConfig } from './config.js';
-import { buildGameModesPayload } from './gameModes.js';
+import { buildGameModesPayload, getGameMode } from './gameModes.js';
+import { optionSourceFor } from './helpers/queueOptions.js';
+import { isPreQueueRejection, resolvePreQueueOptions } from './preQueue.js';
 import { buildLaunchUrlsForAssignment } from './launchUrls.js';
 import {
   ConflictError,
@@ -58,11 +60,38 @@ export function createApp(
   });
 
   // Game-mode manifest: Lobby catalog sync reads this (see lobby game-catalog-architecture.md).
+  // Declaring `preQueue` on a mode here is also what tells Lobby to send `options`
+  // on provision for it, so the catalog gains duel-helpers by this route alone.
   app.get('/api/v1/game-modes', (_req, res) => {
     res.json(buildGameModesPayload(GAME_NAME));
   });
 
   const api = express.Router();
+
+  // The pre-queue roster Lobby's picker renders. A fixed conventional path, matching
+  // the mode-eligibility endpoint, so Lobby SSRF-validates one origin rather than a
+  // path each game declares for itself.
+  //
+  // The roster is the same for every player: no progression, so `lobbyUserId` is
+  // read only to keep the path shape Lobby already knows. It is generated from
+  // `roster.ts`, never hand-written — see `helpers/queueOptions.ts`.
+  //
+  // This endpoint does not fail open. If it errors or times out, Lobby makes the
+  // mode unjoinable rather than inventing a roster, so it must not sit behind
+  // anything with a cold start.
+  api.get('/players/:lobbyUserId/queue-options', (req: Request, res: Response) => {
+    const modeKey = typeof req.query.modeKey === 'string' ? req.query.modeKey.trim() : '';
+    if (!modeKey) return res.status(400).json({ error: 'modeKey is required' });
+
+    const mode = getGameMode(modeKey);
+    if (!mode) return res.status(404).json({ error: `unknown mode: ${modeKey}` });
+
+    // A mode with no pre-queue pick answers 200 with an empty roster, not 404: the
+    // mode exists and is joinable, it just asks nothing before the queue.
+    const groups = mode.preQueue?.groups ?? [];
+    const choices = groups.flatMap((group) => optionSourceFor(group)?.choices() ?? []);
+    return res.json({ modeKey: mode.key, choices });
+  });
 
   // Create a match — either a Lobby-pushed assignment or a standalone self-serve.
   api.post(
@@ -77,6 +106,29 @@ export function createApp(
         const authErr = verifyLobbyProvisionAuth(req.header('authorization'), parsed.lobby.serviceToken);
         if (authErr) {
           return res.status(401).json({ error: authErr });
+        }
+        const mode = getGameMode(parsed.assignment.gameMode);
+        if (mode) {
+          const selections = resolvePreQueueOptions(mode, parsed.assignment.seats, {
+            require: config.requirePreQueueOptions,
+          });
+          if (isPreQueueRejection(selections)) {
+            // 400, never 403 — Lobby parses 403 as the banlist shape and would
+            // re-matchmake forever on a malformed selection.
+            return res.status(400).json(selections);
+          }
+          for (const selection of selections.filter((s) => s.defaulted)) {
+            console.warn(
+              JSON.stringify({
+                event: 'provision.prequeue_defaulted',
+                externalMatchId: parsed.assignment.externalMatchId,
+                gameMode: parsed.assignment.gameMode,
+                seatKey: selection.seatKey,
+                groupKey: selection.groupKey,
+                optionIds: selection.optionIds,
+              }),
+            );
+          }
         }
         const state = await service.ensureMatchFromAssignment(parsed);
         const launchUrls = buildLaunchUrlsForAssignment(config.playUrl, parsed.assignment);

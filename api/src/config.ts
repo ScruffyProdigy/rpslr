@@ -7,6 +7,12 @@ export interface AppConfig {
   databaseUrl: string;
   corsAllowedOrigins: string[];
   requireLobbyAuth: boolean;
+  /**
+   * Reject a provision that omits `options` for a mode with a pre-queue pick, rather
+   * than defaulting the seat. Off until real selections are arriving from Lobby —
+   * step 4 of the tandem deploy in `docs/prequeue-options-contract.md` §5.
+   */
+  requirePreQueueOptions: boolean;
   /** Lobby user ids the game refuses to host. Lobby's push is rejected (403). */
   bannedLobbyUsers: string[];
   /**
@@ -95,6 +101,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseUrl: resolveDatabaseUrl(env),
     corsAllowedOrigins,
     requireLobbyAuth: (env.REQUIRE_LOBBY_AUTH ?? 'false') === 'true',
+    requirePreQueueOptions: (env.REQUIRE_PREQUEUE_OPTIONS ?? 'false') === 'true',
     bannedLobbyUsers: splitList(env.BANNED_LOBBY_USERS),
     tokenAudiences,
     playUrl,
