@@ -1,0 +1,3256 @@
+{
+  "opening": {
+    "initial": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "live": [
+      "rock",
+      "paper",
+      "scissors"
+    ]
+  },
+  "outcomes": {
+    "rockvrock": "draw",
+    "rockvpaper": "b",
+    "rockvscissors": "a",
+    "rockvlizard": "a",
+    "rockvrobot": "b",
+    "papervrock": "a",
+    "papervpaper": "draw",
+    "papervscissors": "b",
+    "papervlizard": "b",
+    "papervrobot": "a",
+    "scissorsvrock": "b",
+    "scissorsvpaper": "a",
+    "scissorsvscissors": "draw",
+    "scissorsvlizard": "a",
+    "scissorsvrobot": "b",
+    "lizardvrock": "b",
+    "lizardvpaper": "a",
+    "lizardvscissors": "b",
+    "lizardvlizard": "draw",
+    "lizardvrobot": "a",
+    "robotvrock": "a",
+    "robotvpaper": "b",
+    "robotvscissors": "a",
+    "robotvlizard": "b",
+    "robotvrobot": "draw"
+  },
+  "engineTable": {
+    "rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>scissors>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>scissors>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>paper>scissors>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>paper>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>paper>scissors>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>scissors>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>scissors>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "rock>paper>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>paper>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>paper>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>paper>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>paper>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "rock>paper>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>paper>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>paper>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>paper>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>paper>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>paper>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>paper>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>scissors>paper>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>scissors>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>scissors>paper>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>paper>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>paper>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "rock>scissors>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>scissors>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>scissors>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>scissors>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>scissors>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "rock>scissors>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>scissors>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>scissors>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>scissors>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>scissors>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>paper>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>paper>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>paper>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>paper>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>paper>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>paper>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "rock>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>scissors>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>scissors>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>scissors>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>scissors>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>scissors>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>scissors>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "rock>lizard>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "rock>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "rock>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "rock>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "rock>lizard>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "rock>lizard>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>scissors>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>scissors>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>rock>scissors>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>rock>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>rock>scissors>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>scissors>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>scissors>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "paper>rock>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>rock>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>rock>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>rock>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>rock>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "paper>rock>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>rock>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>rock>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>rock>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>rock>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>rock>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>rock>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>scissors>rock>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>scissors>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>scissors>rock>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>rock>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>rock>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "paper>scissors>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>scissors>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>scissors>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>scissors>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>scissors>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "paper>scissors>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>scissors>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>scissors>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>scissors>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>scissors>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>rock>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>rock>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>rock>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>rock>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>rock>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>rock>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "paper>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>scissors>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>scissors>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>scissors>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>scissors>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>scissors>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>scissors>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "paper>lizard>scissors>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>scissors>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>scissors>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "paper>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "paper>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "paper>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "paper>lizard>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "paper>lizard>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>paper>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>paper>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>rock>paper>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>rock>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>rock>paper>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>paper>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>paper>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "scissors>rock>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>rock>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>rock>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>rock>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>rock>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "scissors>rock>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>rock>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>rock>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>rock>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>rock>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>rock>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>rock>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>paper>rock>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>paper>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>paper>rock>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>rock>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>rock>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "scissors>paper>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>paper>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>paper>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>paper>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>lizard>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>lizard>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>lizard>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>paper>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "scissors>paper>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>paper>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>paper>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>paper>robot>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>robot>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>paper>robot>lizard>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>lizard>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>rock>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>rock>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>rock>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>rock>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>rock>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>rock>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>rock>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>rock>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>rock>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>lizard>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 0
+    },
+    "scissors>lizard>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>paper>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>paper>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>paper>rock>robot": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>paper>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>paper>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>paper>scissors>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>paper>robot": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 2
+    },
+    "scissors>lizard>paper>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>paper>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>paper>robot>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 1
+    },
+    "scissors>lizard>robot": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 1,
+      "robot": 2
+    },
+    "scissors>lizard>robot>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>robot>rock>paper": {
+      "rock": 1,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>rock>scissors": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>rock>lizard": {
+      "rock": 1,
+      "paper": 0,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>robot>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>robot>paper>rock": {
+      "rock": 2,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>paper>scissors": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>paper>lizard": {
+      "rock": 0,
+      "paper": 1,
+      "scissors": 0,
+      "lizard": 2,
+      "robot": 0
+    },
+    "scissors>lizard>robot>scissors": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 2,
+      "lizard": 0,
+      "robot": 1
+    },
+    "scissors>lizard>robot>scissors>rock": {
+      "rock": 2,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>scissors>paper": {
+      "rock": 0,
+      "paper": 2,
+      "scissors": 1,
+      "lizard": 0,
+      "robot": 0
+    },
+    "scissors>lizard>robot>scissors>lizard": {
+      "rock": 0,
+      "paper": 0,
+      "scissors": 1,
+      "lizard": 2,
+      "robot": 0
+    }
+  },
+  "duel": {
+    "perRound": [
+      {
+        "currentRoundMoves": {},
+        "match": {
+          "bestOf": 5,
+          "code": "<code>",
+          "createdAt": "2026-09-08T15:05:42.255Z",
+          "currentRound": 2,
+          "endReason": null,
+          "externalMatchId": null,
+          "gameMode": "duel",
+          "id": "<id:0>",
+          "lobbyGraphqlUrl": null,
+          "lobbyId": null,
+          "lobbyPlayerProfiles": {},
+          "lobbyReturnUrl": null,
+          "lobbyServiceToken": null,
+          "name": "Golden",
+          "phase": "pick",
+          "phaseDeadline": "2026-01-01T00:00:23.200Z",
+          "phaseStartedAt": "2026-01-01T00:00:00.000Z",
+          "status": "playing",
+          "winnerSeatKey": null
+        },
+        "matchWinnerSeatKey": null,
+        "results": [
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "rock"
+            },
+            "outcome": "draw",
+            "round": 1
+          }
+        ],
+        "seats": [
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 0,
+              "robot": 1,
+              "rock": 2,
+              "scissors": 0
+            },
+            "id": "<id:3>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:2>",
+              "lobbyUserId": null,
+              "name": "Alice",
+              "profile": null,
+              "score": 0
+            },
+            "position": 0,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "1",
+            "teamKey": null
+          },
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 0,
+              "robot": 1,
+              "rock": 2,
+              "scissors": 0
+            },
+            "id": "<id:4>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:1>",
+              "lobbyUserId": null,
+              "name": "Bob",
+              "profile": null,
+              "score": 0
+            },
+            "position": 1,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "2",
+            "teamKey": null
+          }
+        ],
+        "serverNow": "2026-01-01T00:00:00.000Z",
+        "submittedPlayerIds": []
+      },
+      {
+        "currentRoundMoves": {},
+        "match": {
+          "bestOf": 5,
+          "code": "<code>",
+          "createdAt": "2026-09-08T15:05:42.255Z",
+          "currentRound": 3,
+          "endReason": null,
+          "externalMatchId": null,
+          "gameMode": "duel",
+          "id": "<id:0>",
+          "lobbyGraphqlUrl": null,
+          "lobbyId": null,
+          "lobbyPlayerProfiles": {},
+          "lobbyReturnUrl": null,
+          "lobbyServiceToken": null,
+          "name": "Golden",
+          "phase": "pick",
+          "phaseDeadline": "2026-01-01T00:00:23.200Z",
+          "phaseStartedAt": "2026-01-01T00:00:00.000Z",
+          "status": "playing",
+          "winnerSeatKey": null
+        },
+        "matchWinnerSeatKey": null,
+        "results": [
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "rock"
+            },
+            "outcome": "draw",
+            "round": 1
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "scissors",
+              "<id:2>": "paper"
+            },
+            "outcome": "2",
+            "round": 2
+          }
+        ],
+        "seats": [
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 2,
+              "robot": 0,
+              "rock": 1,
+              "scissors": 0
+            },
+            "id": "<id:3>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:2>",
+              "lobbyUserId": null,
+              "name": "Alice",
+              "profile": null,
+              "score": 0
+            },
+            "position": 0,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "1",
+            "teamKey": null
+          },
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 0,
+              "robot": 0,
+              "rock": 1,
+              "scissors": 2
+            },
+            "id": "<id:4>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:1>",
+              "lobbyUserId": null,
+              "name": "Bob",
+              "profile": null,
+              "score": 1
+            },
+            "position": 1,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "2",
+            "teamKey": null
+          }
+        ],
+        "serverNow": "2026-01-01T00:00:00.000Z",
+        "submittedPlayerIds": []
+      },
+      {
+        "currentRoundMoves": {},
+        "match": {
+          "bestOf": 5,
+          "code": "<code>",
+          "createdAt": "2026-09-08T15:05:42.255Z",
+          "currentRound": 4,
+          "endReason": null,
+          "externalMatchId": null,
+          "gameMode": "duel",
+          "id": "<id:0>",
+          "lobbyGraphqlUrl": null,
+          "lobbyId": null,
+          "lobbyPlayerProfiles": {},
+          "lobbyReturnUrl": null,
+          "lobbyServiceToken": null,
+          "name": "Golden",
+          "phase": "pick",
+          "phaseDeadline": "2026-01-01T00:00:23.200Z",
+          "phaseStartedAt": "2026-01-01T00:00:00.000Z",
+          "status": "playing",
+          "winnerSeatKey": null
+        },
+        "matchWinnerSeatKey": null,
+        "results": [
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "rock"
+            },
+            "outcome": "draw",
+            "round": 1
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "scissors",
+              "<id:2>": "paper"
+            },
+            "outcome": "2",
+            "round": 2
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "paper",
+              "<id:2>": "scissors"
+            },
+            "outcome": "1",
+            "round": 3
+          }
+        ],
+        "seats": [
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 1,
+              "robot": 0,
+              "rock": 0,
+              "scissors": 2
+            },
+            "id": "<id:3>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:2>",
+              "lobbyUserId": null,
+              "name": "Alice",
+              "profile": null,
+              "score": 1
+            },
+            "position": 0,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "1",
+            "teamKey": null
+          },
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 2,
+              "robot": 0,
+              "rock": 0,
+              "scissors": 1
+            },
+            "id": "<id:4>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:1>",
+              "lobbyUserId": null,
+              "name": "Bob",
+              "profile": null,
+              "score": 1
+            },
+            "position": 1,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "2",
+            "teamKey": null
+          }
+        ],
+        "serverNow": "2026-01-01T00:00:00.000Z",
+        "submittedPlayerIds": []
+      },
+      {
+        "currentRoundMoves": {},
+        "match": {
+          "bestOf": 5,
+          "code": "<code>",
+          "createdAt": "2026-09-08T15:05:42.255Z",
+          "currentRound": 5,
+          "endReason": null,
+          "externalMatchId": null,
+          "gameMode": "duel",
+          "id": "<id:0>",
+          "lobbyGraphqlUrl": null,
+          "lobbyId": null,
+          "lobbyPlayerProfiles": {},
+          "lobbyReturnUrl": null,
+          "lobbyServiceToken": null,
+          "name": "Golden",
+          "phase": "pick",
+          "phaseDeadline": "2026-01-01T00:00:23.200Z",
+          "phaseStartedAt": "2026-01-01T00:00:00.000Z",
+          "status": "playing",
+          "winnerSeatKey": null
+        },
+        "matchWinnerSeatKey": null,
+        "results": [
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "rock"
+            },
+            "outcome": "draw",
+            "round": 1
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "scissors",
+              "<id:2>": "paper"
+            },
+            "outcome": "2",
+            "round": 2
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "paper",
+              "<id:2>": "scissors"
+            },
+            "outcome": "1",
+            "round": 3
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "lizard",
+              "<id:2>": "rock"
+            },
+            "outcome": "1",
+            "round": 4
+          }
+        ],
+        "seats": [
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 0,
+              "robot": 0,
+              "rock": 2,
+              "scissors": 1
+            },
+            "id": "<id:3>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:2>",
+              "lobbyUserId": null,
+              "name": "Alice",
+              "profile": null,
+              "score": 2
+            },
+            "position": 0,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "1",
+            "teamKey": null
+          },
+          {
+            "delays": {
+              "lizard": 2,
+              "paper": 1,
+              "robot": 0,
+              "rock": 0,
+              "scissors": 0
+            },
+            "id": "<id:4>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:1>",
+              "lobbyUserId": null,
+              "name": "Bob",
+              "profile": null,
+              "score": 1
+            },
+            "position": 1,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "2",
+            "teamKey": null
+          }
+        ],
+        "serverNow": "2026-01-01T00:00:00.000Z",
+        "submittedPlayerIds": []
+      },
+      {
+        "currentRoundMoves": {},
+        "match": {
+          "bestOf": 5,
+          "code": "<code>",
+          "createdAt": "2026-09-08T15:05:42.255Z",
+          "currentRound": 6,
+          "endReason": "played",
+          "externalMatchId": null,
+          "gameMode": "duel",
+          "id": "<id:0>",
+          "lobbyGraphqlUrl": null,
+          "lobbyId": null,
+          "lobbyPlayerProfiles": {},
+          "lobbyReturnUrl": null,
+          "lobbyServiceToken": null,
+          "name": "Golden",
+          "phase": null,
+          "phaseDeadline": null,
+          "phaseStartedAt": null,
+          "status": "finished",
+          "winnerSeatKey": "1"
+        },
+        "matchWinnerSeatKey": "1",
+        "results": [
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "rock"
+            },
+            "outcome": "draw",
+            "round": 1
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "scissors",
+              "<id:2>": "paper"
+            },
+            "outcome": "2",
+            "round": 2
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "paper",
+              "<id:2>": "scissors"
+            },
+            "outcome": "1",
+            "round": 3
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "lizard",
+              "<id:2>": "rock"
+            },
+            "outcome": "1",
+            "round": 4
+          },
+          {
+            "autoPicked": [],
+            "moves": {
+              "<id:1>": "rock",
+              "<id:2>": "paper"
+            },
+            "outcome": "1",
+            "round": 5
+          }
+        ],
+        "seats": [
+          {
+            "delays": {
+              "lizard": 0,
+              "paper": 2,
+              "robot": 0,
+              "rock": 1,
+              "scissors": 0
+            },
+            "id": "<id:3>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:2>",
+              "lobbyUserId": null,
+              "name": "Alice",
+              "profile": null,
+              "score": 3
+            },
+            "position": 0,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "1",
+            "teamKey": null
+          },
+          {
+            "delays": {
+              "lizard": 1,
+              "paper": 0,
+              "robot": 0,
+              "rock": 2,
+              "scissors": 0
+            },
+            "id": "<id:4>",
+            "lobbyProfile": null,
+            "matchId": "<id:0>",
+            "player": {
+              "expiryStrikes": 0,
+              "id": "<id:1>",
+              "lobbyUserId": null,
+              "name": "Bob",
+              "profile": null,
+              "score": 1
+            },
+            "position": 1,
+            "reservedForLobbyUser": null,
+            "role": null,
+            "seatKey": "2",
+            "teamKey": null
+          }
+        ],
+        "serverNow": "2026-01-01T00:00:00.000Z",
+        "submittedPlayerIds": []
+      }
+    ],
+    "final": {
+      "currentRoundMoves": {},
+      "match": {
+        "bestOf": 5,
+        "code": "<code>",
+        "createdAt": "2026-09-08T15:05:42.255Z",
+        "currentRound": 6,
+        "endReason": "played",
+        "externalMatchId": null,
+        "gameMode": "duel",
+        "id": "<id:0>",
+        "lobbyGraphqlUrl": null,
+        "lobbyId": null,
+        "lobbyPlayerProfiles": {},
+        "lobbyReturnUrl": null,
+        "lobbyServiceToken": null,
+        "name": "Golden",
+        "phase": null,
+        "phaseDeadline": null,
+        "phaseStartedAt": null,
+        "status": "finished",
+        "winnerSeatKey": "1"
+      },
+      "matchWinnerSeatKey": "1",
+      "results": [
+        {
+          "autoPicked": [],
+          "moves": {
+            "<id:1>": "rock",
+            "<id:2>": "rock"
+          },
+          "outcome": "draw",
+          "round": 1
+        },
+        {
+          "autoPicked": [],
+          "moves": {
+            "<id:1>": "scissors",
+            "<id:2>": "paper"
+          },
+          "outcome": "2",
+          "round": 2
+        },
+        {
+          "autoPicked": [],
+          "moves": {
+            "<id:1>": "paper",
+            "<id:2>": "scissors"
+          },
+          "outcome": "1",
+          "round": 3
+        },
+        {
+          "autoPicked": [],
+          "moves": {
+            "<id:1>": "lizard",
+            "<id:2>": "rock"
+          },
+          "outcome": "1",
+          "round": 4
+        },
+        {
+          "autoPicked": [],
+          "moves": {
+            "<id:1>": "rock",
+            "<id:2>": "paper"
+          },
+          "outcome": "1",
+          "round": 5
+        }
+      ],
+      "seats": [
+        {
+          "delays": {
+            "lizard": 0,
+            "paper": 2,
+            "robot": 0,
+            "rock": 1,
+            "scissors": 0
+          },
+          "id": "<id:3>",
+          "lobbyProfile": null,
+          "matchId": "<id:0>",
+          "player": {
+            "expiryStrikes": 0,
+            "id": "<id:2>",
+            "lobbyUserId": null,
+            "name": "Alice",
+            "profile": null,
+            "score": 3
+          },
+          "position": 0,
+          "reservedForLobbyUser": null,
+          "role": null,
+          "seatKey": "1",
+          "teamKey": null
+        },
+        {
+          "delays": {
+            "lizard": 1,
+            "paper": 0,
+            "robot": 0,
+            "rock": 2,
+            "scissors": 0
+          },
+          "id": "<id:4>",
+          "lobbyProfile": null,
+          "matchId": "<id:0>",
+          "player": {
+            "expiryStrikes": 0,
+            "id": "<id:1>",
+            "lobbyUserId": null,
+            "name": "Bob",
+            "profile": null,
+            "score": 1
+          },
+          "position": 1,
+          "reservedForLobbyUser": null,
+          "role": null,
+          "seatKey": "2",
+          "teamKey": null
+        }
+      ],
+      "serverNow": "2026-01-01T00:00:00.000Z",
+      "submittedPlayerIds": []
+    }
+  }
+}
