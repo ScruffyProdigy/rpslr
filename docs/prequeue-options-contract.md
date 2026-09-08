@@ -1,8 +1,8 @@
 # Pre-Queue Options — Lobby ↔ Game Contract
 
-**Contract version:** 2
-**Status:** Agreed with the JQ-163 session 2026-09-08, except the two items in
-§8 that need Ryan
+**Contract version:** 3
+**Status:** Agreed with the JQ-163 session 2026-09-08. One item in §7 needs Ryan —
+Blind Spot's representation. Nothing else is open.
 **Game side:** [JQ-146 epic](https://linear.app/joinquest/issue/JQ-146), primarily
 [JQ-148](https://linear.app/joinquest/issue/JQ-148)
 **Lobby side:** [JQ-163](https://linear.app/joinquest/issue/JQ-163) — **already
@@ -21,6 +21,7 @@ discovery, provisioning, link-out and claim. Read that first; this only adds opt
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3 | 2026-09-08 | `exclusionKey` agreed and promoted into §2. Added the sibling-replacement rule for pickers at max, the ban on inferring exclusion from id syntax, and the degenerate-roster rule. |
 | 2 | 2026-09-08 | Negotiated with JQ-163. `group`→`section` to resolve a collision; `select`→per-group `min`/`max`; `rosterPath` dropped for the conventional path; `capabilities` dropped; `blurb`→`description`; provision options become an array of per-group selections. |
 | 1 | 2026-09-08 | First draft from the JQ-146 epic plan. |
 
@@ -121,6 +122,44 @@ decks you built", which no manifest can express.
   **200**, not `404`.
 - `locked` follows the mode-eligibility vocabulary from JQ-11/12/13 — a locked
   choice carries a requirement rather than vanishing. RPSLR sends `false` throughout.
+
+### `exclusionKey` — "at most one of these"
+
+An optional string. **At most one choice per `exclusionKey` may be selected within a
+group.** Choices without one are unconstrained.
+
+```json
+{ "id": "blind-spot:rock", "label": "Blind Spot: Rock", "section": "Minor",
+  "badge": "1 mark", "exclusionKey": "blind-spot", "locked": false }
+```
+
+It exists because variants of one thing are distinct ids to the lobby and the same
+thing to the game. Without it, a 2/2 group lets a player select `blind-spot:rock`
+*and* `blind-spot:paper` — two distinct ids, so the lobby's only distinctness rule
+("the same id twice") passes — and the game then rejects a loadout the lobby told
+the player was fine. That is the `400`-should-be-unreachable invariant in §4 broken
+by two clicks, and it was already broken before this field existed.
+
+Three rules go with it:
+
+- **Never infer exclusion from id syntax.** Splitting `blind-spot:rock` on `:` would
+  couple the lobby to a game's id conventions and silently mis-group any game that
+  uses a colon for something else. The field is explicit or it is absent.
+- **A picker at `max` replaces the *sibling*, not the oldest pick.** Pickers that
+  evict the oldest selection produce this: pick `blind-spot:rock`, pick `ferrus`,
+  tap `blind-spot:paper` → `ferrus` is evicted and the player holds two Blind Spots.
+  Invalid, in three ordinary clicks. Tapping a choice whose `exclusionKey` matches an
+  already-selected one must replace **that** choice. It also reads correctly —
+  "changing which Blind Spot" — and is better than disabling the siblings, which
+  leaves a player who picked the wrong variant unable to see why the others died.
+- **A group whose `max` exceeds its number of distinct exclusion classes has no
+  valid selection at all.** A 2/2 group where every choice shares one `exclusionKey`
+  is unsatisfiable, and it presents to a player as "this mode is mysteriously
+  unjoinable". It is a roster bug; the game checks it when building the roster, and
+  the lobby may reject it too rather than let a player discover it.
+
+The client rule is the UX and the server rule is the authority — both sides enforce,
+as with everything else here.
 
 ### This endpoint does not fail open
 
@@ -259,23 +298,26 @@ the engine to 26 helpers and **325** loadouts, changing the constant in JQ-147's
 ladder test from 231 — a live ripple into work already in progress. (b′) has (b)'s
 zero-contract-change property and leaves the engine untouched.
 
-### The exclusivity hole (b) opens — needs JQ-163 too
+### The exclusivity hole it opens — closed
 
-Under (b) or (b′), `blind-spot:rock` and `blind-spot:paper` are distinct ids, so the
-lobby would accept both as a legal two-choice loadout. The game would then reject it
-as the same helper twice — **a `400` on a selection the lobby validated**, which is
-exactly the unreachable-in-practice case §4 says should not happen.
+**Resolved 2026-09-08:** `exclusionKey` is agreed and specified in §2, along with
+the sibling-replacement rule and the degenerate-roster rule the discussion turned
+up. Nothing here is open any more.
 
-So (b) needs a way for the roster to say "at most one of these". Proposed:
+### What the decision actually costs
 
-```json
-{ "id": "blind-spot:rock", "label": "Blind Spot: Rock", "section": "Minor",
-  "badge": "1 mark", "exclusionKey": "blind-spot", "locked": false }
-```
+Both roster fixtures exist, so this is a one-line change either way:
 
-At most one choice per `exclusionKey` may be selected within a group. It is a much
-smaller addition than (a), and it is the kind of thing any "pick 2 of these variants"
-roster will want. **Not yet agreed** — sent to JQ-163.
+| | `queue-options.duel-helpers.json` | `queue-options.duel-helpers.blind-spot-exploded.json` |
+| --- | --- | --- |
+| Wire choices | 22 | 26 |
+| Blind Spot | one choice, cannot name a move | five, one per move, sharing `exclusionKey` |
+| Engine roster | 22 | 22 under (b′) — 26 under plain (b) |
+| Ladder test constant | 231 | 231 under (b′) — **325** under plain (b) |
 
-Until both are settled, `queue-options.duel-helpers.json` carries the 22-choice
-roster with Blind Spot unexploded, and is marked provisional.
+The recommendation is **(b) with (b′)'s wire-only explosion**: use the exploded
+fixture, keep `roster.ts` at 22 with Blind Spot carrying a move param, and map
+`blind-spot:rock` → `{ id: 'blind-spot', param: 'rock' }` when parsing provision.
+JQ-163 has confirmed the mapping is invisible to the lobby.
+
+If Ryan instead cuts Blind Spot, delete the exploded fixture and nothing else moves.

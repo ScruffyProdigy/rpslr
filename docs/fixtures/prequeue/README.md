@@ -1,7 +1,7 @@
 # Pre-queue options fixtures
 
 Golden bodies for [`../../prequeue-options-contract.md`](../../prequeue-options-contract.md)
-(**v2**, negotiated with the JQ-163 session 2026-09-08).
+(**v3**, negotiated with the JQ-163 session 2026-09-08).
 **These are the specification.** Code is checked against them, never the reverse.
 A change here is a contract change: it lands in the lobby repo too, and the
 contract version goes up.
@@ -17,15 +17,21 @@ Three shapes:
 - **Behaviour fixtures** (`queue-options.unavailable.json`) describe a contract
   that has no single body — here, that the roster endpoint does not fail open.
 
-## Provisional: the roster is still 22 choices
+## Two roster fixtures, pending one decision
 
-`queue-options.duel-helpers.json` carries Blind Spot as **one** choice. Under a
-pre-queue pick it needs to name a move, and the agreed direction is to explode it
-into one choice per move — which would make this 26. Two things are unsettled
-(contract §7): Ryan's call on the representation, and JQ-163's agreement on an
-`exclusionKey` so the lobby can stop a player selecting two Blind Spot variants.
+`exclusionKey` is agreed (contract §2). The only thing still open is Ryan's call on
+how Blind Spot is represented, and **both outcomes are already written**:
 
-Lock the manifest and provision fixtures now; expect this one to gain four entries.
+- `queue-options.duel-helpers.json` — 22 choices, Blind Spot unexploded. Cannot name
+  a move, so it is only correct if the card is cut.
+- `queue-options.duel-helpers.blind-spot-exploded.json` — 26 choices, five Blind Spot
+  variants sharing `exclusionKey: "blind-spot"`. **This is the recommended one.**
+
+Everything else in both is final. Build the picker against the exploded fixture; if
+Ryan cuts the card instead, delete that file and nothing else moves.
+
+Both satisfy the degenerate-roster rule: 22 distinct exclusion classes against a
+group `max` of 2.
 
 ## Running them
 
