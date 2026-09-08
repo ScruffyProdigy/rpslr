@@ -10,21 +10,23 @@
  * @see docs/prequeue-options-contract.md §4
  */
 
-import type { GameModeManifest, PreQueueGroup } from './gameModes.js';
+import type { GameModeManifest } from './gameModes.js';
 import { parseLoadout, type Loadout } from './helpers/loadout.js';
 import { validateSelection } from './helpers/queueOptions.js';
 import type { AssignmentSeat, SeatOptionSelection } from './tokens.js';
 
 /**
- * What a seat gets when provision omits `options`: exactly RPSLR's `duel` opening
- * (Robot 2 marks, Lizard 1), so a defaulted `duel-helpers` match plays like the mode
- * it grew out of rather than like an arbitrary pairing.
+ * There is no default loadout, and that is a decision rather than an omission.
  *
- * A narrow safety net, not the deploy mechanism — it covers standalone play, the
- * stub-lobby harness, and provisions that omit options for a reason neither side
- * anticipated. `REQUIRE_PREQUEUE_OPTIONS=true` closes it once real selections arrive.
+ * v1–v3 of the contract defaulted a seat to Ferrus + Featherweight, chosen because
+ * it reproduces `duel`'s `lizard: 1, robot: 2`. It reproduces the opening *marks*
+ * and not the play — both cards carry permanent effects — so it handed two real
+ * abilities to a player who chose nothing, silently. There is no honest neutral
+ * pairing to swap in either: every Major and Minor has an ongoing effect, and
+ * Trinkets cost 0 marks so cannot supply an opening at all.
+ *
+ * A mode that declares `preQueue` requires a selection per seat. Ryan, 2026-09-08.
  */
-export const DEFAULT_LOADOUT_IDS = ['ferrus', 'featherweight'] as const;
 
 /** The body of a 400. `seatKey` is for diagnosis: a rejection fails the whole match. */
 export interface PreQueueRejection {
@@ -37,8 +39,6 @@ export interface ResolvedSelection {
   seatKey: string;
   groupKey: string;
   optionIds: string[];
-  /** True when the seat sent nothing and took `DEFAULT_LOADOUT_IDS`. */
-  defaulted: boolean;
 }
 
 export function isPreQueueRejection(
@@ -49,11 +49,6 @@ export function isPreQueueRejection(
 
 function reject(seatKey: string, reason: string): PreQueueRejection {
   return { error: 'invalid pre-queue selection', seatKey, reason };
-}
-
-/** The ids this game defaults `group` to, or null if it has no sensible default. */
-function defaultIdsFor(group: PreQueueGroup): string[] | null {
-  return group.kind === 'Loadout' ? [...DEFAULT_LOADOUT_IDS] : null;
 }
 
 /**
@@ -70,7 +65,6 @@ function defaultIdsFor(group: PreQueueGroup): string[] | null {
 export function resolvePreQueueOptions(
   mode: GameModeManifest,
   seats: AssignmentSeat[],
-  opts: { require: boolean },
 ): ResolvedSelection[] | PreQueueRejection {
   const groups = mode.preQueue?.groups ?? [];
   if (groups.length === 0) return [];
@@ -88,30 +82,12 @@ export function resolvePreQueueOptions(
       const match: SeatOptionSelection | undefined = sent.find((s) => s.groupKey === group.key);
 
       if (!match) {
-        if (opts.require) {
-          return reject(seat.seatKey, `pre-queue selection is required for ${group.key}`);
-        }
-        const fallback = defaultIdsFor(group);
-        if (!fallback) {
-          return reject(seat.seatKey, `pre-queue selection is required for ${group.key}`);
-        }
-        resolved.push({
-          seatKey: seat.seatKey,
-          groupKey: group.key,
-          optionIds: fallback,
-          defaulted: true,
-        });
-        continue;
+        return reject(seat.seatKey, `pre-queue selection is required for ${group.key}`);
       }
 
       const checked = validateSelection(group, match.optionIds);
       if (typeof checked === 'string') return reject(seat.seatKey, checked);
-      resolved.push({
-        seatKey: seat.seatKey,
-        groupKey: group.key,
-        optionIds: checked,
-        defaulted: false,
-      });
+      resolved.push({ seatKey: seat.seatKey, groupKey: group.key, optionIds: checked });
     }
   }
   return resolved;

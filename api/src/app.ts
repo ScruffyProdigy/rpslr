@@ -9,7 +9,11 @@ import {
   NotFoundError,
   ReservationError,
 } from './repository.js';
-import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
+import {
+  parseLobbyProvision,
+  parseStandaloneSeats,
+  verifyLobbyProvisionAuth,
+} from './provision.js';
 import {
   BannedPlayerError,
   PreQueueError,
@@ -125,12 +129,19 @@ export function createApp(
         );
         return res.status(201).json({ ...state, launchUrls });
       }
+      // A mode with a pre-queue pick needs one here too: standalone has no lobby to
+      // pick in, so the caller names the loadouts rather than getting a default.
+      const standaloneSeats = parseStandaloneSeats(body.seats);
+      if (typeof standaloneSeats === 'string') {
+        return res.status(400).json({ error: standaloneSeats });
+      }
       const result = await service.createStandaloneMatch({
         gameMode: body.gameMode,
         name: body.name,
         bestOf: body.bestOf,
         hostName: body.hostName,
         hostLobbyUserId: body.lobbyUserId,
+        seats: standaloneSeats,
       });
       return res.status(201).json(result);
     }),

@@ -13,7 +13,6 @@ const hub = new MatchHub();
 const presence = new PresenceTracker();
 const service = new GameService(repo, {
   bannedLobbyUsers: config.bannedLobbyUsers,
-  requirePreQueueOptions: config.requirePreQueueOptions,
   hub,
   presence,
 });

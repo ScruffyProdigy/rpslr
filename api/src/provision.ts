@@ -140,3 +140,30 @@ export function verifyLobbyProvisionAuth(
   }
   return null;
 }
+
+/**
+ * Pre-queue picks on a standalone create, which arrives from a browser rather than
+ * from Lobby and so gets the same shape-check.
+ *
+ * Standalone names its loadouts because there is no default to fall back on and no
+ * lobby to pick in. Whether the ids are *legal* is still settled against the mode's
+ * manifest in `preQueue.ts`.
+ */
+export function parseStandaloneSeats(
+  raw: unknown,
+): { seatKey: string; options?: SeatOptionSelection[] }[] | undefined | string {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return 'seats must be an array';
+
+  const out: { seatKey: string; options?: SeatOptionSelection[] }[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') return 'each seats entry must be an object';
+    const s = row as Record<string, unknown>;
+    const seatKey = typeof s.seatKey === 'string' ? s.seatKey.trim() : '';
+    if (!seatKey) return 'each seats entry requires seatKey';
+    const options = parseSeatOptions(s.options);
+    if (typeof options === 'string') return options;
+    out.push({ seatKey, options });
+  }
+  return out;
+}

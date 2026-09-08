@@ -148,6 +148,10 @@ describe('an unresolved ability firing never reaches the socket', () => {
       gameMode: 'duel-helpers',
       hostName: 'Alice',
       bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'copycat'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
+      ],
     });
     const code = created.state.match.code;
     const hostId = created.you.playerId;
@@ -168,7 +172,8 @@ describe('an unresolved ability firing never reaches the socket', () => {
     send(opponent, { type: 'subscribe', ref: code });
     const snapshot = await waitFor(opponent, (m) => m.type === 'state');
     expect((snapshot.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([]);
-    expect(JSON.stringify(snapshot)).not.toContain('quarantine');
+    // Holding Quarantine is public; the move it named is not, until the round is over.
+    expect(JSON.stringify(snapshot)).not.toContain('"target"');
 
     // Play the round out; now it is history, and history is public.
     await service.submitMove(code, hostId, 'paper');

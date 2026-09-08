@@ -13,7 +13,7 @@ import {
   resolveLobbyPlayerProfile,
 } from './lobbyPlayer.js';
 import type { LobbyProvisionInput } from './provision.js';
-import { TokenError } from './tokens.js';
+import { TokenError, type SeatOptionSelection } from './tokens.js';
 import {
   availableMoves,
   computeDelays,
@@ -105,11 +105,6 @@ export interface GameServiceOptions {
   now?: () => number;
   /** Injectable randomness for auto-picks, so tests are deterministic. */
   rng?: () => number;
-  /**
-   * Reject a provision that omits pre-queue options rather than defaulting the seat.
-   * Off until real selections are arriving from Lobby.
-   */
-  requirePreQueueOptions?: boolean;
 }
 
 /**
@@ -127,7 +122,6 @@ export class GameService {
   private readonly presence?: PresenceTracker;
   private readonly now: () => number;
   private readonly rng: () => number;
-  private readonly requirePreQueueOptions: boolean;
   /** One enforcement pass per match at a time; see `enforceDeadlines`. */
   private readonly enforcing = new Map<string, Promise<void>>();
 
@@ -137,7 +131,6 @@ export class GameService {
     this.presence = options.presence;
     this.now = options.now ?? Date.now;
     this.rng = options.rng ?? Math.random;
-    this.requirePreQueueOptions = options.requirePreQueueOptions ?? false;
   }
 
   // --- Match creation -------------------------------------------------------
@@ -149,17 +142,24 @@ export class GameService {
     bestOf?: number;
     hostName?: string;
     hostLobbyUserId?: string | null;
+    /**
+     * Pre-queue picks per seat, for a mode that asks for them. Standalone has no
+     * lobby to pick in, so it names the loadouts up front instead — there is no
+     * default to fall back on, and inventing one here is exactly what v5 removed.
+     */
+    seats?: { seatKey: string; options?: SeatOptionSelection[] }[];
   }): Promise<ClaimResult> {
     const mode = this.requireMode(opts.gameMode ?? DEFAULT_GAME_MODE);
     const bestOf = clampBestOf(opts.bestOf, defaultBestOfForMode(mode.key));
     const reservations = seatsFromMode(mode);
-    // Standalone has no lobby to pick in, so it always takes the default loadout —
-    // REQUIRE_PREQUEUE_OPTIONS is about the Lobby handshake, and enforcing it here
-    // would make the mode unplayable without one.
+    const named = new Map((opts.seats ?? []).map((s) => [s.seatKey, s.options]));
     const selections = this.resolveSelections(
       mode,
-      reservations.map((r) => ({ seatKey: r.seatKey, lobbyUserId: '' })),
-      { require: false, externalMatchId: null },
+      reservations.map((r) => ({
+        seatKey: r.seatKey,
+        lobbyUserId: '',
+        options: named.get(r.seatKey),
+      })),
     );
     const match = await this.repo.createMatch({
       code: await this.uniqueCode(),
@@ -180,31 +180,17 @@ export class GameService {
   /**
    * Validate the pre-queue selections for a set of seats, or refuse to seat them.
    *
-   * A defaulted seat is logged rather than passed over quietly: the default exists
-   * so a match is still playable when nothing was picked, and a mode that is
-   * silently defaulting every seat looks identical to one that is working.
+   * There is nothing to fall back on: a mode declaring `preQueue` requires a
+   * selection per seat, and a missing one is a rejection rather than a prompt to
+   * invent a loadout the player did not choose.
    */
   private resolveSelections(
     mode: GameModeManifest,
     seats: AssignmentSeat[],
-    opts: { require: boolean; externalMatchId: string | null },
   ): ResolvedSelection[] {
-    const resolved = resolvePreQueueOptions(mode, seats, { require: opts.require });
+    const resolved = resolvePreQueueOptions(mode, seats);
     if (isPreQueueRejection(resolved)) {
       throw new PreQueueError(resolved.seatKey, resolved.reason);
-    }
-    for (const selection of resolved) {
-      if (!selection.defaulted) continue;
-      console.warn(
-        JSON.stringify({
-          event: 'provision.prequeue_defaulted',
-          externalMatchId: opts.externalMatchId,
-          gameMode: mode.key,
-          seatKey: selection.seatKey,
-          groupKey: selection.groupKey,
-          optionIds: selection.optionIds,
-        }),
-      );
     }
     return resolved;
   }
@@ -252,10 +238,7 @@ export class GameService {
 
     const mode = this.requireMode(assignment.gameMode);
     assertAssignmentCoversMode(mode, assignment.seats);
-    const selections = this.resolveSelections(mode, assignment.seats, {
-      require: this.requirePreQueueOptions,
-      externalMatchId: assignment.externalMatchId,
-    });
+    const selections = this.resolveSelections(mode, assignment.seats);
     const reservations = this.withLoadouts(
       mode,
       selections,
@@ -787,7 +770,16 @@ function resolvedFirings(firings: AbilityFiring[], results: RoundResult[]): Abil
   return firings.filter((f) => resolved.has(f.round));
 }
 
-/** Both moves of each resolved round, in round order, seat A's first. */
+/**
+ * Both moves of each resolved round, in round order, seat A's first.
+ *
+ * The filter is defensive only, and cannot fire today: a round is recorded once both
+ * players have moved, and Sacrifice was ruled to draw a round the firer still picks
+ * in, so every resolved round carries both moves by construction. It is written down
+ * because a card that produced a round without one would be discarded here in
+ * silence, taking its decrement and recharge with it — so this line would need
+ * revisiting rather than being relied on.
+ */
 function playedRounds(results: RoundResult[], idA: string, idB: string): PlayedRound[] {
   return [...results]
     .sort((a, b) => a.round - b.round)

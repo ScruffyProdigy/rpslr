@@ -21,7 +21,6 @@ function buildApp(env: Partial<NodeJS.ProcessEnv> = {}, verifier?: TokenVerifier
   const config = loadConfig({ GAME_APP_ENV: 'local', REQUIRE_LOBBY_AUTH: 'false', ...env } as NodeJS.ProcessEnv);
   const service = new GameService(new MemoryGameRepository(), {
     bannedLobbyUsers: config.bannedLobbyUsers,
-    requirePreQueueOptions: config.requirePreQueueOptions,
   });
   return createApp(service, config, verifier);
 }
@@ -417,7 +416,12 @@ describe('POST /api/v1/matches with pre-queue options', () => {
     return request(buildApp(env)).post('/api/v1/matches').send(fixture.request);
   }
 
-  for (const name of ['duplicate-helper', 'unknown-helper', 'wrong-arity'] as const) {
+  for (const name of [
+    'duplicate-helper',
+    'unknown-helper',
+    'wrong-arity',
+    'missing-options',
+  ] as const) {
     it(`rejects ${name} with the fixture's status, seat and reason`, async () => {
       const fixture = prequeueFixture<ProvisionFixture>(`provision.${name}`);
       const res = await provision(fixture);
@@ -464,22 +468,12 @@ describe('POST /api/v1/matches with pre-queue options', () => {
     expect(res.status).toBe(201);
   });
 
-  it('defaults a seat with no options, and provisions rather than failing', async () => {
+  it('never invents a loadout for a seat that picked nothing', async () => {
     const fixture = prequeueFixture<ProvisionFixture>('provision.missing-options');
     const res = await provision(fixture);
-    expect(res.status).toBe(fixture.expect.status);
-  });
-
-  it('rejects the same body once REQUIRE_PREQUEUE_OPTIONS is on', async () => {
-    const fixture = prequeueFixture<{
-      request: Record<string, unknown>;
-      expect: { whenRequired: { status: number; reason: string } };
-    }>('provision.missing-options');
-    const res = await request(buildApp({ REQUIRE_PREQUEUE_OPTIONS: 'true' }))
-      .post('/api/v1/matches')
-      .send(fixture.request);
-    expect(res.status).toBe(fixture.expect.whenRequired.status);
-    expect(res.body.reason).toContain(fixture.expect.whenRequired.reason);
+    expect(res.status).toBe(400);
+    // The old default was Ferrus + Featherweight. Nothing should reach for it.
+    expect(JSON.stringify(res.body)).not.toContain('featherweight');
   });
 
   it('leaves duel provisioning untouched', async () => {

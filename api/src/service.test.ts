@@ -295,12 +295,10 @@ describe('GameService — duel-helpers loadouts', () => {
     expect(reread.seats[0].delays).toEqual(created.seats[0].delays);
   });
 
-  it('defaults a seat that picked nothing to exactly the duel opening', async () => {
-    const state = await provision('m-default', [{ seatKey: '1' }, { seatKey: '2' }]);
-    for (const seat of state.seats) {
-      expect(seat.loadout).toEqual(['ferrus', 'featherweight']);
-      expect(seat.delays).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 });
-    }
+  it('refuses to seat a player who picked nothing', async () => {
+    await expect(provision('m-default', [{ seatKey: '1' }, { seatKey: '2' }])).rejects.toMatchObject(
+      { seatKey: '1', reason: expect.stringContaining('pre-queue selection is required') },
+    );
   });
 
   it('refuses to seat an invalid selection', async () => {
@@ -312,32 +310,23 @@ describe('GameService — duel-helpers loadouts', () => {
     ).rejects.toMatchObject({ seatKey: '1', reason: 'a loadout needs two different helpers' });
   });
 
-  it('rejects a missing selection when the deploy has tightened', async () => {
-    const strict = new GameService(new MemoryGameRepository(), { requirePreQueueOptions: true });
-    await expect(
-      strict.ensureMatchFromAssignment({
-        lobbyId: 'https://lobby.local',
-        lobby: { returnUrl: 'http://localhost:5173', graphqlUrl: 'http://localhost:8080/query' },
-        assignment: {
-          externalMatchId: 'm-strict',
-          gameMode: 'duel-helpers',
-          bestOf: 5,
-          seats: [
-            { seatKey: '1', lobbyUserId: 'u_1' },
-            { seatKey: '2', lobbyUserId: 'u_2' },
-          ],
-        },
-      }),
-    ).rejects.toMatchObject({ seatKey: '1' });
-  });
-
-  it('gives a standalone duel-helpers match the default loadout, tightening or not', async () => {
-    const strict = new GameService(new MemoryGameRepository(), { requirePreQueueOptions: true });
-    const created = await strict.createStandaloneMatch({
+  it('seats a standalone duel-helpers match from the loadouts it was given', async () => {
+    const created = await service.createStandaloneMatch({
       gameMode: 'duel-helpers',
       hostName: 'Alice',
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['ferrus', 'chimera'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'copycat'] }] },
+      ],
     });
-    expect(created.state.seats[0].loadout).toEqual(['ferrus', 'featherweight']);
+    expect(created.state.seats[0].loadout).toEqual(['ferrus', 'chimera']);
+    expect(created.state.seats[1].loadout).toEqual(['oracle', 'copycat']);
+  });
+
+  it('refuses a standalone duel-helpers match that names no loadout', async () => {
+    await expect(
+      service.createStandaloneMatch({ gameMode: 'duel-helpers', hostName: 'Alice' }),
+    ).rejects.toMatchObject({ seatKey: '1' });
   });
 
   it('leaves a duel seat with no loadout at all', async () => {
@@ -361,6 +350,10 @@ describe('GameService — ability firings', () => {
       gameMode: 'duel-helpers',
       hostName: 'Alice',
       bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'copycat'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
+      ],
     });
     const code = created.state.match.code;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
@@ -386,8 +379,9 @@ describe('GameService — ability firings', () => {
 
     const state = await service.getState(code);
     expect(state.abilityFirings).toEqual([]);
-    // The named move must not be anywhere in the payload, not merely unrendered.
-    expect(JSON.stringify(state)).not.toContain('quarantine');
+    // The named move must be absent from the payload, not merely unrendered. Holding
+    // Quarantine is public — naming a move with it is not until the round is over.
+    expect(JSON.stringify(state)).not.toContain('"target"');
   });
 
   it('discloses the firing, and the move it named, once the round resolves', async () => {
