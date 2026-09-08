@@ -5,18 +5,20 @@ import { ruleCardSchedule } from './commentary';
 import { HowToPlayDialog } from './components/HowToPlay';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
+import { PlayAlongToggle } from './components/PlayAlongToggle';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { ReplayCommentary } from './components/ReplayCommentary';
 import { ReplayControls } from './components/ReplayControls';
 import { RevealCard } from './components/RevealCard';
 import { RoundStrip } from './components/RoundStrip';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
+import { scoreGuesses, usePlayAlong } from './lib/usePlayAlong';
 import { useReplayPlayback } from './lib/useReplayPlayback';
 import { getLobbyGameUrl } from './env';
 import { withReplayAttribution } from './lib/replayLink';
 import { spectatorVoice } from './lib/voice';
 import { winningEdgeOf } from './moves';
-import { buildReplay, replayBlockedReason } from './replay';
+import { buildReplay, flipReplay, replayBlockedReason } from './replay';
 
 /**
  * Somebody else's finished match, watched from outside it.
@@ -25,7 +27,8 @@ import { buildReplay, replayBlockedReason } from './replay';
  * — driven from a frame list instead of a socket. What changes is who it is
  * addressed to: nobody here is playing, so nothing is "yours", and both sides
  * are named. Seat order decides the colours, so a player is the same colour
- * every time the link is opened.
+ * every time the link is opened — unless the watcher steps into a seat to call
+ * its moves, which is the one thing that earns a flip.
  */
 export function ReplayPage({ matchRef }: { matchRef: string }) {
   const [state, setState] = useState<MatchState | null>(null);
@@ -47,9 +50,20 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   }, [matchRef]);
 
   const blocked = state ? replayBlockedReason(state) : null;
-  const replay = useMemo(
+  const match = useMemo(
     () => (state && !replayBlockedReason(state) ? buildReplay(state) : null),
     [state],
+  );
+
+  const playAlong = usePlayAlong();
+
+  // Calling a player's moves means standing in their seat: their cooldowns are
+  // the pills on the board, their side of the reveal card is the near one, and
+  // the end card's verdict is about them. Everything downstream already reads
+  // the you-side out of `a`, so the flip happens once, here.
+  const replay = useMemo(
+    () => (match && playAlong.side === 1 ? flipReplay(match) : match),
+    [match, playAlong.side],
   );
 
   // One step past the last round, for the end card. Without it the deciding
@@ -63,24 +77,47 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   // them again by a link, and the panels answer the same question either way.
   const rules = useFirstMatchRules(replay !== null);
 
-  const playback = useReplayPlayback(replay ? replay.frames.length + 1 : 0, rules.open);
+  // A round nobody has called yet holds the replay where it is, the same way
+  // the rules panels do. Which round that is depends on the playback index the
+  // hook itself owns, so it is asked for rather than told.
+  const playback = useReplayPlayback(replay ? replay.frames.length + 1 : 0, (index) => {
+    if (rules.open) return true;
+    if (!playAlong.on || !replay) return false;
+    const pending = replay.frames[index];
+    return pending !== undefined && playAlong.guesses[pending.round] === undefined;
+  });
 
   // Which round first puts each rule on the board. Computed once for the whole
   // replay so a rule is explained where it belongs rather than wherever the
   // watcher happens to have stepped to.
   const schedule = useMemo(() => (replay ? ruleCardSchedule(replay.frames) : []), [replay]);
 
+  const score = useMemo(
+    () => scoreGuesses(replay?.frames ?? [], playAlong.guesses),
+    [replay, playAlong.guesses],
+  );
+
   if (error) return <ReplayMessage title="Replay unavailable" body={error} />;
   if (!state) return <ReplayMessage title="Loading the match…" body={null} />;
   if (blocked) return <ReplayMessage title={blocked} body={null} />;
-  if (!replay) return <ReplayMessage title="This match has no rounds to replay" body={null} />;
+  // `match` is what `replay` is built from, so one is null exactly when the
+  // other is — narrowing both keeps the unflipped names reachable below.
+  if (!match || !replay) {
+    return <ReplayMessage title="This match has no rounds to replay" body={null} />;
+  }
 
   const over = playback.index >= replay.frames.length;
   // On the end-card step there is no round of its own, so the board keeps the
   // last one — the strip beneath it still reads as the whole match.
   const frameIndex = Math.min(playback.index, replay.frames.length - 1);
   const frame = replay.frames[frameIndex];
-  const shown = replay.frames.slice(0, frameIndex + 1);
+  // What the watcher called for this round: a move, null if they let it go by,
+  // undefined while it is still theirs to answer.
+  const called = playAlong.guesses[frame.round];
+  const awaiting = playAlong.on && !over && called === undefined;
+  // A round waiting to be called is not one of the rounds so far: its chip
+  // would sit under the board with the answer already on it.
+  const shown = replay.frames.slice(0, frameIndex + (awaiting ? 0 : 1));
   const voice = spectatorVoice(replay.a.identity.name);
   // A replay's job is to turn a watcher into a player, so the way to JoinQuest
   // is on screen the whole time rather than only once the match runs out.
@@ -97,7 +134,10 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   // round's result is its to give: the arrow it was won on stays dark, and the
   // scoreboard still reads as it did going in. Both would otherwise announce
   // the verdict over the top of a card that has not reached it yet.
-  const settled = playback.beat !== 'reveal';
+  // Nothing about a round waiting to be called is settled either: the
+  // scoreline, the winning arrow and the commentary all read its outcome, and
+  // any of them would answer the question before it was asked.
+  const settled = !awaiting && playback.beat !== 'reveal';
   const edge = settled ? winningEdgeOf(frame.a.move, frame.b.move) : null;
   // A round with a missing pick is skipped by buildReplay, so a round number is
   // not an index — look it up rather than assume they line up.
@@ -149,6 +189,14 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
 
       <HowToPlayDialog bestOf={replay.bestOf} open={rules.open} onClose={rules.dismiss} />
 
+      <PlayAlongToggle
+        on={playAlong.on}
+        side={playAlong.side}
+        names={[match.a.identity.name, match.b.identity.name]}
+        onMode={playAlong.setOn}
+        onSide={playAlong.setSide}
+      />
+
       {over ? (
         <MatchEndCard
           iWon={replay.winnerSeatKey === replay.a.seatKey}
@@ -166,29 +214,39 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           activeRound={null}
           onSelectRound={jumpToRound}
           playCtaUrl={playCtaUrl}
+          called={score}
         />
       ) : (
         <MovePicker
           myDelays={frame.a.delaysBefore}
           oppDelays={frame.b.delaysBefore}
-          myChosenMove={frame.a.move}
-          lockedIn
+          // The round is the watcher's to call until they have called it, so
+          // the board is a live picker with nothing chosen on it rather than a
+          // record of what was.
+          myChosenMove={awaiting ? null : frame.a.move}
+          lockedIn={!awaiting}
           opponentLockedIn
-          disabled
+          disabled={!awaiting}
           round={frame.round}
           myRecentMoves={frame.a.recentMoves}
-          onPlay={() => {}}
+          onPlay={(move) => {
+            playAlong.call(frame.round, move);
+            playback.resume();
+          }}
           voice={voice}
           oppName={oppName}
           winningEdge={edge}
           centerSlot={
-            // An empty element, not nothing: MovePicker reads a centre slot as
-            // "a round is being shown" and falls back to its own picker centre
-            // without one — which speaks to a player, and there isn't one here.
-            playback.beat === 'strike' ? (
+            // Nothing at all while the round is the watcher's: MovePicker reads
+            // a centre slot as "a round is being shown" and falls back to its
+            // own picker centre without one, which is the whole mode.
+            awaiting ? undefined : playback.beat === 'strike' ? (
+              // An empty element, not nothing: the same fallback would other-
+              // wise speak to a player, and on a settled round there isn't one.
               <></>
             ) : (
               <RevealCard
+                call={called}
                 // Keyed by round so the card is a new one every time. The whole
                 // showdown is CSS animation-delays hanging off a single mount,
                 // and a card React reuses across rounds never mounts again —
@@ -227,7 +285,27 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         controls pushed play/pause off a phone screen. The board is watched, the
         transport is reached for, and the words are read: that is the order.
       */}
-      {!over && (
+      {awaiting && (
+        <p className="replay__call">
+          {score.called > 0 && (
+            <span className="replay__call-score">
+              Called {score.hits} of {score.called}
+            </span>
+          )}
+          <button
+            type="button"
+            className="replay__call-skip"
+            onClick={() => {
+              playAlong.skip(frame.round);
+              playback.resume();
+            }}
+          >
+            Skip this round
+          </button>
+        </p>
+      )}
+
+      {!over && !awaiting && (
         <ReplayCommentary
           frame={frame}
           replay={replay}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchState, Move, RoundResult, Seat } from './api';
-import { buildReplay, replayBlockedReason } from './replay';
+import { buildReplay, flipReplay, replayBlockedReason } from './replay';
 
 function seat(position: number, seatKey: string, playerId: string, name: string): Seat {
   return {
@@ -231,5 +231,45 @@ describe('buildReplay frame detail', () => {
     expect(frames[0].a.recentMoves).toEqual([]);
     expect(frames[1].a.recentMoves).toEqual(['rock']);
     expect(frames[1].b.recentMoves).toEqual(['paper']);
+  });
+});
+
+describe('flipReplay', () => {
+  it('puts the other seat in the played role', () => {
+    const replay = buildReplay(state([round(1, 'rock', 'scissors', 'a')]));
+    const flipped = flipReplay(replay);
+
+    expect(flipped.a.identity.name).toBe('Ben');
+    expect(flipped.b.identity.name).toBe('Ana');
+    expect(flipped.frames[0].a.move).toBe('scissors');
+    expect(flipped.frames[0].b.move).toBe('rock');
+  });
+
+  it('swaps the cooldowns each side is read against', () => {
+    const replay = buildReplay(state([round(1, 'rock', 'lizard', 'a'), round(2, 'paper', 'rock', 'b')]));
+    const flipped = flipReplay(replay);
+
+    expect(flipped.frames[1].a.delaysBefore).toEqual(replay.frames[1].b.delaysBefore);
+    expect(flipped.frames[1].b.delaysBefore).toEqual(replay.frames[1].a.delaysBefore);
+  });
+
+  it('swaps the final score', () => {
+    const replay = buildReplay(
+      state([round(1, 'rock', 'scissors', 'a'), round(2, 'paper', 'scissors', 'b')]),
+    );
+    expect(flipReplay(replay).finalScore).toEqual({ a: 1, b: 1 });
+
+    const oneSided = buildReplay(
+      state([round(1, 'rock', 'scissors', 'a'), round(2, 'scissors', 'paper', 'a')]),
+    );
+    expect(flipReplay(oneSided).finalScore).toEqual({ a: 0, b: 2 });
+  });
+
+  it('leaves the recorded round untouched', () => {
+    // Components find their own side in a RoundResult by player id, so the
+    // round as the server recorded it must survive the flip unrewritten.
+    const replay = buildReplay(state([round(1, 'rock', 'scissors', 'a')]));
+    expect(flipReplay(replay).frames[0].result).toBe(replay.frames[0].result);
+    expect(flipReplay(replay).frames[0].outcome).toBe('a');
   });
 });

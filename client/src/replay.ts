@@ -186,3 +186,27 @@ export function buildReplay(state: MatchState): Replay {
     finalScore: { a: scoreA, b: scoreB },
   };
 }
+
+/**
+ * The same match seen from the other seat.
+ *
+ * Seat order normally decides who is drawn in the blue `--you` role, so a
+ * player is the same colour every time a replay link is opened. Standing in a
+ * player's seat to call their moves is the one thing that should override
+ * that: the board's cooldown pills, the reveal card's left-hand side and the
+ * end card's verdict all follow the you-side, and they should all follow the
+ * player being played as.
+ *
+ * The recorded `RoundResult` is deliberately left untouched — components find
+ * their own side in it by player id, and rewriting it would put the flip in
+ * two places at once.
+ */
+export function flipReplay(replay: Replay): Replay {
+  return {
+    ...replay,
+    a: replay.b,
+    b: replay.a,
+    frames: replay.frames.map((frame) => ({ ...frame, a: frame.b, b: frame.a })),
+    finalScore: { a: replay.finalScore.b, b: replay.finalScore.a },
+  };
+}

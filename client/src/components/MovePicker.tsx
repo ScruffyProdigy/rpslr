@@ -103,12 +103,14 @@ export function MovePicker({
         ? 'idle'
         : 'picking';
 
-  // A new round is a new decision.
+  // A new round is a new decision — and so is the board becoming pickable
+  // again after it was not, which is how a replay watcher switching the player
+  // they are calling for gets a clean board rather than the last one's tap.
   useEffect(() => {
     setPicked(null);
     setHovered(null);
     autoCommitted.current = false;
-  }, [round]);
+  }, [round, disabled]);
 
   // The preview's caption and Lock-in button sit on top of the graph, so there
   // has to be a way to put them away and read what is underneath. Tapping the
@@ -390,6 +392,7 @@ export function MovePicker({
               myRecentMoves={myRecentMoves}
               oppDelays={oppDelays}
               onCommit={commit}
+              voice={voice}
             />
           )}
         </div>
@@ -421,7 +424,10 @@ export function MovePicker({
         arrows = attacks they can&rsquo;t make)
       </p>
 
-      {showTapHint && !voice.you && (
+      {/* Wherever the board can be tapped — a live match, or a replay being
+          called along with. Not on a replay being watched, where the hint
+          would point at a board that does not answer. */}
+      {showTapHint && !disabled && (
         <OneTimeNoteBar onDismiss={tapHint.dismiss}>
           Tap to preview · tap again to lock in.
         </OneTimeNoteBar>
@@ -458,6 +464,7 @@ function PickerCenter({
   myRecentMoves,
   oppDelays,
   onCommit,
+  voice,
 }: {
   preview: Move | null;
   picked: Move | null;
@@ -468,6 +475,8 @@ function PickerCenter({
   myRecentMoves: Move[];
   oppDelays: Record<string, number>;
   onCommit: (move: Move) => void;
+  /** How to refer to the you-side: second person, or by name on a replay. */
+  voice: Voice;
 }) {
   // After lock-in the centre holds your pick — and the wait — so the page
   // below the board doesn't have to say anything.
@@ -490,7 +499,9 @@ function PickerCenter({
   if (!shown) {
     return (
       <div className="picker-center picker-center--idle">
-        <span className="picker-center__idle">Pick a move</span>
+        <span className="picker-center__idle">
+          {voice.you ? `What does ${voice.you} play?` : 'Pick a move'}
+        </span>
       </div>
     );
   }
