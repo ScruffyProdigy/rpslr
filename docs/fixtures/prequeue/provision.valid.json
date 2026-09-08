@@ -1,0 +1,53 @@
+{
+  "request": {
+    "lobbyId": "https://lobby.local",
+    "lobby": {
+      "returnUrl": "http://localhost:5173",
+      "graphqlUrl": "http://localhost:8080/query"
+    },
+    "assignment": {
+      "externalMatchId": "fixture-valid",
+      "gameMode": "duel-helpers",
+      "bestOf": 5,
+      "seats": [
+        {
+          "seatKey": "1",
+          "lobbyUserId": "u_1",
+          "options": [
+            {
+              "groupKey": "helpers",
+              "optionIds": [
+                "ferrus",
+                "chimera"
+              ],
+              "labels": [
+                "Ferrus",
+                "Chimera"
+              ]
+            }
+          ]
+        },
+        {
+          "seatKey": "2",
+          "lobbyUserId": "u_2",
+          "options": [
+            {
+              "groupKey": "helpers",
+              "optionIds": [
+                "oracle",
+                "copycat"
+              ],
+              "labels": [
+                "Oracle",
+                "Copycat"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expect": {
+    "status": 201
+  }
+}

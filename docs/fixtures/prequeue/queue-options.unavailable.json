@@ -1,0 +1,10 @@
+{
+  "note": "The roster endpoint does not fail open. If GET /api/v1/players/{id}/queue-options errors, times out, or returns unreadable JSON, duel-helpers becomes unjoinable and the player is told why — the lobby will not invent a default roster. This fixture describes that contract; it is not a response body.",
+  "cases": [
+    { "when": "5xx from the game", "expect": "mode unjoinable, player shown the reason" },
+    { "when": "timeout", "expect": "mode unjoinable, player shown the reason" },
+    { "when": "200 with unparseable body", "expect": "mode unjoinable, player shown the reason" },
+    { "when": "200 with choices: []", "expect": "not an error — this is the no-pre-queue-pick case, see queue-options.duel.json" }
+  ],
+  "implication": "A slow or flaky queue-options is a full outage of the mode, not a degraded experience. Do not serve it off anything with a cold start."
+}

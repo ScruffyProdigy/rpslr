@@ -1,0 +1,32 @@
+{
+  "game": "rock-paper-scissors-lizard-robot",
+  "modes": [
+    {
+      "key": "duel",
+      "displayName": "1v1 Duel",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "seatTemplate": { "count": 2 }
+    },
+    {
+      "key": "duel-helpers",
+      "displayName": "Helpers",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "seatTemplate": { "count": 2 },
+      "preQueue": {
+        "groups": [
+          {
+            "key": "helpers",
+            "kind": "Loadout",
+            "label": "Choose your two helpers",
+            "min": 2,
+            "max": 2,
+            "sectionOrder": ["Major", "Minor", "Trinket"],
+            "locking": "none"
+          }
+        ]
+      }
+    }
+  ]
+}
