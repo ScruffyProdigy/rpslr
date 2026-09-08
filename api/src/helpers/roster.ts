@@ -12,8 +12,9 @@ import type { Move } from '../game.js';
 export type Tier = 'Major' | 'Minor' | 'Trinket';
 
 /**
- * How a helper spends itself. `passive` is always on; `per-round` asks its owner
- * for something every round; `charge` is fired by choice.
+ * How a helper spends itself. `passive` is always on; `charge` is fired by choice.
+ * `per-round` is on its way out — Quarantine was its only user and now recharges
+ * like everything else, so Task 1.6 collapses this to passive-or-ability.
  *
  * A charge is not spent once and gone: it sits on its own slot on the cooldown
  * track with opening and recharge marks, in the same delay marks a move uses, and
@@ -56,7 +57,7 @@ const MAJORS = [
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
     load: 'passive', blurb: 'Your Robot takes 1 mark instead of 2.' },
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: 'per-round', blurb: 'Name a move each round. If they play it, it takes 4 marks.' },
+    load: 'per-round', blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
     load: 'charge', blurb: 'Learn one live move they did not play, then re-pick.' },
   // The four below have no effect yet. They are named here because the roster
