@@ -68,7 +68,17 @@ export interface Playback {
  * fades. `stepping` lets the page drop the play control rather than show one
  * that does nothing.
  */
-export function useReplayPlayback(frameCount: number): Playback {
+export function useReplayPlayback(
+  frameCount: number,
+  /**
+   * Something on top of the replay has the watcher's attention — the rules
+   * panels, opened on a first visit over a replay that has already started
+   * playing. The replay stops where it is without being paused, so closing
+   * whatever it was resumes exactly what it interrupted and nothing has to
+   * remember what that was.
+   */
+  held: boolean = false,
+): Playback {
   const stepping = useRef(prefersReducedMotion()).current;
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(!stepping && frameCount > 1);
@@ -93,7 +103,7 @@ export function useReplayPlayback(frameCount: number): Playback {
   // A round is only an arc while it is going past on its own. A watcher who
   // paused or stepped here is reading, not watching, and gets the whole round
   // at once rather than a frame of an animation they stopped.
-  const moving = playing && !stepping;
+  const moving = playing && !stepping && !held;
   const beat: RoundBeat = !moving ? 'settled' : elapsed;
 
   // Two hand-offs inside a round: the card starts dissolving, then it is gone
@@ -111,14 +121,14 @@ export function useReplayPlayback(frameCount: number): Playback {
   }, [moving, index, speed]);
 
   useEffect(() => {
-    if (stepping || !playing) return;
+    if (stepping || !playing || held) return;
     if (index >= last) {
       setPlaying(false);
       return;
     }
     const timer = setTimeout(() => setIndex((cur) => Math.min(last, cur + 1)), ROUND_MS / speed);
     return () => clearTimeout(timer);
-  }, [stepping, playing, index, last, speed]);
+  }, [stepping, playing, held, index, last, speed]);
 
   const play = useCallback(() => {
     if (stepping) return;

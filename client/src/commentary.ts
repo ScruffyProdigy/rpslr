@@ -1,0 +1,409 @@
+import type { Move } from './api';
+import {
+  ALL_MOVES,
+  MOVE_META,
+  beatVerb,
+  beatsOf,
+  describeBeat,
+  threatsTo,
+  winsNeeded,
+} from './moves';
+import {
+  DELAY_ON_CHOICE,
+  type DelayMap,
+  type Replay,
+  type ReplayFrame,
+  type ReplaySide,
+} from './replay';
+import { roundEdge, roundValue } from './roundValue';
+
+/**
+ * What a replay says out loud.
+ *
+ * A watcher who has never played RPSLR gets the board, the pentagon and a
+ * reveal card — all of which assume the rules. This module is the other half:
+ * a sentence per round saying what happened, a note when the cooldown state
+ * made a pick interesting, and the rules themselves the first time each one
+ * actually decides something on screen.
+ *
+ * Every function here is pure and takes only what `buildReplay` already
+ * derived, so the copy can be rewritten in a Content pass without touching a
+ * component — which it will be: these strings are a first draft.
+ *
+ * Tone is neutral and explanatory rather than sportscaster (JQ-121's open
+ * question). A watcher reading this is being taught, not entertained, and the
+ * game's own vocabulary — "covers", "vaporizes", "on cooldown" — is the thing
+ * they are meant to leave with.
+ */
+
+/** The clause break the game's copy uses everywhere else. */
+const EM = '—';
+
+/** En dash in a scoreline, matching the one the header already draws. */
+const EN = '–';
+
+function label(move: Move): string {
+  return MOVE_META[move].label;
+}
+
+/**
+ * The scoreline after a round, from the point of view of nobody.
+ *
+ * A match that ended without anyone reaching the target — a forfeit, an
+ * abandoned match — leaves a leader rather than a winner, so reaching the
+ * target is what "wins the match" is keyed on, not being the last frame.
+ */
+function scoreLine(frame: ReplayFrame, replay: Replay): string {
+  const { a, b } = { a: frame.a.score, b: frame.b.score };
+  if (a === b) return a === 0 ? 'No score yet.' : `Level at ${a}${EN}${b}.`;
+  const aLeads = a > b;
+  const name = aLeads ? replay.a.identity.name : replay.b.identity.name;
+  const [hi, lo] = aLeads ? [a, b] : [b, a];
+  if (hi >= winsNeeded(replay.bestOf)) return `${name} wins the match ${hi}${EN}${lo}.`;
+  return `${name} leads ${hi}${EN}${lo}.`;
+}
+
+/**
+ * One round as a sentence: what each player played, which edge of the
+ * pentagon settled it, and where that leaves the match.
+ */
+export function narrateRound(frame: ReplayFrame, replay: Replay): string {
+  const nameA = replay.a.identity.name;
+  const nameB = replay.b.identity.name;
+  const score = scoreLine(frame, replay);
+
+  // Only a move can draw with itself, so a drawn round is always a mirror —
+  // and reads better said once than as two identical halves.
+  if (frame.outcome === 'draw') {
+    return `Both play ${label(frame.a.move)} ${EM} no winner. ${score}`;
+  }
+
+  const aWon = frame.outcome === frame.a.seatKey;
+  const [winner, loser] = aWon ? [frame.a.move, frame.b.move] : [frame.b.move, frame.a.move];
+  return (
+    `${nameA} plays ${label(frame.a.move)}, ${nameB} plays ${label(frame.b.move)} ` +
+    `${EM} ${describeBeat(winner, loser)}. ${score}`
+  );
+}
+
+export type CalloutKind =
+  | 'opening'
+  | 'safe-pick'
+  | 'safe-mirror-locked'
+  | 'punish'
+  | 'safe-unplayed'
+  | 'safe-out-of-reach'
+  | 'trap'
+  | 'round-edge'
+  | 'cooldown'
+  | 'match-point';
+
+export interface Callout {
+  /** Stable across copy changes, so components and tests key on it. */
+  kind: CalloutKind;
+  text: string;
+}
+
+/**
+ * The mirror of a safe pick: a move with nothing left to beat.
+ *
+ * A move beats exactly two others and the opponent always rests exactly two,
+ * so when those are the same pair the pick cannot win. The opponent still
+ * holds the move itself, which is why a draw is on the table and losing is the
+ * only other way out.
+ */
+function trapText(mover: string, blocked: string, move: Move): string {
+  const [x, y] = beatsOf(move);
+  return (
+    `${label(move)} only beats ${label(x)} and ${label(y)}, and ${blocked} had both ` +
+    `on cooldown ${EM} the best ${mover} could get from it was a draw.`
+  );
+}
+
+/**
+ * The cooldown rule keeps both sides at exactly three playable moves every
+ * round of every match — the opening locks and the -1/+2 rule work out that
+ * way with no exceptions. It is the fact the whole strategy layer rests on,
+ * and none of the notes below would mean anything without it.
+ */
+function liveMoves(delays: DelayMap): Move[] {
+  return ALL_MOVES.filter((m) => delays[m] === 0);
+}
+
+/**
+ * The safe move, and what it is actually worth.
+ *
+ * A move is safe when both moves that beat it are resting for the opponent.
+ * The opponent always rests exactly two, and no two moves share an attacking
+ * pair, so a side never has more than one safe move — `safeMoves[0]` is the
+ * whole of it.
+ *
+ * What it is worth is the part that is easy to get wrong, and the reason this
+ * returns more than a move. A safe move cannot lose, but the opponent can see
+ * it too, and their answer is to play the same move back for the draw — so the
+ * safe move on its own is worth nothing at all. It is worth something only
+ * when its owner also holds one of the two moves that beat it, which are
+ * exactly the two the opponent is resting. Then the mirror can be punished,
+ * the opponent cannot safely play it, and the round is worth a third of a win
+ * to the safe side — the largest edge this game ever offers. Solved over every
+ * position the game can reach: see `roundValue.test.ts`.
+ *
+ * `threatsTo` does the work twice over. Against the opponent's cooldowns it
+ * says which move is safe; against this player's own it says which of that
+ * move's attackers are still in hand, which is the punish.
+ */
+interface SafeRead {
+  move: Move;
+  /** In hand this round, rather than resting. */
+  reachable: boolean;
+  /** Live moves that beat `move` — the answer to the opponent's mirror. */
+  punish: Move[];
+}
+
+function safeRead(side: ReplaySide): SafeRead | null {
+  const move = side.safeMoves[0];
+  if (move === undefined) return null;
+  return {
+    move,
+    reachable: side.delaysBefore[move] === 0,
+    punish: threatsTo(move, side.delaysBefore).live,
+  };
+}
+
+/** "Rock crushes Lizard and Scissors decapitates it" — why a move is safe. */
+function whySafe(move: Move, oppDelays: DelayMap): string {
+  const [x, y] = threatsTo(move, oppDelays).all;
+  return `${describeBeat(x, move)} and ${label(y)} ${beatVerb(y, move)} it`;
+}
+
+/**
+ * How many strategy notes a round is allowed before they bury the board. The
+ * cooldown line and match point are not counted against it — they are the
+ * round's bookkeeping and always survive.
+ */
+const MAX_INSIGHTS = 2;
+
+/**
+ * The strategy notes a round supports — never a guess, always something the
+ * frame can be checked against.
+ *
+ * These all read the round's outcome, so the page must hold them back until
+ * the reveal card has landed; see `ReplayCommentary`.
+ */
+export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
+  const nameA = replay.a.identity.name;
+  const nameB = replay.b.identity.name;
+  const sides = [
+    { side: frame.a, oppDelays: frame.b.delaysBefore, mover: nameA, blocked: nameB },
+    { side: frame.b, oppDelays: frame.a.delaysBefore, mover: nameB, blocked: nameA },
+  ];
+
+  // Tiered rather than one list: the note about how a round was won beats the
+  // note about what was merely available, whichever player each belongs to.
+  const played: Callout[] = [];
+  const missed: Callout[] = [];
+  const traps: Callout[] = [];
+
+  for (const { side, oppDelays, mover, blocked } of sides) {
+    const read = safeRead(side);
+    if (read) {
+      const { move: safe, reachable, punish } = read;
+      const safeName = label(safe);
+      if (!reachable) {
+        missed.push({
+          kind: 'safe-out-of-reach',
+          text: `${safeName} was the one move ${blocked} had no answer to, and it was resting for ${mover}.`,
+        });
+      } else if (side.move === safe && punish.length > 0) {
+        played.push({
+          kind: 'safe-pick',
+          text:
+            `${whySafe(safe, oppDelays)}, but ${blocked} had both resting ${EM} nothing ` +
+            `could beat ${mover}'s ${safeName}. The only answer left was ${safeName} back ` +
+            `for the draw, and ${mover} still held ${label(punish[0])}, which beats that: ` +
+            `the strongest edge this game offers.`,
+        });
+      } else if (side.move === safe) {
+        played.push({
+          kind: 'safe-mirror-locked',
+          text:
+            `Nothing ${blocked} could play beat ${mover}'s ${safeName} ${EM} but ${safeName} ` +
+            `back draws it, and ${mover} had nothing that beats ${safeName}. Played right, ` +
+            `this round was a draw either way.`,
+        });
+      } else if (punish.includes(side.move)) {
+        played.push({
+          kind: 'punish',
+          text:
+            `${safeName} was the one move ${blocked} could not beat, so ${safeName} is what ` +
+            `they had to expect ${EM} and ${mover} played ${label(side.move)}, which beats it.`,
+        });
+      } else {
+        missed.push({
+          kind: 'safe-unplayed',
+          text:
+            `Nothing ${blocked} could play beat ${safeName}, and ${mover} had it in hand ` +
+            `${EM} the pick was ${label(side.move)}.`,
+        });
+      }
+    }
+
+    if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
+      traps.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
+    }
+  }
+
+  const insights: Callout[] = [];
+
+  // Neither side has played, so the only locked moves are the two that start
+  // that way: the opening round is the game everybody already knows.
+  if (frame.a.recentMoves.length === 0 && frame.b.recentMoves.length === 0) {
+    const open = liveMoves(frame.a.delaysBefore).map(label);
+    insights.push({
+      kind: 'opening',
+      text:
+        `Nothing has been played yet, so both open with the same three: ` +
+        `${open.slice(0, -1).join(', ')} and ${open[open.length - 1]}. ` +
+        `Lizard and Robot are still locked.`,
+    });
+  }
+
+  insights.push(...played, ...traps, ...missed);
+
+  // Only when nothing more specific applied. These are the rounds that most
+  // look like guesswork from outside, and the ones where saying whether the
+  // position was even is worth more than saying nothing.
+  if (insights.length === 0) {
+    const value = roundValue(
+      liveMoves(frame.a.delaysBefore),
+      liveMoves(frame.b.delaysBefore),
+    );
+    const ahead = value > 0 ? nameA : nameB;
+    const edge = roundEdge(value);
+    insights.push({
+      kind: 'round-edge',
+      text:
+        edge === 'even'
+          ? 'Neither side had an edge going in — played perfectly, this round was a coin flip.'
+          : edge === 'slight'
+            ? `Going in, ${ahead} had a slight edge under best play.`
+            : `Going in, this round was ${ahead}'s under best play.`,
+    });
+  }
+
+  const always: Callout[] = [];
+
+  if (frame.outcome === 'draw') {
+    always.push({
+      kind: 'cooldown',
+      text: `Neither can play ${label(frame.a.move)} for the next ${DELAY_ON_CHOICE} rounds.`,
+    });
+  } else {
+    const aWon = frame.outcome === frame.a.seatKey;
+    const winner = aWon ? frame.a : frame.b;
+    const name = aWon ? nameA : nameB;
+    always.push({
+      kind: 'cooldown',
+      text: `${name}'s ${label(winner.move)} is now out for ${DELAY_ON_CHOICE} rounds.`,
+    });
+  }
+
+  const needed = winsNeeded(replay.bestOf);
+  const { score: sa } = frame.a;
+  const { score: sb } = frame.b;
+  const decided = Math.max(sa, sb) >= needed;
+  if (!decided && Math.max(sa, sb) === needed - 1) {
+    const both = sa === sb;
+    const name = sa > sb ? nameA : nameB;
+    always.push({
+      kind: 'match-point',
+      text: both ? 'Match point for both players.' : `Match point for ${name}.`,
+    });
+  }
+
+  return [...insights.slice(0, MAX_INSIGHTS), ...always];
+}
+
+export type RuleCardId = 'three' | 'cooldown' | 'unlock' | 'safe';
+
+export interface RuleCard {
+  title: string;
+  body: string;
+}
+
+/**
+ * The three rules a watcher has to be told, because the board shows them
+ * rather than saying them. Copy is the ticket's, verbatim — the "you" in the
+ * cooldown card is whoever is playing, not the watcher, and is the one place
+ * a replay uses the word.
+ */
+export const RULE_CARDS: Record<RuleCardId, RuleCard> = {
+  three: {
+    title: 'Three moves each',
+    body:
+      'Every round each player has exactly three moves they can play — never more, ' +
+      'never fewer. Which three is the whole game.',
+  },
+  cooldown: {
+    title: 'Cooldowns',
+    body: 'Every move you play goes on cooldown for 2 rounds',
+  },
+  unlock: {
+    title: 'Locked at the start',
+    body: 'Lizard and Robot start locked and unlock as the match goes on',
+  },
+  safe: {
+    title: 'Safe picks',
+    body:
+      'Watch the arrows: a move nothing can beat right now is a safe pick. No move ever ' +
+      "beats all three of an opponent's options, so that is as good as a round gets.",
+  },
+};
+
+/** Moves that begin a match locked — `INITIAL_DELAYS` in `replay.ts`. */
+const STARTS_LOCKED: Move[] = ['lizard', 'robot'];
+
+/** A move the player has already thrown is resting because they threw it. */
+function hasRestingPick(side: ReplaySide): boolean {
+  return side.recentMoves.some((m) => side.delaysBefore[m] > 0);
+}
+
+/**
+ * A move that started the match locked and has come free without being
+ * played — the opening lock lifting, rather than a cooldown expiring.
+ */
+function hasFreshUnlock(side: ReplaySide): boolean {
+  return STARTS_LOCKED.some((m) => side.delaysBefore[m] === 0 && !side.recentMoves.includes(m));
+}
+
+const RULE_ORDER: RuleCardId[] = ['three', 'cooldown', 'unlock', 'safe'];
+
+const RULE_APPLIES: Record<RuleCardId, (frame: ReplayFrame) => boolean> = {
+  // Always true, which is exactly why it is worth saying — and it gives round
+  // one, which demonstrates none of the other rules, a rule of its own.
+  three: () => true,
+  cooldown: (f) => hasRestingPick(f.a) || hasRestingPick(f.b),
+  unlock: (f) => hasFreshUnlock(f.a) || hasFreshUnlock(f.b),
+  safe: (f) => f.a.safeMoves.length > 0 || f.b.safeMoves.length > 0,
+};
+
+/**
+ * Which rule card, if any, belongs to each round — one entry per frame.
+ *
+ * A rule is explained the first round it is actually visible on the board,
+ * which is the only moment it means anything; a rule a replay never reaches
+ * is never explained. Two rules coming true on the same round would stack two
+ * cards over the board, so the second waits for the next round it still holds
+ * on. Round one is always bare: nothing has been played into it yet, so its
+ * only locked moves are the opening ones, which is the *unlock* rule's
+ * business rather than the cooldown rule's.
+ */
+export function ruleCardSchedule(frames: ReplayFrame[]): (RuleCardId | null)[] {
+  const left = new Set(RULE_ORDER);
+  return frames.map((frame) => {
+    const id = RULE_ORDER.find((r) => left.has(r) && RULE_APPLIES[r](frame));
+    if (!id) return null;
+    left.delete(id);
+    return id;
+  });
+}

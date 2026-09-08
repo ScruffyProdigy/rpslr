@@ -2225,6 +2225,109 @@ input:focus-visible {
   justify-content: center;
 }
 
+/* The header is a column, so the rules button would otherwise stretch across
+   it — it is a pill, and a pill the width of the page is a bar. */
+.replay__header .rules-btn {
+  align-self: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Commentary
+   ---------------------------------------------------------------------------
+   What the board is doing, in words, for a watcher who does not know the game
+   yet. It sits between the board and the transport because that is the order
+   it is read in — look, then read, then decide whether to step back.
+   --------------------------------------------------------------------------- */
+
+.replay-commentary {
+  max-width: 46ch;
+  margin: 16px auto 0;
+  text-align: center;
+}
+
+.replay-commentary__line {
+  /* Two lines held open at every width. The sentence only arrives once the
+     reveal card has landed, and the board must not shift under it when it
+     does. */
+  min-height: 2.9em;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.replay-commentary__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-note {
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* The two notes that are about the shape of the match rather than the round
+   are worth picking out of it. */
+.replay-note--safe-pick {
+  border-color: color-mix(in srgb, var(--you) 45%, var(--line-2));
+}
+.replay-note--match-point {
+  border-color: color-mix(in srgb, var(--opp) 55%, var(--line-2));
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* A rule, the first round it decides anything. Above the sentence rather than
+   below it: it is the thing that makes the sentence make sense. */
+.replay-rule-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--you) 45%, var(--line-2));
+  background: color-mix(in srgb, var(--you) 8%, var(--surface-2));
+}
+.replay-rule-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.replay-rule-card__body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.replay-rule-card__dismiss {
+  min-height: 34px;
+  margin-top: 2px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-3);
+  background: var(--surface-5);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.replay-rule-card__dismiss:hover,
+.replay-rule-card__dismiss:focus-visible {
+  border-color: var(--you);
+}
+
 /* The round on screen, marked the way an expanded chip already is — the strip
    means the same thing in both places, so it should not learn a second look. */
 .history-chip--active {
