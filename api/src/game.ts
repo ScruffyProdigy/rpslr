@@ -287,9 +287,24 @@ export function resolveRound(
   };
 }
 
-/** Moves currently selectable (0 delay marks). */
+/**
+ * Moves currently selectable — and never an empty list.
+ *
+ * Normally that is the moves on 0 marks. Helpers can drive every move above 0:
+ * Quarantine deepens what you played, Rust blocks what is left, Freeze stops the
+ * decrement that would have freed something. A player with nothing to play cannot
+ * submit, waits out the timer, and takes an expiry strike for a state they had no
+ * way to escape — and strikes forfeit the match. So there is a floor of one: when
+ * nothing is clear, the least-marked moves are playable.
+ *
+ * Unreachable in `duel`, where at most two moves carry marks, so the floor cannot
+ * change what a duel does. The byte-identity fixture holds it to that.
+ */
 export function availableMoves(delays: DelayMap): Move[] {
-  return MOVES.filter((m) => delays[m] === 0);
+  const clear = MOVES.filter((m) => delays[m] === 0);
+  if (clear.length > 0) return clear;
+  const fewest = Math.min(...MOVES.map((m) => delays[m]));
+  return MOVES.filter((m) => delays[m] === fewest);
 }
 
 /**

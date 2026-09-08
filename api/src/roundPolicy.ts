@@ -24,7 +24,7 @@
  * @see docs/superpowers/specs/2026-09-07-jq-156-round-timer-design.md
  */
 
-import { MOVES, availableMoves, type DelayMap, type Move } from './game.js';
+import { availableMoves, type DelayMap, type Move } from './game.js';
 
 /**
  * A timed segment of a match. Only `pick` exists today; `duel-helpers` adds
@@ -112,12 +112,10 @@ export function deadlineFor(
  * mode that changes what "live" means (Ferrus, Featherweight) stays correct.
  */
 export function chooseAutoPick(delays: DelayMap, rng: () => number): Move {
+  // `availableMoves` guarantees at least one, falling back to the least-marked
+  // moves when helpers have blocked everything, so there is no empty case to
+  // handle here any more.
   const live = availableMoves(delays);
-  if (live.length === 0) {
-    // Unreachable in duel — at most two moves carry marks — but a future mode
-    // that blocks everything must degrade rather than throw inside expiry.
-    return MOVES.reduce((best, m) => (delays[m] < delays[best] ? m : best), MOVES[0]);
-  }
   // Math.min guards rng() === 1, which would index one past the end.
   return live[Math.min(live.length - 1, Math.floor(rng() * live.length))];
 }

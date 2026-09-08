@@ -226,3 +226,46 @@ describe('seatWinner', () => {
     expect(seatWinner({ a: 'scissors', b: 'lizard' }, chimera, chimera)).toBe('b');
   });
 });
+
+describe('availableMoves never leaves a player with nothing to do', () => {
+  it('is the moves on zero marks, when there are any', () => {
+    expect(availableMoves({ rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 }).sort()).toEqual([
+      'paper',
+      'rock',
+      'scissors',
+    ]);
+    expect(availableMoves({ rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 })).toHaveLength(5);
+  });
+
+  it('falls back to the least-marked move when helpers have blocked everything', () => {
+    // Quarantine deepening what was played, Rust taking the last clear move.
+    expect(availableMoves({ rock: 3, paper: 4, scissors: 1, lizard: 2, robot: 4 })).toEqual([
+      'scissors',
+    ]);
+  });
+
+  it('offers every move that ties for least-marked', () => {
+    expect(availableMoves({ rock: 2, paper: 2, scissors: 3, lizard: 4, robot: 2 }).sort()).toEqual([
+      'paper',
+      'robot',
+      'rock',
+    ]);
+  });
+
+  it('is never empty, for any reachable mark count', () => {
+    // 6^5 maps, which covers every combination a match could put on the board.
+    const counts = [0, 1, 2, 3, 4, 5];
+    for (const rock of counts)
+      for (const paper of counts)
+        for (const scissors of counts)
+          for (const lizard of counts)
+            for (const robot of counts) {
+              const delays = { rock, paper, scissors, lizard, robot };
+              expect(availableMoves(delays).length, JSON.stringify(delays)).toBeGreaterThan(0);
+            }
+  });
+
+  it('leaves the duel opening untouched', () => {
+    expect(availableMoves(INITIAL_DELAYS).sort()).toEqual(['paper', 'rock', 'scissors']);
+  });
+});

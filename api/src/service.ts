@@ -15,6 +15,7 @@ import {
 import type { LobbyProvisionInput } from './provision.js';
 import { TokenError } from './tokens.js';
 import {
+  availableMoves,
   computeDelays,
   isMove,
   matchWinner,
@@ -359,11 +360,12 @@ export class GameService {
     const mySeat = seats.find((s) => s.player?.id === playerId);
     if (!mySeat) throw new NotFoundError('player not in this match');
 
-    // Enforce the cooldown: the chosen move must have 0 delay marks. Delay marks
-    // are derived from the player's moves in resolved rounds.
+    // Enforce the cooldown. Asked through `availableMoves` rather than by testing
+    // the mark count, so the "you always have something to play" floor is honoured
+    // here too — re-deriving the rule is how the two drift apart.
     const results = await this.repo.listResults(match.id);
     const delays = delaysBySeat(results, seats)[mySeat.seatKey];
-    if (delays[move] > 0) {
+    if (!availableMoves(delays).includes(move as Move)) {
       throw new ValidationError(
         `'${move}' is on cooldown (${delays[move]} delay mark${delays[move] === 1 ? '' : 's'})`,
       );
