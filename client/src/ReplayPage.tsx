@@ -8,6 +8,7 @@ import { ReplayControls } from './components/ReplayControls';
 import { RevealCard } from './components/RevealCard';
 import { RoundStrip } from './components/RoundStrip';
 import { useReplayPlayback } from './lib/useReplayPlayback';
+import { getLobbyGameUrl } from './env';
 import { withReplayAttribution } from './lib/replayLink';
 import { spectatorVoice } from './lib/voice';
 import { winningEdgeOf } from './moves';
@@ -67,12 +68,15 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   const shown = replay.frames.slice(0, frameIndex + 1);
   const voice = spectatorVoice(replay.a.identity.name);
   // A replay's job is to turn a watcher into a player, so the way to JoinQuest
-  // is on screen the whole time rather than only once the match runs out. The
-  // marker lets Lobby tell a sign-up that came from a replay from one that
-  // didn't.
-  const playCtaUrl = state.match.lobbyReturnUrl
-    ? withReplayAttribution(state.match.lobbyReturnUrl)
-    : null;
+  // is on screen the whole time rather than only once the match runs out.
+  //
+  // Deliberately not `match.lobbyReturnUrl`: that is the way back to *this
+  // match* for someone who played it, and a watcher has no seat to return to.
+  // What they need is the game's own page, which is the same for every match
+  // and exists even for a standalone one — where a return URL is null and the
+  // button would simply never have appeared. The marker lets Lobby tell a
+  // sign-up that came from a replay from one that didn't.
+  const playCtaUrl = withReplayAttribution(getLobbyGameUrl());
   const oppName = replay.b.identity.name;
   // The card is mid-performance until it starts dissolving, and until then the
   // round's result is its to give: the arrow it was won on stays dark, and the

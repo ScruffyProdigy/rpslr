@@ -122,6 +122,21 @@ describe('<ReplayPage>', () => {
     expect(second).not.toBe(first);
   });
 
+  it('offers the way to JoinQuest even for a match with no return URL', async () => {
+    // The CTA used to hang off match.lobbyReturnUrl, which is the way back to
+    // *this match* for someone who played it — null for a standalone match, so
+    // the button simply never appeared. A watcher wants the game's own page.
+    vi.spyOn(api, 'getState').mockResolvedValue(finishedState({ lobbyReturnUrl: null }));
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+
+    const cta = screen.getByRole('link', { name: /play rpslr on joinquest/i });
+    expect(cta).toHaveAttribute(
+      'href',
+      'https://joinquest.cc/games/rock-paper-scissors-lizard-robot?ref=replay',
+    );
+  });
+
   it('plays the deciding round out before it declares the winner', async () => {
     // The last round is the one worth watching. Ending the moment the final
     // frame is reached shows its result on a scoreboard and never on the board.
