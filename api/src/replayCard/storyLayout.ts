@@ -57,12 +57,16 @@ export function storyLayout(model: CardModel): StoryLayout {
   const hasPlayers = model.kind === 'match' && model.players.length === 2;
 
   const headline: Box = { x: SAFE_GUTTER, y: 270, width: safe.width, height: 100 };
-  const wordmark: Box = { x: SAFE_GUTTER, y: 1580, width: safe.width, height: 70 };
+  const wordmark: Box = { x: SAFE_GUTTER, y: 1590, width: safe.width, height: 70 };
 
+  // Stacked, not side by side. A URL beside a 260px QR has 540px to live in,
+  // and `rpsls-duel.win/r/RPS-K7M2` set large enough to read across a room does
+  // not fit in 540 — the first draft ran it out past the gutter. Under the QR
+  // it gets the full width, which is the shape a 9:16 canvas wants anyway.
   const shortLink = model.shortCode
     ? {
-        qr: { x: 180, y: 1270, width: QR_SIZE, height: QR_SIZE },
-        url: { x: 480, y: 1350, width: 540, height: 100 },
+        qr: { x: CENTRE - QR_SIZE / 2, y: 1210, width: QR_SIZE, height: QR_SIZE },
+        url: { x: SAFE_GUTTER, y: 1490, width: safe.width, height: 70 },
       }
     : null;
 
@@ -73,14 +77,14 @@ export function storyLayout(model: CardModel): StoryLayout {
       avatars: [],
       names: [],
       // Nothing flanks it, so the generic card's mark takes the middle.
-      score: { x: SAFE_GUTTER, y: 820, width: safe.width, height: 140 },
+      score: { x: SAFE_GUTTER, y: 800, width: safe.width, height: 140 },
       showdown: null,
       shortLink,
       wordmark,
     };
   }
 
-  const avatarY = 430;
+  const avatarY = 420;
   const left: Box = {
     x: CENTRE - AVATAR_GAP / 2 - AVATAR,
     y: avatarY,
@@ -88,15 +92,15 @@ export function storyLayout(model: CardModel): StoryLayout {
     height: AVATAR,
   };
   const right: Box = { x: CENTRE + AVATAR_GAP / 2, y: avatarY, width: AVATAR, height: AVATAR };
-  const nameY = avatarY + AVATAR + 30;
+  const nameY = avatarY + AVATAR + 20;
 
-  const iconY = 860;
+  const iconY = 830;
   const showdown = model.showdown
     ? {
         winner: { x: 200, y: iconY, width: ICON, height: ICON },
-        verb: { x: 410, y: 915, width: 260, height: 90 },
+        verb: { x: 410, y: 885, width: 260, height: 90 },
         loser: { x: 680, y: iconY, width: ICON, height: ICON },
-        caption: { x: SAFE_GUTTER, y: 1140, width: safe.width, height: 70 },
+        caption: { x: SAFE_GUTTER, y: 1060, width: safe.width, height: 70 },
       }
     : null;
 
