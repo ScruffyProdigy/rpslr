@@ -8,7 +8,6 @@ import {
   NotFoundError,
   ReservationError,
 } from './repository.js';
-import { reportMatchResult } from './lobbyClient.js';
 import { parseLobbyProvision, verifyLobbyProvisionAuth } from './provision.js';
 import { BannedPlayerError, ValidationError, type GameService } from './service.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';

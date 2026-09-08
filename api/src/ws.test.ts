@@ -106,8 +106,7 @@ describe('WebSocket gameplay transport', () => {
     const created = await service.createStandaloneMatch({ hostName: 'Alice', bestOf: 5 });
     const code = created.state.match.code;
     const hostId = created.you.playerId;
-    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
-    const challengerId = joined.you.playerId;
+    await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
 
     const host = await open();
     const challenger = await open();
