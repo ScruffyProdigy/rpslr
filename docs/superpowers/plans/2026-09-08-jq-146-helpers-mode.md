@@ -373,6 +373,14 @@ its interfaces are real rather than invented:
 
 ## Task 0: Contract, fixtures, and the stub lobby
 
+> **DONE 2026-09-08**, on branch `ryanckohler/jq-146-epic-plan-and-contract`.
+> All five steps below are complete: the contract is at
+> `docs/prequeue-options-contract.md`, the nine fixtures at
+> `docs/fixtures/prequeue/`, the harness at `scripts/stub-lobby.sh`, and the
+> proposal has been sent to the JQ-163 session (`local_2a534150…`, lobby repo,
+> PR #45). **Awaiting their reply on the five `[CHANGE]`s and Blind Spot** —
+> that reply is what unblocks JQ-148.
+
 **Files:**
 - Create: `docs/prequeue-options-contract.md`
 - Create: `docs/fixtures/prequeue/*.json` (the nine files listed above)
