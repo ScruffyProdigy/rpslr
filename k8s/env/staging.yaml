@@ -19,3 +19,6 @@ data:
   # Browser calls API via ingress /api prefix; JWT aud uses GAME_API_AUDIENCE above.
   GAME_API_BASE_URL: "https://rps.staging.joinquest.example/api"
   GAME_WS_BASE_URL: ""
+  # Where "Play RPSLR on JoinQuest" sends a replay watcher. Blank falls back
+  # to the game's page on joinquest.cc; set it to point at another Lobby.
+  GAME_LOBBY_URL: ""

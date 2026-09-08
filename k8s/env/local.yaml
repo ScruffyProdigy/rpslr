@@ -21,3 +21,6 @@ data:
   GAME_API_BASE_URL: "http://rps-game.local/api"
   # Blank -> client derives ws://rps-game.local/api/api/v1/ws from the API base.
   GAME_WS_BASE_URL: ""
+  # Where "Play RPSLR on JoinQuest" sends a replay watcher. Blank falls back
+  # to the game's page on joinquest.cc; set it to point at another Lobby.
+  GAME_LOBBY_URL: ""

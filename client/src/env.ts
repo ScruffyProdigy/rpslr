@@ -4,6 +4,8 @@ export interface RuntimeEnv {
   GAME_API_BASE_URL: string;
   /** Optional explicit WebSocket base; derived from the API base when unset. */
   GAME_WS_BASE_URL?: string;
+  /** The game's page on JoinQuest — where a replay sends a watcher to play. */
+  GAME_LOBBY_URL?: string;
 }
 
 declare global {
@@ -11,6 +13,13 @@ declare global {
     env?: Partial<RuntimeEnv>;
   }
 }
+
+/**
+ * Where "Play RPSLR on JoinQuest" goes. The same page in every environment
+ * unless someone is pointing a deployment at a different Lobby, so it is a
+ * default rather than something each overlay has to remember to set.
+ */
+const DEFAULT_LOBBY_GAME_URL = 'https://joinquest.cc/games/rock-paper-scissors-lizard-robot';
 
 const defaults: RuntimeEnv = {
   GAME_APP_ENV: 'local',
@@ -23,7 +32,17 @@ export function getEnv(): RuntimeEnv {
     GAME_APP_ENV: (w.GAME_APP_ENV as RuntimeEnv['GAME_APP_ENV']) ?? defaults.GAME_APP_ENV,
     GAME_API_BASE_URL: w.GAME_API_BASE_URL ?? defaults.GAME_API_BASE_URL,
     GAME_WS_BASE_URL: w.GAME_WS_BASE_URL,
+    GAME_LOBBY_URL: w.GAME_LOBBY_URL,
   };
+}
+
+/**
+ * The game's own page on JoinQuest. The entrypoint always writes the key, so
+ * an unset ConfigMap value arrives as an empty string rather than as absent —
+ * blank has to mean "not configured", not "link to nowhere".
+ */
+export function getLobbyGameUrl(env: RuntimeEnv = getEnv()): string {
+  return env.GAME_LOBBY_URL?.trim() || DEFAULT_LOBBY_GAME_URL;
 }
 
 /**

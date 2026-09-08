@@ -9,6 +9,7 @@ import {
   circleNodePos,
 } from '../lib/pentagon';
 import { hasSeen, markSeen, type OneTimeNote } from '../lib/prefs';
+import { PLAYER_VOICE, type Voice } from '../lib/voice';
 import {
   MOVE_META,
   beatsOf,
@@ -52,6 +53,8 @@ export function MovePicker({
   secondsLeft = null,
   centerSlot,
   winningEdge = null,
+  voice = PLAYER_VOICE,
+  oppName,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -72,6 +75,10 @@ export function MovePicker({
   centerSlot?: React.ReactNode;
   /** The edge the round was just won on, lit as the reveal card dissolves. */
   winningEdge?: WinningEdge | null;
+  /** How to refer to the you-side: second person, or by name on a replay. */
+  voice?: Voice;
+  /** The other player's name, for a replay's legend. */
+  oppName?: string;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -173,7 +180,7 @@ export function MovePicker({
     else setPicked(move);
   }
 
-  const graphText = describeBeatsGraph(oppDelays);
+  const graphText = describeBeatsGraph(oppDelays, oppName);
   const myCooldowns = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
@@ -406,20 +413,21 @@ export function MovePicker({
         <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
           <UiIcon name="hourglass" /> N
         </span>{' '}
-        your cooldown ·{' '}
+        {voice.you ? `${voice.you}'s cooldown` : 'your cooldown'} ·{' '}
         <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
           <UiIcon name="hourglass" />
         </span>{' '}
-        opponent cooldown (faded arrows = attacks they can&rsquo;t make)
+        {voice.you ? `${oppName ? `${oppName}'s` : 'their'} cooldown` : 'opponent cooldown'} (faded
+        arrows = attacks they can&rsquo;t make)
       </p>
 
-      {showTapHint && (
+      {showTapHint && !voice.you && (
         <OneTimeNoteBar onDismiss={tapHint.dismiss}>
           Tap to preview · tap again to lock in.
         </OneTimeNoteBar>
       )}
 
-      {showCooldownNote && (
+      {showCooldownNote && !voice.you && (
         <OneTimeNoteBar onDismiss={cooldownNote.dismiss}>
           {myLastMove && (myDelays[myLastMove] ?? 0) > 0
             ? `You played ${MOVE_META[myLastMove].label} last round — it's back in ${

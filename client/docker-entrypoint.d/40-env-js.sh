@@ -10,7 +10,8 @@ cat > "$ENV_JS_PATH" <<EOF
 window.env = {
   GAME_APP_ENV: "${GAME_APP_ENV:-production}",
   GAME_API_BASE_URL: "${GAME_API_BASE_URL:-http://localhost:3001}",
-  GAME_WS_BASE_URL: "${GAME_WS_BASE_URL:-}"
+  GAME_WS_BASE_URL: "${GAME_WS_BASE_URL:-}",
+  GAME_LOBBY_URL: "${GAME_LOBBY_URL:-}"
 };
 EOF
 

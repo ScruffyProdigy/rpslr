@@ -2099,3 +2099,215 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+
+/* ---------------------------------------------------------------------------
+   Replay (JQ-117)
+
+   A finished match watched from outside it. The board below the header is the
+   match's own board, so this file only has to dress what surrounds it: who is
+   playing, the transport, and the strip of rounds that doubles as a scrubber.
+   --------------------------------------------------------------------------- */
+
+.replay {
+  /* A replay can be a short page — a one-line "not over yet" especially — and
+     the body gradient is painted to the content, not the viewport. */
+  min-height: 100dvh;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-top: 24px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+.replay__header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* One line at every width: the names give up space before the score or the
+   avatars do, because a truncated name still identifies a player and a
+   truncated score identifies nothing. */
+.replay__matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.replay__matchup .player-avatar {
+  flex: 0 0 auto;
+}
+.replay__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+.replay__score {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.replay-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+.replay-controls__step,
+.replay-controls__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.replay-controls__step {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.replay-controls__play {
+  background: var(--accent);
+  border-color: transparent;
+  color: white;
+}
+.replay-controls__step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.replay-controls__speed {
+  display: inline-flex;
+  margin-left: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.replay-controls__speed-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.replay-controls__speed-btn[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--you) 18%, var(--surface-2));
+  color: var(--text);
+}
+
+.replay__rounds {
+  margin-top: 18px;
+}
+.replay__rounds .history-strip {
+  justify-content: center;
+}
+
+/* The round on screen, marked the way an expanded chip already is — the strip
+   means the same thing in both places, so it should not learn a second look. */
+.history-chip--active {
+  border-color: color-mix(in srgb, var(--you) 55%, transparent);
+  background: color-mix(in srgb, var(--you) 12%, var(--surface-2));
+}
+
+.replay--message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.replay-message__title {
+  margin: 24px 0 0;
+  font-size: 1.25rem;
+}
+.replay-message__body {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------------------
+   Share replay + Play-on-JoinQuest (JQ-119)
+   --------------------------------------------------------------------------- */
+
+.share-replay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+}
+.share-replay__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 22px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.share-replay__status {
+  min-height: 1.1em;
+  font-size: 0.82rem;
+  color: var(--ok);
+}
+/* The http fallback: a link with nothing to copy it, so it has to be legible
+   and selectable rather than merely present. */
+.share-replay__manual {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+.share-replay__url {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: var(--text);
+}
+
+.match-end__cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.match-end__cta-line {
+  margin: 0;
+  color: var(--muted);
+}
+
+.replay__cta {
+  display: flex;
+  justify-content: center;
+  margin: 22px 0 0;
+}

@@ -76,23 +76,28 @@ export function describeBeatsOf(move: Move): string {
  * closing line names the attacks the opponent cannot make this round — the
  * faded arrows a sighted player reads straight off the board.
  */
-export function describeBeatsGraph(oppDelays: Record<string, number>): {
+export function describeBeatsGraph(
+  oppDelays: Record<string, number>,
+  /** The other player's name, when there is no "you" to be opposite. */
+  oppName?: string,
+): {
   edges: string[];
   opponent: string;
 } {
   const edges = ALL_MOVES.map(describeBeatsOf);
+  const them = oppName?.trim() || 'The opponent';
   const off = ALL_MOVES.filter((m) => (oppDelays[m] ?? 0) > 0).map((m) => MOVE_META[m].label);
   if (off.length === 0) {
     return {
       edges,
-      opponent: 'The opponent can play every move this round, so every arrow is live.',
+      opponent: `${them} can play every move this round, so every arrow is live.`,
     };
   }
   const list =
     off.length === 1 ? off[0] : `${off.slice(0, -1).join(', ')} or ${off[off.length - 1]}`;
   return {
     edges,
-    opponent: `The opponent can't play ${list} this round, so those attacks are drawn faded.`,
+    opponent: `${them} can't play ${list} this round, so those attacks are drawn faded.`,
   };
 }
 

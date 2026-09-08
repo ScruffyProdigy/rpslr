@@ -24,3 +24,6 @@ data:
   GAME_APP_ENV: "production"
   GAME_API_BASE_URL: "https://rpsls-duel.win"
   GAME_WS_BASE_URL: ""
+  # Where "Play RPSLR on JoinQuest" sends a replay watcher. Blank falls back
+  # to the game's page on joinquest.cc; set it to point at another Lobby.
+  GAME_LOBBY_URL: "https://joinquest.cc/games/rock-paper-scissors-lizard-robot"

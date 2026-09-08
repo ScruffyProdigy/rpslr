@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getEnv, getLobbyLink, getLobbyUserFromUrl, getWebSocketUrl, isDebugMode } from './env';
+import { getEnv, getLobbyGameUrl, getLobbyLink, getLobbyUserFromUrl, getWebSocketUrl, isDebugMode } from './env';
 
 afterEach(() => {
   delete window.env;
@@ -99,5 +99,28 @@ describe('isDebugMode', () => {
     expect(isDebugMode('?match=abc')).toBe(false);
     expect(isDebugMode('?debug=0')).toBe(false);
     expect(isDebugMode('?debug')).toBe(false);
+  });
+});
+
+describe('getLobbyGameUrl', () => {
+  const original = window.env;
+  afterEach(() => {
+    window.env = original;
+  });
+
+  it('points at the game on JoinQuest by default', () => {
+    window.env = {};
+    expect(getLobbyGameUrl()).toBe('https://joinquest.cc/games/rock-paper-scissors-lizard-robot');
+  });
+
+  it('can be pointed somewhere else per environment', () => {
+    window.env = { GAME_LOBBY_URL: 'https://staging.joinquest.example/games/rpslr' };
+    expect(getLobbyGameUrl()).toBe('https://staging.joinquest.example/games/rpslr');
+  });
+
+  it('ignores a blank override, which is what an unset ConfigMap key looks like', () => {
+    // The entrypoint always writes the key; an unset value writes "".
+    window.env = { GAME_LOBBY_URL: '   ' };
+    expect(getLobbyGameUrl()).toBe('https://joinquest.cc/games/rock-paper-scissors-lizard-robot');
   });
 });

@@ -1,6 +1,8 @@
 import type { MatchEndReason, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
+import { PLAYER_VOICE, winsMatch, youLabel, type Voice } from '../lib/voice';
 import { LobbyReturnButton } from './LobbyReturnButton';
+import { ShareReplayButton } from './ShareReplayButton';
 import { PlayerAvatar } from './PlayerAvatar';
 import { RoundStrip } from './RoundStrip';
 
@@ -24,6 +26,11 @@ export function MatchEndCard({
   myPlayerId,
   lobbyReturnUrl,
   endReason,
+  voice = PLAYER_VOICE,
+  activeRound = null,
+  onSelectRound,
+  replayUrl = null,
+  playCtaUrl = null,
 }: {
   iWon: boolean;
   /** No winner seat — the match ended without one (abandoned, or all draws). */
@@ -38,12 +45,22 @@ export function MatchEndCard({
   lobbyReturnUrl: string | null;
   /** How the match ended. Anything but 'played' needs saying out loud. */
   endReason?: MatchEndReason | null;
+  /** How to refer to the you-side: second person, or by name on a replay. */
+  voice?: Voice;
+  /** Round the strip should mark, when it is a replay's scrubber. */
+  activeRound?: number | null;
+  /** When set, the strip jumps the replay rather than expanding a chip. */
+  onSelectRound?: (round: number) => void;
+  /** Link to this match's replay — offered to the players who just played it. */
+  replayUrl?: string | null;
+  /** Link to JoinQuest — offered to whoever is watching the replay. */
+  playCtaUrl?: string | null;
 }) {
   const winner = drawn ? null : iWon ? you : opponent;
   const verdict = drawn
     ? 'The match ends level.'
     : iWon
-      ? 'You win the match!'
+      ? winsMatch(voice)
       : `${opponent.name} wins the match.`;
 
   // A match that ended on the clock rather than on the score has to say so —
@@ -55,11 +72,11 @@ export function MatchEndCard({
       : endReason === 'forfeit-disconnect'
         ? iWon
           ? `${opponent.name} disconnected and did not come back.`
-          : 'You were disconnected too long.'
+          : `${youLabel(voice)} ${voice.you ? 'was' : 'were'} disconnected too long.`
         : endReason === 'forfeit-strikes'
           ? iWon
             ? `${opponent.name} ran out of time twice in a row.`
-            : 'You ran out of time twice in a row.'
+            : `${youLabel(voice)} ran out of time twice in a row.`
           : null;
 
   return (
@@ -82,7 +99,7 @@ export function MatchEndCard({
 
       {howItEnded && <p className="match-end__how">{howItEnded}</p>}
 
-      <p className="match-end__score" aria-label={`Final score: you ${myScore}, ${opponent.name} ${oppScore}`}>
+      <p className="match-end__score" aria-label={`Final score: ${voice.you ?? 'you'} ${myScore}, ${opponent.name} ${oppScore}`}>
         <span className="match-end__score-you" aria-hidden="true">
           {myScore}
         </span>
@@ -101,8 +118,24 @@ export function MatchEndCard({
           myPlayerId={myPlayerId}
           you={you}
           opponent={opponent}
+          voice={voice}
+          activeRound={activeRound}
+          onSelectRound={onSelectRound}
         />
       </div>
+
+      {replayUrl && <ShareReplayButton url={replayUrl} />}
+
+      {playCtaUrl && (
+        <div className="match-end__cta">
+          <p className="match-end__cta-line">
+            {winner ? `Think you could beat ${winner.name}?` : 'Think you could do better?'}
+          </p>
+          <a className="lobby-return-btn" href={playCtaUrl}>
+            Play RPSLR on JoinQuest
+          </a>
+        </div>
+      )}
 
       {lobbyReturnUrl && <LobbyReturnButton href={lobbyReturnUrl} />}
     </div>

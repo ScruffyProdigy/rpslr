@@ -1,6 +1,7 @@
 import type { RoundResult } from '../api';
 import type { RevealPhase } from '../lib/useRoundReveal';
 import type { Identity } from '../lib/seatProfile';
+import { PLAYER_VOICE, ranOutOfTime, takesRound, type Voice } from '../lib/voice';
 import { describeOutcome, describeRoundMatchup, opponentMoveFromResult } from '../moves';
 import { PlayerAvatar } from './PlayerAvatar';
 import MoveIcon from './MoveIcon';
@@ -22,6 +23,7 @@ export function RevealCard({
   myPlayerId,
   you,
   opponent,
+  voice = PLAYER_VOICE,
   onSkip,
 }: {
   result: RoundResult;
@@ -31,6 +33,8 @@ export function RevealCard({
   myPlayerId: string;
   you: Identity;
   opponent: Identity;
+  /** How to refer to the you-side: second person, or by name on a replay. */
+  voice?: Voice;
   onSkip: () => void;
 }) {
   const { myMove, oppMove } = opponentMoveFromResult(result.moves, myPlayerId);
@@ -39,7 +43,7 @@ export function RevealCard({
   // that the server picked for them, and so is the player who waited.
   const autoPicked = result.autoPicked ?? [];
   const timedOut = autoPicked.includes(myPlayerId)
-    ? 'You ran out of time — a move was picked for you'
+    ? ranOutOfTime(voice)
     : autoPicked.length > 0
       ? `${opponent.name} ran out of time — a move was picked for them`
       : null;
@@ -47,7 +51,7 @@ export function RevealCard({
     verdict === 'draw'
       ? 'Draw'
       : verdict === 'win'
-        ? `You take round ${result.round}`
+        ? takesRound(voice, result.round)
         : `${opponent.name} takes round ${result.round}`;
 
   return (

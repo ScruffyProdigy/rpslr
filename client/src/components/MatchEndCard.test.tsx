@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MatchEndCard } from './MatchEndCard';
+import { spectatorVoice } from '../lib/voice';
 import type { RoundResult } from '../api';
 
 const MY_PLAYER = 'player-a';
@@ -114,5 +115,18 @@ describe('<MatchEndCard>', () => {
     const { container } = renderCard({ drawn: true, myScore: 2, oppScore: 2 });
     expect(screen.getByText('The match ends level.')).toBeInTheDocument();
     expect(container.querySelector('.match-end__winner')).not.toBeInTheDocument();
+  });
+});
+
+describe('<MatchEndCard> in a replay', () => {
+  it('names the winner rather than congratulating the reader', () => {
+    renderCard({ iWon: true, voice: spectatorVoice('Ada') });
+    expect(screen.getByText('Ada wins the match.')).toBeInTheDocument();
+    expect(screen.queryByText('You win the match!')).not.toBeInTheDocument();
+  });
+
+  it('names the side that ran down the clock', () => {
+    renderCard({ iWon: false, endReason: 'forfeit-strikes', voice: spectatorVoice('Ada') });
+    expect(screen.getByText('Ada ran out of time twice in a row.')).toBeInTheDocument();
   });
 });
