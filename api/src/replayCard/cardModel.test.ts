@@ -149,3 +149,50 @@ describe('buildCardModel', () => {
     expect(model.ogDescription).not.toMatch(/ · …$/);
   });
 });
+
+describe('the deciding round', () => {
+  it('is the round that won the match, not simply the last one', () => {
+    // Round 4 is Ana's third win; round 3 was a draw. The card shows round 4.
+    const model = buildCardModel(finishedState(), { ref: 'ext-1' });
+    expect(model.showdown).toEqual({
+      round: 4,
+      winnerMove: 'robot',
+      loserMove: 'rock',
+      caption: 'Robot vaporizes Rock',
+    });
+  });
+
+  it('skips a later round the winner did not take', () => {
+    const state = finishedState();
+    state.results.push({ round: 5, outcome: '2', moves: { p1: 'paper', p2: 'scissors' }, autoPicked: [] });
+    expect(buildCardModel(state, { ref: 'ext-1' }).showdown?.round).toBe(4);
+  });
+
+  it('is absent from a drawn match, which nobody won', () => {
+    const state = finishedState({ winnerSeatKey: 'draw' });
+    state.matchWinnerSeatKey = 'draw';
+    expect(buildCardModel(state, { ref: 'ext-1' }).showdown).toBeNull();
+  });
+
+  it('is absent from a forfeit, where the last round decided nothing', () => {
+    const state = finishedState({ endReason: 'forfeit' });
+    expect(buildCardModel(state, { ref: 'ext-1' }).showdown).toBeNull();
+  });
+
+  it('is absent when the moves cannot be resolved to both players', () => {
+    const state = finishedState();
+    state.results[3] = { round: 4, outcome: '1', moves: { p1: 'robot' }, autoPicked: [] };
+    expect(buildCardModel(state, { ref: 'ext-1' }).showdown).toBeNull();
+  });
+});
+
+describe('the short code', () => {
+  it('is the match join code, which is already unique and already typable', () => {
+    expect(buildCardModel(finishedState(), { ref: 'ext-1' }).shortCode).toBe('RPS-ABCD');
+  });
+
+  it('is absent from a card with no match behind it', () => {
+    expect(genericCardModel('nope').shortCode).toBeNull();
+    expect(genericCardModel('nope').showdown).toBeNull();
+  });
+});

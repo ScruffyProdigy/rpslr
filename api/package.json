@@ -2,7 +2,7 @@
   "name": "@rps-game/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Rock Paper Scissors demo game server \u2014 JoinQuest-compatible, runs standalone",
+  "description": "Rock Paper Scissors demo game server — JoinQuest-compatible, runs standalone",
   "type": "module",
   "engines": {
     "node": ">=20 <23"
@@ -24,6 +24,7 @@
     "express": "^4.21.2",
     "jose": "^5.9.6",
     "pg": "^8.13.1",
+    "qrcode-generator": "^2.0.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -36,6 +37,7 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.1",
+    "jsqr": "^1.4.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
