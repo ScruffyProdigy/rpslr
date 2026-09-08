@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { HELPERS, MARK_COST } from './roster.js';
 import { openingMarks, type Loadout } from './loadout.js';
+import { abilityMarks, slotsFor } from './abilities.js';
 import { rollFor, rulesFor } from './rules.js';
 import { availableMoves, MOVES, replayMatch, type Move } from '../game.js';
 
@@ -118,4 +119,66 @@ describe('the tier ladder holds for every legal loadout', () => {
       }
     }
   });
+});
+
+/**
+ * The same sweep, for the ability track.
+ *
+ * `openingMarks` above is about the marks a loadout puts on *moves*; a Major that
+ * carries a charge puts marks on its own slot too, and a mispriced one shows up
+ * the same way — as a card that is live when it should not be, or that firing
+ * drives somewhere the arithmetic cannot come back from.
+ */
+describe('the ability track holds for every legal loadout', () => {
+  const loadoutOf = (a: string, b: string) => [a, b] as Loadout;
+  const quiet = (rounds: number) => Array.from({ length: rounds }, () => []);
+
+  it('makes each ability available exactly on the round its opening marks name', () => {
+    for (const [x, y] of PAIRS) {
+      const loadout = loadoutOf(x.id, y.id);
+      for (const [id, slot] of Object.entries(slotsFor(loadout))) {
+        for (let round = 0; round <= slot.opening; round += 1) {
+          const state = abilityMarks(loadout, quiet(round))[id];
+          expect(state.available, `${x.id} + ${y.id}: ${id} after ${round} rounds`).toBe(
+            round === slot.opening,
+          );
+        }
+      }
+    }
+  });
+
+  /**
+   * Three firing disciplines, because they stress different halves of the fold:
+   * never firing leaves a slot sitting at zero taking the decrement (which is what
+   * the floor is for), firing on sight exercises the recharge, and firing blind
+   * exercises what an unvalidated caller can do to it.
+   */
+  const STRATEGIES = {
+    'never fires': () => false,
+    'fires the moment it comes up': (available: boolean) => available,
+    'fires blind, cooldown or not': () => true,
+  };
+
+  for (const [discipline, shouldFire] of Object.entries(STRATEGIES)) {
+    it(`never drives an ability below zero when it ${discipline}`, () => {
+      for (const [x, y] of PAIRS) {
+        const loadout = loadoutOf(x.id, y.id);
+        const ids = Object.keys(slotsFor(loadout));
+        if (ids.length === 0) continue;
+
+        // Longer than any match runs, so nothing is proved by simply stopping early.
+        const firings: { id: string }[][] = [];
+        for (let round = 0; round < 12; round += 1) {
+          const state = abilityMarks(loadout, firings);
+          for (const id of ids) {
+            expect(
+              state[id].marks ?? 0,
+              `${x.id} + ${y.id}: ${id} at round ${round} when it ${discipline}`,
+            ).toBeGreaterThanOrEqual(0);
+          }
+          firings.push(ids.filter((id) => shouldFire(state[id].available)).map((id) => ({ id })));
+        }
+      }
+    });
+  }
 });

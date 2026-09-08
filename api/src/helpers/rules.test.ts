@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DUEL_RULES, rollFor, rulesFor } from './rules.js';
-import { BEATS, INITIAL_DELAYS, replayMatch, type Move, type PlayerOutcome } from '../game.js';
+import { abilityMarks } from './abilities.js';
+import {
+  BASE_RULES,
+  BEATS,
+  INITIAL_DELAYS,
+  replayMatch,
+  resolveRound,
+  type Move,
+  type PlayerOutcome,
+} from '../game.js';
 import type { Loadout } from './loadout.js';
 
 /** A Trinket with no engine effect, so a test isolates the card it is paired with. */
@@ -299,12 +308,12 @@ describe('the helpers that only change what a player is shown', () => {
   });
 });
 
-describe('the helpers whose effects are not implemented yet', () => {
-  it('are still legal to hold, and change nothing beyond their opening marks', () => {
-    // Quarantine is per-round and the four charge Majors are gated on the resize
-    // sign-off (JQ-146 Task 1.0). They must not silently do something in the
-    // meantime, so a loadout holding one plays as its opening marks and no more.
-    for (const id of ['quarantine', 'oracle', 'sacrifice', 'rust', 'thief', 'freeze']) {
+describe('the helper whose effect is not implemented yet', () => {
+  it('is still legal to hold, and changes nothing beyond its opening marks', () => {
+    // Oracle alone now: it needs a mid-round reveal sub-phase, which is JQ-150.
+    // Its marks come from the roster here so JQ-150 inherits the cooldown rather
+    // than inventing one. It must not silently do something in the meantime.
+    for (const id of ['oracle']) {
       const rules = rulesFor(load(id));
       expect(cost(load(id), 'rock', 'win'), id).toBe(2);
       expect(rules.beats, id).toEqual(BEATS);
@@ -352,5 +361,207 @@ describe('the stacking pairs the design doc says to watch', () => {
     expect(replayMatch(sequence, rules, rulesFor(null)).a.rock).toBe(1);
     // The same two rounds without Copycat leave it down for two.
     expect(replayMatch(sequence, rulesFor(load('good-old-rock')), rulesFor(null)).a.rock).toBe(2);
+  });
+});
+
+describe('a loadout hands its ability slots to the engine', () => {
+  it('BASE_RULES holds none, so duel is still the identity element', () => {
+    expect(BASE_RULES.abilities).toEqual({});
+  });
+
+  it('carries what each ability opens on and what firing it costs', () => {
+    expect(rulesFor(load('sacrifice')).abilities).toEqual({
+      sacrifice: { opening: 3, recharge: 3 },
+    });
+  });
+
+  it('holds none for a loadout of nothing but passives', () => {
+    expect(rulesFor(['ferrus', 'copycat']).abilities).toEqual({});
+  });
+});
+
+/**
+ * The five cooldown abilities, each as a state transition over one round.
+ *
+ * Driven through `replayMatch` rather than by poking a hook directly, because
+ * every one of them is about *when* in the round it lands — before the decrement,
+ * after the choice marks — and only the replay puts those in order.
+ */
+describe('Freeze', () => {
+  const fired = (id: string) => [{ id }];
+
+  it("stops the opponent's marks coming off that round", () => {
+    const attacker = rulesFor(load('freeze'));
+    // Ferrus binds robot, so B opens with 2 marks there to watch.
+    const victim = rulesFor(['ferrus', 'copycat']);
+    const round = { a: 'rock' as const, b: 'paper' as const };
+
+    const thawed = replayMatch([round], attacker, victim);
+    const frozen = replayMatch([{ ...round, firedA: fired('freeze') }], attacker, victim);
+
+    expect(thawed.b.robot).toBe(1);
+    expect(frozen.b.robot).toBe(2);
+  });
+
+  it("leaves the firer's own marks decrementing as usual", () => {
+    // Freeze is itself robot-bound, so its own 2 opening marks are the ones to watch.
+    const attacker = rulesFor(load('freeze'));
+    const victim = rulesFor(load('copycat'));
+    const { a } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: fired('freeze') }],
+      attacker,
+      victim,
+    );
+    // Freeze's own 2 opening marks come off as normal: it reaches across, not down.
+    expect(a.robot).toBe(1);
+  });
+});
+
+describe('Quarantine', () => {
+  const attacker = rulesFor(load('quarantine'));
+  const victim = rulesFor(load('copycat'));
+  const name = (target: Move) => [{ id: 'quarantine', target }];
+
+  it('adds 2 marks to the named move when they play it', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: name('paper') }],
+      attacker,
+      victim,
+    );
+    // Their paper takes its own 2 choice marks, and Quarantine's 2 on top.
+    expect(b.paper).toBe(4);
+  });
+
+  it('does nothing at all when they play something else', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: name('lizard') }],
+      attacker,
+      victim,
+    );
+    expect(b.lizard).toBe(0);
+    expect(b.paper).toBe(2);
+  });
+
+  it('spends the charge on a miss just as on a hit', () => {
+    const missed = abilityMarks(['quarantine', 'old-habits'], [name('lizard')]);
+    expect(missed).toEqual({ quarantine: { marks: 3, available: false } });
+  });
+});
+
+describe('Rust', () => {
+  const attacker = rulesFor(load('rust'));
+  // Ferrus binds robot, so B enters the match with one live move and four clear.
+  const victim = rulesFor(['ferrus', 'copycat']);
+  const at = (target: Move) => [{ id: 'rust', target }];
+
+  it('adds 2 marks to a move they have live', () => {
+    const { b } = replayMatch([{ a: 'rock', b: 'paper', firedA: at('robot') }], attacker, victim);
+    // robot enters on 2, loses one to the decrement, takes Rust's 2.
+    expect(b.robot).toBe(3);
+  });
+
+  it('does nothing to a move they have clear — there is no rust to add', () => {
+    const { b } = replayMatch([{ a: 'rock', b: 'paper', firedA: at('lizard') }], attacker, victim);
+    expect(b.lizard).toBe(0);
+  });
+
+  it('reads live as it stands entering the round, not after the decrement', () => {
+    // Their robot is on 1 entering round 2, which the decrement would clear. Rust
+    // named it while it was still live, so it lands.
+    const rounds = [
+      { a: 'rock' as const, b: 'paper' as const },
+      { a: 'rock' as const, b: 'paper' as const, firedA: at('robot') },
+    ];
+    const { b } = replayMatch(rounds, attacker, victim);
+    expect(b.robot).toBe(2);
+  });
+});
+
+describe('Thief', () => {
+  // Thief binds lizard, so its owner has 2 marks of their own to move.
+  const attacker = rulesFor(load('thief'));
+  const victim = rulesFor(load('copycat'));
+  const steal = (source: Move, target: Move) => [{ id: 'thief', source, target }];
+
+  it('takes a mark off one of yours and puts it on one of theirs', () => {
+    const { a, b } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: steal('lizard', 'robot') }],
+      attacker,
+      victim,
+    );
+    // Their lizard enters on 2, loses one to the decrement, loses one to Thief.
+    expect(a.lizard).toBe(0);
+    expect(b.robot).toBe(1);
+  });
+
+  it('does nothing when the move it takes from is already clear', () => {
+    const { a, b } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: steal('scissors', 'robot') }],
+      attacker,
+      victim,
+    );
+    expect(a.scissors).toBe(0);
+    expect(b.robot).toBe(0);
+  });
+
+  it('never drives the move it takes from below zero', () => {
+    // Entering round 2 their lizard is on 1, which the decrement alone clears.
+    const rounds = [
+      { a: 'rock' as const, b: 'paper' as const },
+      { a: 'rock' as const, b: 'paper' as const, firedA: steal('lizard', 'robot') },
+    ];
+    const { a, b } = replayMatch(rounds, attacker, victim);
+    expect(a.lizard).toBe(0);
+    expect(b.robot).toBe(1);
+  });
+});
+
+describe('Sacrifice', () => {
+  // Sacrifice binds rock, so its owner has marks worth clearing.
+  const firer = rulesFor(load('sacrifice'));
+  // Two disclosure Trinkets: nothing that prices a move, so the opponent's marks
+  // are the round's doing and nothing else's.
+  const other = rulesFor(['old-habits', 'watchful']);
+  const round = { a: 'rock' as const, b: 'paper' as const, firedA: [{ id: 'sacrifice' }] };
+  const at = { roundIndex: 0, lossesA: 0, lossesB: 0 };
+
+  it('makes the round a draw however the moves fell', () => {
+    // Paper beats rock, so this is B's round on the moves alone.
+    expect(resolveRound(round, firer, other, at)).toEqual({
+      seat: 'draw',
+      outcomeA: 'draw',
+      outcomeB: 'draw',
+    });
+  });
+
+  it('is declared before picking, so no card reads the result afterwards', () => {
+    // Sharp Practice turns a Scissors mirror into a win. A sacrificed round is
+    // settled before either seat picks, so there is no result left for it to read.
+    const sharp = rulesFor(['sacrifice', 'sharp-practice']);
+    const mirror = {
+      a: 'scissors' as const,
+      b: 'scissors' as const,
+      firedA: [{ id: 'sacrifice' }],
+    };
+    expect(resolveRound(mirror, sharp, other, at).outcomeA).toBe('draw');
+  });
+
+  it('clears every one of the firer’s marks', () => {
+    const { a } = replayMatch([round], firer, other);
+    expect(a).toEqual({ rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 });
+  });
+
+  it('leaves the opponent’s marks exactly as the round left them', () => {
+    const { b } = replayMatch([round], firer, other);
+    expect(b.paper).toBe(2);
+  });
+
+  it('is a real draw, so the opponent’s draw cards price it as one', () => {
+    // Copycat is "on a drawn round, your move takes 1 mark instead of 2". A
+    // sacrificed round is drawn, so it does — giving up the round is not a way to
+    // deny the opponent what a draw would have paid them.
+    const copycat = rulesFor(load('copycat'));
+    const { b } = replayMatch([round], firer, copycat);
+    expect(b.paper).toBe(1);
   });
 });
