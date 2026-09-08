@@ -2590,12 +2590,12 @@
         "match": {
           "bestOf": 5,
           "code": "<code>",
-          "createdAt": "2026-09-08T15:05:42.255Z",
+          "createdAt": "<createdAt>",
           "currentRound": 2,
           "endReason": null,
           "externalMatchId": null,
           "gameMode": "duel",
-          "id": "<id:0>",
+          "id": "<match>",
           "lobbyGraphqlUrl": null,
           "lobbyId": null,
           "lobbyPlayerProfiles": {},
@@ -2613,8 +2613,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "rock"
             },
             "outcome": "draw",
             "round": 1
@@ -2629,12 +2629,12 @@
               "rock": 2,
               "scissors": 0
             },
-            "id": "<id:3>",
+            "id": "<seat:1>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:2>",
+              "id": "<player:1>",
               "lobbyUserId": null,
               "name": "Alice",
               "profile": null,
@@ -2654,12 +2654,12 @@
               "rock": 2,
               "scissors": 0
             },
-            "id": "<id:4>",
+            "id": "<seat:2>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:1>",
+              "id": "<player:2>",
               "lobbyUserId": null,
               "name": "Bob",
               "profile": null,
@@ -2680,12 +2680,12 @@
         "match": {
           "bestOf": 5,
           "code": "<code>",
-          "createdAt": "2026-09-08T15:05:42.255Z",
+          "createdAt": "<createdAt>",
           "currentRound": 3,
           "endReason": null,
           "externalMatchId": null,
           "gameMode": "duel",
-          "id": "<id:0>",
+          "id": "<match>",
           "lobbyGraphqlUrl": null,
           "lobbyId": null,
           "lobbyPlayerProfiles": {},
@@ -2703,8 +2703,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "rock"
             },
             "outcome": "draw",
             "round": 1
@@ -2712,8 +2712,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "scissors",
-              "<id:2>": "paper"
+              "<player:1>": "paper",
+              "<player:2>": "scissors"
             },
             "outcome": "2",
             "round": 2
@@ -2728,12 +2728,12 @@
               "rock": 1,
               "scissors": 0
             },
-            "id": "<id:3>",
+            "id": "<seat:1>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:2>",
+              "id": "<player:1>",
               "lobbyUserId": null,
               "name": "Alice",
               "profile": null,
@@ -2753,12 +2753,12 @@
               "rock": 1,
               "scissors": 2
             },
-            "id": "<id:4>",
+            "id": "<seat:2>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:1>",
+              "id": "<player:2>",
               "lobbyUserId": null,
               "name": "Bob",
               "profile": null,
@@ -2779,12 +2779,12 @@
         "match": {
           "bestOf": 5,
           "code": "<code>",
-          "createdAt": "2026-09-08T15:05:42.255Z",
+          "createdAt": "<createdAt>",
           "currentRound": 4,
           "endReason": null,
           "externalMatchId": null,
           "gameMode": "duel",
-          "id": "<id:0>",
+          "id": "<match>",
           "lobbyGraphqlUrl": null,
           "lobbyId": null,
           "lobbyPlayerProfiles": {},
@@ -2802,8 +2802,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "rock"
             },
             "outcome": "draw",
             "round": 1
@@ -2811,8 +2811,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "scissors",
-              "<id:2>": "paper"
+              "<player:1>": "paper",
+              "<player:2>": "scissors"
             },
             "outcome": "2",
             "round": 2
@@ -2820,8 +2820,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "paper",
-              "<id:2>": "scissors"
+              "<player:1>": "scissors",
+              "<player:2>": "paper"
             },
             "outcome": "1",
             "round": 3
@@ -2836,12 +2836,12 @@
               "rock": 0,
               "scissors": 2
             },
-            "id": "<id:3>",
+            "id": "<seat:1>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:2>",
+              "id": "<player:1>",
               "lobbyUserId": null,
               "name": "Alice",
               "profile": null,
@@ -2861,12 +2861,12 @@
               "rock": 0,
               "scissors": 1
             },
-            "id": "<id:4>",
+            "id": "<seat:2>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:1>",
+              "id": "<player:2>",
               "lobbyUserId": null,
               "name": "Bob",
               "profile": null,
@@ -2887,12 +2887,12 @@
         "match": {
           "bestOf": 5,
           "code": "<code>",
-          "createdAt": "2026-09-08T15:05:42.255Z",
+          "createdAt": "<createdAt>",
           "currentRound": 5,
           "endReason": null,
           "externalMatchId": null,
           "gameMode": "duel",
-          "id": "<id:0>",
+          "id": "<match>",
           "lobbyGraphqlUrl": null,
           "lobbyId": null,
           "lobbyPlayerProfiles": {},
@@ -2910,8 +2910,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "rock"
             },
             "outcome": "draw",
             "round": 1
@@ -2919,8 +2919,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "scissors",
-              "<id:2>": "paper"
+              "<player:1>": "paper",
+              "<player:2>": "scissors"
             },
             "outcome": "2",
             "round": 2
@@ -2928,8 +2928,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "paper",
-              "<id:2>": "scissors"
+              "<player:1>": "scissors",
+              "<player:2>": "paper"
             },
             "outcome": "1",
             "round": 3
@@ -2937,8 +2937,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "lizard",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "lizard"
             },
             "outcome": "1",
             "round": 4
@@ -2953,12 +2953,12 @@
               "rock": 2,
               "scissors": 1
             },
-            "id": "<id:3>",
+            "id": "<seat:1>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:2>",
+              "id": "<player:1>",
               "lobbyUserId": null,
               "name": "Alice",
               "profile": null,
@@ -2978,12 +2978,12 @@
               "rock": 0,
               "scissors": 0
             },
-            "id": "<id:4>",
+            "id": "<seat:2>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:1>",
+              "id": "<player:2>",
               "lobbyUserId": null,
               "name": "Bob",
               "profile": null,
@@ -3004,12 +3004,12 @@
         "match": {
           "bestOf": 5,
           "code": "<code>",
-          "createdAt": "2026-09-08T15:05:42.255Z",
+          "createdAt": "<createdAt>",
           "currentRound": 6,
           "endReason": "played",
           "externalMatchId": null,
           "gameMode": "duel",
-          "id": "<id:0>",
+          "id": "<match>",
           "lobbyGraphqlUrl": null,
           "lobbyId": null,
           "lobbyPlayerProfiles": {},
@@ -3027,8 +3027,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "rock"
             },
             "outcome": "draw",
             "round": 1
@@ -3036,8 +3036,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "scissors",
-              "<id:2>": "paper"
+              "<player:1>": "paper",
+              "<player:2>": "scissors"
             },
             "outcome": "2",
             "round": 2
@@ -3045,8 +3045,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "paper",
-              "<id:2>": "scissors"
+              "<player:1>": "scissors",
+              "<player:2>": "paper"
             },
             "outcome": "1",
             "round": 3
@@ -3054,8 +3054,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "lizard",
-              "<id:2>": "rock"
+              "<player:1>": "rock",
+              "<player:2>": "lizard"
             },
             "outcome": "1",
             "round": 4
@@ -3063,8 +3063,8 @@
           {
             "autoPicked": [],
             "moves": {
-              "<id:1>": "rock",
-              "<id:2>": "paper"
+              "<player:1>": "paper",
+              "<player:2>": "rock"
             },
             "outcome": "1",
             "round": 5
@@ -3079,12 +3079,12 @@
               "rock": 1,
               "scissors": 0
             },
-            "id": "<id:3>",
+            "id": "<seat:1>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:2>",
+              "id": "<player:1>",
               "lobbyUserId": null,
               "name": "Alice",
               "profile": null,
@@ -3104,12 +3104,12 @@
               "rock": 2,
               "scissors": 0
             },
-            "id": "<id:4>",
+            "id": "<seat:2>",
             "lobbyProfile": null,
-            "matchId": "<id:0>",
+            "matchId": "<match>",
             "player": {
               "expiryStrikes": 0,
-              "id": "<id:1>",
+              "id": "<player:2>",
               "lobbyUserId": null,
               "name": "Bob",
               "profile": null,
@@ -3131,12 +3131,12 @@
       "match": {
         "bestOf": 5,
         "code": "<code>",
-        "createdAt": "2026-09-08T15:05:42.255Z",
+        "createdAt": "<createdAt>",
         "currentRound": 6,
         "endReason": "played",
         "externalMatchId": null,
         "gameMode": "duel",
-        "id": "<id:0>",
+        "id": "<match>",
         "lobbyGraphqlUrl": null,
         "lobbyId": null,
         "lobbyPlayerProfiles": {},
@@ -3154,8 +3154,8 @@
         {
           "autoPicked": [],
           "moves": {
-            "<id:1>": "rock",
-            "<id:2>": "rock"
+            "<player:1>": "rock",
+            "<player:2>": "rock"
           },
           "outcome": "draw",
           "round": 1
@@ -3163,8 +3163,8 @@
         {
           "autoPicked": [],
           "moves": {
-            "<id:1>": "scissors",
-            "<id:2>": "paper"
+            "<player:1>": "paper",
+            "<player:2>": "scissors"
           },
           "outcome": "2",
           "round": 2
@@ -3172,8 +3172,8 @@
         {
           "autoPicked": [],
           "moves": {
-            "<id:1>": "paper",
-            "<id:2>": "scissors"
+            "<player:1>": "scissors",
+            "<player:2>": "paper"
           },
           "outcome": "1",
           "round": 3
@@ -3181,8 +3181,8 @@
         {
           "autoPicked": [],
           "moves": {
-            "<id:1>": "lizard",
-            "<id:2>": "rock"
+            "<player:1>": "rock",
+            "<player:2>": "lizard"
           },
           "outcome": "1",
           "round": 4
@@ -3190,8 +3190,8 @@
         {
           "autoPicked": [],
           "moves": {
-            "<id:1>": "rock",
-            "<id:2>": "paper"
+            "<player:1>": "paper",
+            "<player:2>": "rock"
           },
           "outcome": "1",
           "round": 5
@@ -3206,12 +3206,12 @@
             "rock": 1,
             "scissors": 0
           },
-          "id": "<id:3>",
+          "id": "<seat:1>",
           "lobbyProfile": null,
-          "matchId": "<id:0>",
+          "matchId": "<match>",
           "player": {
             "expiryStrikes": 0,
-            "id": "<id:2>",
+            "id": "<player:1>",
             "lobbyUserId": null,
             "name": "Alice",
             "profile": null,
@@ -3231,12 +3231,12 @@
             "rock": 2,
             "scissors": 0
           },
-          "id": "<id:4>",
+          "id": "<seat:2>",
           "lobbyProfile": null,
-          "matchId": "<id:0>",
+          "matchId": "<match>",
           "player": {
             "expiryStrikes": 0,
-            "id": "<id:1>",
+            "id": "<player:2>",
             "lobbyUserId": null,
             "name": "Bob",
             "profile": null,

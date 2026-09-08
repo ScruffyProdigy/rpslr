@@ -14,7 +14,19 @@ import {
 } from './lobbyPlayer.js';
 import type { LobbyProvisionInput } from './provision.js';
 import { TokenError } from './tokens.js';
-import { computeDelays, decideRound, isMove, matchWinner, winsNeeded, type Move } from './game.js';
+import {
+  computeDelays,
+  isMove,
+  matchWinner,
+  replayMatch,
+  resolveRound,
+  winsNeeded,
+  type DelayMap,
+  type Move,
+  type PlayedRound,
+  type PlayerRules,
+} from './game.js';
+import { DUEL_RULES } from './helpers/rules.js';
 import type { MatchHub } from './matchHub.js';
 import type { PresenceTracker } from './presence.js';
 import {
@@ -276,9 +288,10 @@ export class GameService {
     // A forfeit ends a match without anyone scoring, so a recorded winner
     // outranks the score-derived one.
     const scoredWinner = seats.find((s) => (s.player?.score ?? 0) >= need);
-    // Each seat's delay marks are derived from that player's resolved moves.
+    // Each seat's delay marks are replayed from the resolved rounds.
+    const delays = delaysBySeat(results, seats);
     for (const seat of seats) {
-      seat.delays = computeDelays(seat.player ? playerMoveSequence(results, seat.player.id) : []);
+      seat.delays = delays[seat.seatKey];
     }
     return this.publicView({
       match,
@@ -349,7 +362,7 @@ export class GameService {
     // Enforce the cooldown: the chosen move must have 0 delay marks. Delay marks
     // are derived from the player's moves in resolved rounds.
     const results = await this.repo.listResults(match.id);
-    const delays = computeDelays(playerMoveSequence(results, playerId));
+    const delays = delaysBySeat(results, seats)[mySeat.seatKey];
     if (delays[move] > 0) {
       throw new ValidationError(
         `'${move}' is on cooldown (${delays[move]} delay mark${delays[move] === 1 ? '' : 's'})`,
@@ -374,7 +387,7 @@ export class GameService {
       return { ...broadcast, currentRoundMoves: { [playerId]: move as Move } };
     }
 
-    return this.resolveDuelRound(match.id, match.currentRound, match.bestOf, seats, moves);
+    return this.resolveDuelRound(match.id, match.currentRound, match.bestOf, seats, moves, results);
   }
 
   /** RPS "duel" resolution: exactly two seats, ordered by position. */
@@ -384,17 +397,31 @@ export class GameService {
     bestOf: number,
     seats: Seat[],
     moves: Record<string, Move>,
+    priorResults: RoundResult[],
     autoPicked: string[] = [],
   ): Promise<MatchState> {
     const [seatA, seatB] = seats;
     const playerA = seatA.player!;
     const playerB = seatB.player!;
-    const rel = decideRound(moves[playerA.id], moves[playerB.id]);
+    const played = { a: moves[playerA.id], b: moves[playerB.id] };
+    // A round has one winner, but the two players can still read it differently —
+    // Sharp Practice scores a Scissors mirror for whoever holds it, and both may.
+    // `outcome` records the single winner; each score follows that player's reading.
+    const { seat: rel, outcomeA, outcomeB } = resolveRound(
+      played,
+      rulesForSeat(seatA),
+      rulesForSeat(seatB),
+      {
+        roundIndex: priorResults.length,
+        lossesA: lossesFor(priorResults, seatA, seatB),
+        lossesB: lossesFor(priorResults, seatB, seatA),
+      },
+    );
 
     const winningSeatKey = rel === 'draw' ? 'draw' : rel === 'a' ? seatA.seatKey : seatB.seatKey;
     const scores: Record<string, number> = {
-      [playerA.id]: playerA.score + (rel === 'a' ? 1 : 0),
-      [playerB.id]: playerB.score + (rel === 'b' ? 1 : 0),
+      [playerA.id]: playerA.score + (outcomeA === 'win' ? 1 : 0),
+      [playerB.id]: playerB.score + (outcomeB === 'win' ? 1 : 0),
     };
     const result: RoundResult = {
       round,
@@ -505,11 +532,11 @@ export class GameService {
     if (expired.length === 0) return;
 
     const results = await this.repo.listResults(matchId);
+    const delays = delaysBySeat(results, seats);
     const autoPicked: string[] = [];
     for (const { seat } of expired) {
       const player = seat.player!;
-      const delays = computeDelays(playerMoveSequence(results, player.id));
-      const move = chooseAutoPick(delays, this.rng);
+      const move = chooseAutoPick(delays[seat.seatKey], this.rng);
       try {
         await this.repo.recordMove({
           matchId,
@@ -537,6 +564,7 @@ export class GameService {
       match.bestOf,
       seats,
       filled,
+      results,
       autoPicked,
     );
   }
@@ -624,6 +652,57 @@ function playerMoveSequence(results: RoundResult[], playerId: string): Move[] {
     .sort((a, b) => a.round - b.round)
     .map((r) => r.moves[playerId])
     .filter((m): m is Move => Boolean(m));
+}
+
+/**
+ * The rules a seat plays by.
+ *
+ * Every seat is a duel seat today: nothing carries a loadout until JQ-148 puts one
+ * on provision and on the match record. Routing duel through this call rather than
+ * around it is the point — when loadouts arrive, only this function changes.
+ */
+function rulesForSeat(_seat: Seat): PlayerRules {
+  return DUEL_RULES;
+}
+
+/** Both moves of each resolved round, in round order, seat A's first. */
+function playedRounds(results: RoundResult[], idA: string, idB: string): PlayedRound[] {
+  return [...results]
+    .sort((a, b) => a.round - b.round)
+    .map((r) => ({ a: r.moves[idA], b: r.moves[idB] }))
+    .filter((r): r is PlayedRound => Boolean(r.a && r.b));
+}
+
+/** How many resolved rounds this seat has lost. */
+function lossesFor(results: RoundResult[], seat: Seat, opponent: Seat): number {
+  return results.filter((r) => r.outcome === opponent.seatKey && r.moves[seat.player!.id]).length;
+}
+
+/**
+ * Delay marks for every seat, replayed from the resolved rounds.
+ *
+ * A helpers match cannot be replayed one seat at a time — Grudge, Echo Chamber and
+ * Small Mercy let one player's round mark the *other* player's moves, so the two
+ * sequences are coupled. A duel holds none of those, and DUEL_RULES makes the
+ * two-seat replay land on exactly what the old per-seat one produced.
+ */
+function delaysBySeat(results: RoundResult[], seats: Seat[]): Record<string, DelayMap> {
+  if (seats.length !== 2) {
+    // No mode has anything but two seats today. If one ever does, it keeps the old
+    // per-seat replay rather than silently being handed a two-player one.
+    return Object.fromEntries(
+      seats.map((s) => [
+        s.seatKey,
+        computeDelays(s.player ? playerMoveSequence(results, s.player.id) : []),
+      ]),
+    );
+  }
+  const [seatA, seatB] = seats;
+  const idA = seatA.player?.id;
+  const idB = seatB.player?.id;
+  const rounds = idA && idB ? playedRounds(results, idA, idB) : [];
+  const { a, b } = replayMatch(rounds, rulesForSeat(seatA), rulesForSeat(seatB));
+  return { [seatA.seatKey]: a, [seatB.seatKey]: b };
 }
 
 function seatsFromMode(mode: GameModeManifest): SeatReservation[] {

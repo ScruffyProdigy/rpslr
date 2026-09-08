@@ -67,28 +67,47 @@ export function outcomeGrid(): Record<string, string> {
 }
 
 /**
- * Replace generated ids and codes with stable placeholders, in first-seen order,
- * so the snapshot compares on rules and not on UUIDs.
+ * Keys whose value is wall-clock time the injected clock does not reach — the
+ * repository stamps `createdAt` with `new Date()` of its own. Blanked rather than
+ * placeholdered, so the comparison is about rules. Clock-derived fields
+ * (`serverNow`, `phaseDeadline`, `phaseStartedAt`) are deliberately *not* here:
+ * they come from the fixed clock and a change in them is a real change.
  */
-export function normalise(value: unknown): unknown {
-  const seen = new Map<string, string>();
+const VOLATILE_KEYS = new Set(['createdAt']);
+
+/** Placeholders for the generated ids, keyed by the id itself. */
+export type Aliases = Record<string, string>;
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * Replace generated ids and codes with stable placeholders, so the snapshot
+ * compares on rules and not on UUIDs.
+ *
+ * The placeholders come from `aliases` — by role, not by order of discovery.
+ * Numbering ids as they turn up looked simpler and was wrong: object keys are
+ * walked sorted, two player UUIDs sort at random, so the two seats swapped
+ * placeholders about half the time and the comparison was flaky rather than
+ * strict. Anything not named in `aliases` collapses to a single `<uuid>`, which
+ * cannot encode an ordering either.
+ */
+export function normalise(value: unknown, aliases: Aliases = {}): unknown {
   const swap = (s: string): string => {
-    const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-    const withIds = s.replace(uuid, (m) => {
-      if (!seen.has(m)) seen.set(m, `<id:${seen.size}>`);
-      return seen.get(m)!;
-    });
+    const withIds = s.replace(UUID, (m) => aliases[m] ?? '<uuid>');
     return withIds.replace(/^RPS-[A-Z0-9-]+$/, '<code>');
   };
   const visit = (v: unknown): unknown => {
     if (typeof v === 'string') return swap(v);
     if (Array.isArray(v)) return v.map(visit);
     if (v && typeof v === 'object') {
-      const out: Record<string, unknown> = {};
-      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
-        out[swap(k)] = visit((v as Record<string, unknown>)[k]);
-      }
-      return out;
+      // Sorted by the *placeholder*, not the raw key: some keys are player UUIDs,
+      // and sorting those put the two seats in a random order in the output.
+      const entries = Object.entries(v as Record<string, unknown>).map(
+        ([k, value]) =>
+          [swap(k), VOLATILE_KEYS.has(k) ? `<${k}>` : visit(value)] as [string, unknown],
+      );
+      entries.sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0));
+      return Object.fromEntries(entries);
     }
     return v;
   };
@@ -116,6 +135,14 @@ export async function scriptedDuel(): Promise<unknown> {
   const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
   const challengerId = joined.you.playerId;
 
+  const seated = await service.getState(code);
+  const aliases: Aliases = {
+    [seated.match.id]: '<match>',
+    [hostId]: '<player:1>',
+    [challengerId]: '<player:2>',
+  };
+  for (const seat of seated.seats) aliases[seat.id] = `<seat:${seat.seatKey}>`;
+
   // rock/rock draws, then rock is on cooldown for both; paper beats rock;
   // scissors beats paper; lizard opens up once its opening mark decays.
   const script: [Move, Move][] = [
@@ -130,10 +157,10 @@ export async function scriptedDuel(): Promise<unknown> {
   for (const [a, b] of script) {
     await service.submitMove(code, hostId, a);
     const state = await service.submitMove(code, challengerId, b);
-    perRound.push(normalise(state));
+    perRound.push(normalise(state, aliases));
     if (state.match.status === 'finished') break;
   }
-  return { perRound, final: normalise(await service.getState(code)) };
+  return { perRound, final: normalise(await service.getState(code), aliases) };
 }
 
 /** Everything the byte-identity test compares, in one object. */
