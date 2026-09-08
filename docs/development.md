@@ -122,3 +122,27 @@ workloads → optional env ingress overlay → waits for rollout.
 Point DNS at the cluster ingress, then `./scripts/deploy-production.sh`. Lobby
 catalog: `playUrl` = `https://rpsls-duel.win`, `apiBaseUrl` =
 `https://rpsls-duel.win`.
+
+### Replay link previews
+
+In production the ingress routes `/replay/*` to the API, which serves the
+`og:`/`twitter:` meta tags and the SPA in one response — a crawler runs no
+JavaScript, so the tags have to be in the HTML it is handed.
+
+Local dev has no ingress: vite serves `/replay/:id` to your browser as it always
+has, and the card is checked against the API directly.
+
+```bash
+curl -s localhost:3001/replay/RPS-ABCD | grep og:
+open http://localhost:3001/api/v1/replay/RPS-ABCD/card.png
+```
+
+`npm run card:preview -- /tmp/card.png` in `api/` renders a card with no match at
+all, which is the quickest way to look at a design change. Pass `generic` as a
+second argument for the fallback card.
+
+The card's fonts live in `api/assets/fonts` as TTF: resvg cannot read the
+`.woff2` files the client ships, and it ignores font options it does not
+recognise rather than complaining, so a card set in the wrong face is a silent
+failure. `cardImage.test.ts` renders two families and fails if they come out
+identical.

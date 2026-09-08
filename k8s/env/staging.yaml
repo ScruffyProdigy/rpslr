@@ -9,6 +9,9 @@ data:
   REQUIRE_LOBBY_AUTH: "true"
   CORS_ALLOWED_ORIGINS: "https://lobby.staging.joinquest.example"
   GAME_API_AUDIENCE: "https://rps.staging.joinquest.example"
+  # Where /replay fetches the SPA shell from for link-preview meta (JQ-120).
+  # In-cluster service, not the public host — no hairpin through the ingress.
+  GAME_CLIENT_ORIGIN: "http://rps-game-client"
 ---
 apiVersion: v1
 kind: ConfigMap
