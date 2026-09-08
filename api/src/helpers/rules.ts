@@ -124,8 +124,8 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      *     loses to a surcharge.
      *  2. A draw rule beats a per-move one, and Echo Chamber ("yours doesn't")
      *     beats Copycat ("yours takes 1") because it is the stronger claim.
-     *  3. A per-move discount beats an outcome surcharge: Ferrus says Robot takes
-     *     1, full stop, which is why it is worth a Major.
+     *  3. A per-move discount beats an outcome surcharge: Featherweight says Lizard
+     *     takes 1, full stop, rather than bending to how the round went.
      */
     delayOnChoice({ move, outcome, roundIndex }) {
       if (has('bookend') && roundIndex === 0) return 1;
@@ -133,7 +133,6 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
         if (has('echo-chamber')) return 0;
         if (has('copycat')) return 1;
       }
-      if (has('ferrus') && move === 'robot') return 1;
       if (has('featherweight') && move === 'lizard') return 1;
       if (has('tempered') && outcome === 'win') return 3;
       if (has('tempered') && outcome === 'loss') return 1;
@@ -171,6 +170,7 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       const markTheirs = (move: Move) => {
         adjustment.opponent[move] = (adjustment.opponent[move] ?? 0) + 1;
       };
+      if (has('ferrus') && ctx.own === 'robot') markTheirs(ctx.opponent);
       if (has('echo-chamber') && ctx.outcome === 'draw') markTheirs(ctx.opponent);
       if (has('grudge') && ctx.outcome === 'loss') markTheirs(ctx.opponent);
       if (has('small-mercy') && ctx.outcome === 'loss' && ctx.lossesSoFar === 0) {

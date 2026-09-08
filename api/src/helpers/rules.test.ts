@@ -93,11 +93,33 @@ describe('Chimera — a sixth edge, for its owner only', () => {
   });
 });
 
-describe('Ferrus — Robot takes 1', () => {
-  it('discounts robot and nothing else', () => {
-    expect(cost(load('ferrus'), 'robot', 'win')).toBe(1);
-    expect(cost(load('ferrus'), 'rock', 'win')).toBe(2);
-    expect(cost(load('ferrus'), 'lizard', 'win')).toBe(2);
+describe('Ferrus — playing Robot marks what they played', () => {
+  it('marks their move whenever you play robot, win or lose', () => {
+    expect(marks(load('ferrus'), { own: 'robot', opponent: 'paper', outcome: 'loss' })).toEqual({
+      own: {},
+      opponent: { paper: 1 },
+    });
+    expect(marks(load('ferrus'), { own: 'robot', opponent: 'scissors', outcome: 'win' })).toEqual({
+      own: {},
+      opponent: { scissors: 1 },
+    });
+  });
+
+  it('does nothing on any other move of yours', () => {
+    expect(marks(load('ferrus'), { own: 'rock', opponent: 'paper', outcome: 'loss' })).toEqual({
+      own: {},
+      opponent: {},
+    });
+  });
+
+  it('no longer discounts robot — that effect moved off this card', () => {
+    expect(cost(load('ferrus'), 'robot', 'win')).toBe(2);
+  });
+
+  it('stacks with a second card marking the same move', () => {
+    expect(marks(['ferrus', 'grudge'], { own: 'robot', opponent: 'paper', outcome: 'loss' })).toEqual(
+      { own: {}, opponent: { paper: 2 } },
+    );
   });
 });
 

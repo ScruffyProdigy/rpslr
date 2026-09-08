@@ -55,7 +55,7 @@ const MAJORS = [
   { id: 'chimera', name: 'Chimera', tier: 'Major', boundMove: 'lizard',
     load: 'passive', blurb: 'Your Lizard also beats Scissors, all match.' },
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
-    load: 'passive', blurb: 'Your Robot takes 1 mark instead of 2.' },
+    load: 'passive', blurb: 'When you play Robot, the move they played takes an extra mark.' },
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
     load: 'per-round', blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
