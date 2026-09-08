@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DUEL_RULES, rollFor, rulesFor } from './rules.js';
-import { BEATS, INITIAL_DELAYS, type Move, type PlayerOutcome } from '../game.js';
+import { BEATS, INITIAL_DELAYS, replayMatch, type Move, type PlayerOutcome } from '../game.js';
 import type { Loadout } from './loadout.js';
 
 /** A Trinket with no engine effect, so a test isolates the card it is paired with. */
@@ -9,14 +9,14 @@ const INERT = 'old-habits';
 const load = (id: string): Loadout => [id, INERT] as Loadout;
 
 const cost = (loadout: Loadout, move: Move, outcome: PlayerOutcome, roundIndex = 2) =>
-  rulesFor(loadout, null).delayOnChoice({ move, outcome, roundIndex });
+  rulesFor(loadout).delayOnChoice({ move, outcome, roundIndex });
 
 const outcome = (
   loadout: Loadout,
   raw: PlayerOutcome,
   ctx: { own: Move; opponent: Move; roundIndex?: number; lossesSoFar?: number },
 ) =>
-  rulesFor(loadout, null).transformOutcome(raw, {
+  rulesFor(loadout).transformOutcome(raw, {
     own: ctx.own,
     opponent: ctx.opponent,
     roundIndex: ctx.roundIndex ?? 0,
@@ -27,7 +27,7 @@ const marks = (
   loadout: Loadout,
   ctx: { own: Move; opponent: Move; outcome: PlayerOutcome; lossesSoFar?: number },
 ) =>
-  rulesFor(loadout, null).adjustAfterRound({
+  rulesFor(loadout).adjustAfterRound({
     own: ctx.own,
     opponent: ctx.opponent,
     outcome: ctx.outcome,
@@ -45,22 +45,22 @@ describe('duel is the null loadout', () => {
   });
 
   it('is what rulesFor returns for no loadout at all', () => {
-    expect(rulesFor(null, null)).toBe(DUEL_RULES);
+    expect(rulesFor(null)).toBe(DUEL_RULES);
   });
 });
 
 describe('rulesFor — opening marks', () => {
   it('prices the opening from the loadout, not the duel constants', () => {
-    expect(rulesFor(['ferrus', 'copycat'], null).initialDelays).toEqual({
+    expect(rulesFor(['ferrus', 'copycat']).initialDelays).toEqual({
       rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 2,
     });
-    expect(rulesFor(['copycat', 'watchful'], null).initialDelays).toEqual({
+    expect(rulesFor(['copycat', 'watchful']).initialDelays).toEqual({
       rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0,
     });
   });
 
   it('carries the stored roll through, rather than rolling again', () => {
-    const rules = rulesFor(['grudge', 'sharp-practice'], 'lizard');
+    const rules = rulesFor(['grudge', 'sharp-practice'], { roll: 'lizard' });
     expect(rules.rolledMove).toBe('lizard');
     expect(rules.initialDelays).toEqual({
       rock: 0, paper: 0, scissors: 1, lizard: 1, robot: 0,
@@ -68,7 +68,7 @@ describe('rulesFor — opening marks', () => {
   });
 
   it('refuses to build a colliding loadout with no roll to place', () => {
-    expect(() => rulesFor(['grudge', 'sharp-practice'], null)).toThrow(/roll/i);
+    expect(() => rulesFor(['grudge', 'sharp-practice'])).toThrow(/roll/i);
   });
 
   it('rolls once, for storing, and only where there is a collision', () => {
@@ -80,13 +80,13 @@ describe('rulesFor — opening marks', () => {
 
 describe('Chimera — a sixth edge, for its owner only', () => {
   it('adds lizard beats scissors without touching the shared graph', () => {
-    expect(rulesFor(load('chimera'), null).beats.lizard).toEqual(['robot', 'paper', 'scissors']);
+    expect(rulesFor(load('chimera')).beats.lizard).toEqual(['robot', 'paper', 'scissors']);
     expect(BEATS.lizard).toEqual(['robot', 'paper']);
     expect(DUEL_RULES.beats.lizard).toEqual(['robot', 'paper']);
   });
 
   it('leaves every other row of the graph alone', () => {
-    const rules = rulesFor(load('chimera'), null);
+    const rules = rulesFor(load('chimera'));
     for (const move of ['rock', 'paper', 'scissors', 'robot'] as const) {
       expect(rules.beats[move], move).toEqual(BEATS[move]);
     }
@@ -246,29 +246,56 @@ describe('Grudge and Small Mercy together stack on the same move', () => {
 
 describe('the helpers that only change what a player is shown', () => {
   it('Poker Face hides that you locked in', () => {
-    expect(rulesFor(load('poker-face'), null).disclosure.hidesLockIn).toBe(true);
+    expect(rulesFor(load('poker-face')).disclosure.hidesLockIn).toBe(true);
     expect(DUEL_RULES.disclosure.hidesLockIn).toBe(false);
   });
 
-  it('Blind Spot hides one of your cooldowns', () => {
-    expect(rulesFor(load('blind-spot'), null).disclosure.hiddenCooldown).toBe('robot');
+  it('Blind Spot hides the move its holder named at the draft', () => {
+    // The design doc is explicit: "At draft, name one of your moves". Not the
+    // robot it is bound to — any of the five.
+    expect(rulesFor(load('blind-spot'), { blindSpot: 'paper' }).disclosure.hiddenCooldown).toBe(
+      'paper',
+    );
+    expect(rulesFor(load('blind-spot'), { blindSpot: 'robot' }).disclosure.hiddenCooldown).toBe(
+      'robot',
+    );
     expect(DUEL_RULES.disclosure.hiddenCooldown).toBeNull();
   });
 
+  it('refuses a Blind Spot with no named move, rather than hiding nothing', () => {
+    expect(() => rulesFor(load('blind-spot'))).toThrow(/named at the draft/i);
+    expect(() => rulesFor(load('blind-spot'), { blindSpot: 'trebuchet' as Move })).toThrow(
+      /not a move/i,
+    );
+  });
+
+  it('ignores a named move when nobody is holding Blind Spot', () => {
+    expect(rulesFor(load('poker-face'), { blindSpot: 'paper' }).disclosure.hiddenCooldown).toBeNull();
+  });
+
   it('Old Habits shows you their most-played move', () => {
-    expect(rulesFor(['old-habits', 'copycat'], null).disclosure.showsOpponentMostPlayed).toBe(true);
+    expect(rulesFor(['old-habits', 'copycat']).disclosure.showsOpponentMostPlayed).toBe(true);
   });
 
   it('Watchful shows you their cooldowns as they will stand', () => {
-    expect(rulesFor(['watchful', 'copycat'], null).disclosure.showsOpponentNextCooldowns).toBe(true);
+    expect(rulesFor(['watchful', 'copycat']).disclosure.showsOpponentNextCooldowns).toBe(true);
   });
 
   it('leaves the cooldown arithmetic alone', () => {
     for (const id of ['poker-face', 'blind-spot', 'old-habits', 'watchful']) {
       // A loadout is two *distinct* helpers, so the inert partner has to differ.
       const pair = [id, id === INERT ? 'watchful' : INERT] as Loadout;
-      expect(cost(pair, 'rock', 'win'), id).toBe(2);
-      expect(outcome(pair, 'loss', { own: 'rock', opponent: 'paper' }), id).toBe('loss');
+      const rules = rulesFor(pair, { blindSpot: 'paper' });
+      expect(rules.delayOnChoice({ move: 'rock', outcome: 'win', roundIndex: 2 }), id).toBe(2);
+      expect(
+        rules.transformOutcome('loss', {
+          own: 'rock',
+          opponent: 'paper',
+          roundIndex: 0,
+          lossesSoFar: 0,
+        }),
+        id,
+      ).toBe('loss');
     }
   });
 });
@@ -279,7 +306,7 @@ describe('the helpers whose effects are not implemented yet', () => {
     // sign-off (JQ-146 Task 1.0). They must not silently do something in the
     // meantime, so a loadout holding one plays as its opening marks and no more.
     for (const id of ['quarantine', 'oracle', 'sacrifice', 'rust', 'thief', 'freeze']) {
-      const rules = rulesFor(load(id), null);
+      const rules = rulesFor(load(id));
       expect(cost(load(id), 'rock', 'win'), id).toBe(2);
       expect(rules.beats, id).toEqual(BEATS);
       expect(outcome(load(id), 'loss', { own: 'rock', opponent: 'paper' }), id).toBe('loss');
@@ -288,5 +315,43 @@ describe('the helpers whose effects are not implemented yet', () => {
         opponent: {},
       });
     }
+  });
+});
+
+describe('the stacking pairs the design doc says to watch', () => {
+  // Both bound to Rock, so they collide and are now draftable together. Both turn
+  // a loss into a draw, and the doc calls this "the pairing to check first".
+  it('Good Old Rock spares a Rock loss without spending Second Wind', () => {
+    const rules = rulesFor(['good-old-rock', 'second-wind'], { roll: 'paper' });
+    const rockLoss = { own: 'rock' as Move, opponent: 'paper' as Move, roundIndex: 0, lossesSoFar: 0 };
+    expect(rules.transformOutcome('loss', rockLoss)).toBe('draw');
+    // Because that never became a loss, Second Wind is still armed for the next one.
+    const laterLoss = { own: 'paper' as Move, opponent: 'scissors' as Move, roundIndex: 2, lossesSoFar: 0 };
+    expect(rules.transformOutcome('loss', laterLoss)).toBe('draw');
+    // And once Second Wind has genuinely been spent, losses land.
+    expect(rules.transformOutcome('loss', { ...laterLoss, lossesSoFar: 1 })).toBe('loss');
+  });
+
+  it('Copycat and Good Old Rock together cool Rock every other round, not every third', () => {
+    const rules = rulesFor(['good-old-rock', 'copycat'], {});
+    // The Rock loss becomes a draw, and a drawn round charges Rock 1 instead of 2.
+    const asDraw = rules.transformOutcome('loss', {
+      own: 'rock',
+      opponent: 'paper',
+      roundIndex: 1,
+      lossesSoFar: 0,
+    });
+    expect(asDraw).toBe('draw');
+    expect(rules.delayOnChoice({ move: 'rock', outcome: asDraw, roundIndex: 1 })).toBe(1);
+    // Rock opens on 2 marks for a Good Old Rock holder, so the soonest it can be
+    // played is round 2. Charged 1 instead of 2, it is live again the round after
+    // that — back every other round rather than every third.
+    const sequence = [
+      { a: 'paper' as Move, b: 'rock' as Move },
+      { a: 'rock' as Move, b: 'paper' as Move },
+    ];
+    expect(replayMatch(sequence, rules, rulesFor(null)).a.rock).toBe(1);
+    // The same two rounds without Copycat leave it down for two.
+    expect(replayMatch(sequence, rulesFor(load('good-old-rock')), rulesFor(null)).a.rock).toBe(2);
   });
 });

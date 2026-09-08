@@ -49,7 +49,7 @@ describe('duel is byte-identical to the engine it had before loadouts', () => {
 
 describe('the null loadout is the duel path, not a copy of it', () => {
   it('hands back the very same rules object', () => {
-    expect(rulesFor(null, null)).toBe(DUEL_RULES);
+    expect(rulesFor(null)).toBe(DUEL_RULES);
     expect(DUEL_RULES).toBe(BASE_RULES);
   });
 

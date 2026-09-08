@@ -28,7 +28,7 @@ import {
   type PlayerRules,
 } from '../game.js';
 import { helpersIn, openingMarks, type Loadout, type MovePicker } from './loadout.js';
-import { getHelper, type HelperId } from './roster.js';
+import type { HelperId } from './roster.js';
 
 /** A plain duel is the null loadout, not a special case in the engine. */
 export const DUEL_RULES = BASE_RULES;
@@ -45,6 +45,18 @@ export function rollFor(loadout: Loadout | null, pick: MovePicker): Move | null 
 }
 
 /**
+ * The per-match decisions a loadout carries that are not derivable from the cards
+ * themselves. Both are settled once, before round 1, and stored: replaying a match
+ * has to reach the marks it reached the first time.
+ */
+export interface LoadoutState {
+  /** From `rollFor` — where a same-move collision displaced the cheaper marks. */
+  roll?: Move | null;
+  /** Blind Spot: the move its holder named at the draft. */
+  blindSpot?: Move | null;
+}
+
+/**
  * Compile a loadout into rules.
  *
  * `roll` is the stored result of `rollFor`, not a fresh throw — a replay has to
@@ -52,8 +64,9 @@ export function rollFor(loadout: Loadout | null, pick: MovePicker): Move | null 
  * is a wiring mistake rather than bad input, so it throws instead of quietly
  * placing the marks somewhere plausible.
  */
-export function rulesFor(loadout: Loadout | null, roll: Move | null): PlayerRules {
+export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): PlayerRules {
   if (!loadout) return DUEL_RULES;
+  const roll = state.roll ?? null;
 
   const ids = new Set<string>(loadout);
   const has = (id: HelperId) => ids.has(id);
@@ -75,13 +88,21 @@ export function rulesFor(loadout: Loadout | null, roll: Move | null): PlayerRule
   ) as Record<Move, Move[]>;
   if (has('chimera')) beats.lizard = [...beats.lizard, 'scissors'];
 
-  const blindSpot = has('blind-spot') ? (getHelper('blind-spot')!.boundMove as Move) : null;
+  // Blind Spot hides a move its holder *names at the draft* — any of the five, not
+  // the robot it is bound to. Holding it without a named move is a wiring gap, the
+  // same class of mistake as a collision with no roll, so it throws rather than
+  // quietly hiding nothing. JQ-149 collects the name; JQ-151 renders the effect.
+  const blindSpot = has('blind-spot') ? state.blindSpot ?? null : null;
+  if (has('blind-spot') && blindSpot === null) {
+    throw new Error('blind-spot needs the move its holder named at the draft');
+  }
+  if (blindSpot !== null && !MOVES.includes(blindSpot)) {
+    throw new Error(`'${blindSpot}' is not a move blind-spot could name`);
+  }
+
   const disclosure: Disclosure = {
     ...NO_DISCLOSURE,
     hidesLockIn: has('poker-face'),
-    // The move Blind Spot hides is its own bound move, for the same reason every
-    // other bound helper acts on the move it is bound to — and because a random
-    // one would be a second thing to roll and store. JQ-151 renders it.
     hiddenCooldown: blindSpot,
     showsOpponentMostPlayed: has('old-habits'),
     showsOpponentNextCooldowns: has('watchful'),

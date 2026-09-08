@@ -75,14 +75,16 @@ describe('the tier ladder holds for every legal loadout', () => {
     for (const [a, b] of PAIRS) {
       const loadout = [a.id, b.id] as Loadout;
       const roll = rollFor(loadout, first);
-      const rules = rulesFor(loadout, roll);
+      // Blind Spot's hidden move is named at the draft, so a loadout holding it
+      // cannot be compiled without one.
+      const rules = rulesFor(loadout, { roll, blindSpot: 'paper' });
       // Play whatever is live, twice, so per-round hooks all get exercised.
       const opening = availableMoves(rules.initialDelays);
       const rounds = [
         { a: opening[0], b: opening[0] },
         { a: opening[1], b: opening[0] },
       ];
-      const { a: marksA, b: marksB } = replayMatch(rounds, rules, rulesFor(null, null));
+      const { a: marksA, b: marksB } = replayMatch(rounds, rules, rulesFor(null));
       for (const move of MOVES) {
         expect(marksA[move], `${a.id} + ${b.id}`).toBeGreaterThanOrEqual(0);
         expect(marksB[move], `${a.id} + ${b.id}`).toBeGreaterThanOrEqual(0);
