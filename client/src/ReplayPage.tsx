@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Wordmark } from './App';
 import { api, type MatchState } from './api';
+import { ruleCardSchedule } from './commentary';
+import { HowToPlayDialog } from './components/HowToPlay';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
 import { PlayerAvatar } from './components/PlayerAvatar';
+import { ReplayCommentary } from './components/ReplayCommentary';
 import { ReplayControls } from './components/ReplayControls';
 import { RevealCard } from './components/RevealCard';
 import { RoundStrip } from './components/RoundStrip';
+import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useReplayPlayback } from './lib/useReplayPlayback';
 import { getLobbyGameUrl } from './env';
 import { withReplayAttribution } from './lib/replayLink';
@@ -53,7 +57,18 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   // round that settled the match would only ever appear as a final score.
   // Hooks run before the early returns below, so this is 0 until the match
   // loads; the playback hook handles an empty replay without special-casing.
-  const playback = useReplayPlayback(replay ? replay.frames.length + 1 : 0);
+  // Nobody arriving on a shared replay link has been told the rules. The same
+  // three panels a first match opens with, opened once here too and remembered
+  // under the same key — someone who read them in a match should not be shown
+  // them again by a link, and the panels answer the same question either way.
+  const rules = useFirstMatchRules(replay !== null);
+
+  const playback = useReplayPlayback(replay ? replay.frames.length + 1 : 0, rules.open);
+
+  // Which round first puts each rule on the board. Computed once for the whole
+  // replay so a rule is explained where it belongs rather than wherever the
+  // watcher happens to have stepped to.
+  const schedule = useMemo(() => (replay ? ruleCardSchedule(replay.frames) : []), [replay]);
 
   if (error) return <ReplayMessage title="Replay unavailable" body={error} />;
   if (!state) return <ReplayMessage title="Loading the match…" body={null} />;
@@ -117,7 +132,22 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
             size="sm"
           />
         </p>
+        <button
+          type="button"
+          className="rules-btn"
+          aria-label="How to play"
+          onClick={() => rules.setOpen(true)}
+        >
+          <span className="rules-btn__mark" aria-hidden="true">
+            ?
+          </span>
+          <span className="rules-btn__label" aria-hidden="true">
+            How to play
+          </span>
+        </button>
       </header>
+
+      <HowToPlayDialog bestOf={replay.bestOf} open={rules.open} onClose={rules.dismiss} />
 
       {over ? (
         <MatchEndCard
@@ -189,6 +219,22 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
         onNext={playback.next}
         onSpeed={playback.setSpeed}
       />
+
+      {/*
+        Under the transport rather than between it and the board. The commentary
+        is the tallest thing on the page — a rule card and four notes is a real
+        round, not a contrived one — and putting that much reading above the
+        controls pushed play/pause off a phone screen. The board is watched, the
+        transport is reached for, and the words are read: that is the order.
+      */}
+      {!over && (
+        <ReplayCommentary
+          frame={frame}
+          replay={replay}
+          card={schedule[frameIndex] ?? null}
+          settled={settled}
+        />
+      )}
 
       {!over && (
         <div className="replay__rounds">

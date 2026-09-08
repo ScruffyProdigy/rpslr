@@ -19,8 +19,12 @@ import { ALL_MOVES, threatsTo } from './moves';
 
 export type DelayMap = Record<Move, number>;
 
-/** Delay marks each move starts a match with — `INITIAL_DELAYS` in game.ts. */
-const INITIAL_DELAYS: DelayMap = {
+/**
+ * Delay marks each move starts a match with — `INITIAL_DELAYS` in game.ts.
+ * Exported with `advanceDelays` so anything that needs to reason about the
+ * cooldown clock reads it from here rather than writing the rule down again.
+ */
+export const INITIAL_DELAYS: DelayMap = {
   rock: 0,
   paper: 0,
   scissors: 0,
@@ -28,11 +32,15 @@ const INITIAL_DELAYS: DelayMap = {
   robot: 2,
 };
 
-/** How many marks the chosen move gains — `DELAY_ON_CHOICE` in game.ts. */
-const DELAY_ON_CHOICE = 2;
+/**
+ * How many marks the chosen move gains — `DELAY_ON_CHOICE` in game.ts.
+ * Exported so the commentary can say how long a move rests without writing
+ * the number down a second time.
+ */
+export const DELAY_ON_CHOICE = 2;
 
 /** Every move −1 floored at 0, then the pick +2. The order is the rule. */
-function advanceDelays(delays: DelayMap, chosen: Move): DelayMap {
+export function advanceDelays(delays: DelayMap, chosen: Move): DelayMap {
   const next = { ...delays };
   for (const move of ALL_MOVES) next[move] = Math.max(0, next[move] - 1);
   next[chosen] += DELAY_ON_CHOICE;
