@@ -272,29 +272,6 @@ describe('the helpers that only change what a player is shown', () => {
     expect(DUEL_RULES.disclosure.hidesLockIn).toBe(false);
   });
 
-  it('Blind Spot hides the move its holder named at the draft', () => {
-    // The design doc is explicit: "At draft, name one of your moves". Not the
-    // robot it is bound to — any of the five.
-    expect(rulesFor(load('blind-spot'), { blindSpot: 'paper' }).disclosure.hiddenCooldown).toBe(
-      'paper',
-    );
-    expect(rulesFor(load('blind-spot'), { blindSpot: 'robot' }).disclosure.hiddenCooldown).toBe(
-      'robot',
-    );
-    expect(DUEL_RULES.disclosure.hiddenCooldown).toBeNull();
-  });
-
-  it('refuses a Blind Spot with no named move, rather than hiding nothing', () => {
-    expect(() => rulesFor(load('blind-spot'))).toThrow(/named at the draft/i);
-    expect(() => rulesFor(load('blind-spot'), { blindSpot: 'trebuchet' as Move })).toThrow(
-      /not a move/i,
-    );
-  });
-
-  it('ignores a named move when nobody is holding Blind Spot', () => {
-    expect(rulesFor(load('poker-face'), { blindSpot: 'paper' }).disclosure.hiddenCooldown).toBeNull();
-  });
-
   it('Old Habits shows you their most-played move', () => {
     expect(rulesFor(['old-habits', 'copycat']).disclosure.showsOpponentMostPlayed).toBe(true);
   });
@@ -304,10 +281,10 @@ describe('the helpers that only change what a player is shown', () => {
   });
 
   it('leaves the cooldown arithmetic alone', () => {
-    for (const id of ['poker-face', 'blind-spot', 'old-habits', 'watchful']) {
+    for (const id of ['poker-face', 'old-habits', 'watchful']) {
       // A loadout is two *distinct* helpers, so the inert partner has to differ.
       const pair = [id, id === INERT ? 'watchful' : INERT] as Loadout;
-      const rules = rulesFor(pair, { blindSpot: 'paper' });
+      const rules = rulesFor(pair);
       expect(rules.delayOnChoice({ move: 'rock', outcome: 'win', roundIndex: 2 }), id).toBe(2);
       expect(
         rules.transformOutcome('loss', {

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { HELPERS, MARK_COST, getHelper } from './roster.js';
 
 describe('helper roster', () => {
-  it('holds all 22 helpers at the design doc tier counts', () => {
-    expect(HELPERS).toHaveLength(22);
+  it('holds 21 helpers at the current tier counts', () => {
+    // Was 22 at 9/8/5. Blind Spot is cut, Second Wind promoted to Major, Poker Face
+    // demoted to Trinket — see the review issue on the roster's pricing.
+    expect(HELPERS).toHaveLength(21);
     const byTier = (t: string) => HELPERS.filter((h) => h.tier === t).length;
-    expect(byTier('Major')).toBe(9);
-    expect(byTier('Minor')).toBe(8);
-    expect(byTier('Trinket')).toBe(5);
+    expect(byTier('Major')).toBe(10);
+    expect(byTier('Minor')).toBe(5);
+    expect(byTier('Trinket')).toBe(6);
   });
 
   it('prices tiers as the ladder requires', () => {

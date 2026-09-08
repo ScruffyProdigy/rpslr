@@ -53,8 +53,6 @@ export function rollFor(loadout: Loadout | null, pick: MovePicker): Move | null 
 export interface LoadoutState {
   /** From `rollFor` — where a same-move collision displaced the cheaper marks. */
   roll?: Move | null;
-  /** Blind Spot: the move its holder named at the draft. */
-  blindSpot?: Move | null;
 }
 
 /**
@@ -89,22 +87,9 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
   ) as Record<Move, Move[]>;
   if (has('chimera')) beats.lizard = [...beats.lizard, 'scissors'];
 
-  // Blind Spot hides a move its holder *names at the draft* — any of the five, not
-  // the robot it is bound to. Holding it without a named move is a wiring gap, the
-  // same class of mistake as a collision with no roll, so it throws rather than
-  // quietly hiding nothing. JQ-149 collects the name; JQ-151 renders the effect.
-  const blindSpot = has('blind-spot') ? state.blindSpot ?? null : null;
-  if (has('blind-spot') && blindSpot === null) {
-    throw new Error('blind-spot needs the move its holder named at the draft');
-  }
-  if (blindSpot !== null && !MOVES.includes(blindSpot)) {
-    throw new Error(`'${blindSpot}' is not a move blind-spot could name`);
-  }
-
   const disclosure: Disclosure = {
     ...NO_DISCLOSURE,
     hidesLockIn: has('poker-face'),
-    hiddenCooldown: blindSpot,
     showsOpponentMostPlayed: has('old-habits'),
     showsOpponentNextCooldowns: has('watchful'),
   };

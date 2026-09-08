@@ -105,8 +105,6 @@ export interface MarkAdjustment {
 export interface Disclosure {
   /** Poker Face: the opponent is never told this player has locked in. */
   hidesLockIn: boolean;
-  /** Blind Spot: this move's marks are withheld from the opponent's view. */
-  hiddenCooldown: Move | null;
   /** Old Habits: this player is shown the opponent's most-played move. */
   showsOpponentMostPlayed: boolean;
   /** Watchful: this player is shown the opponent's cooldowns as they will stand. */
@@ -130,7 +128,6 @@ export interface PlayerRules {
 
 export const NO_DISCLOSURE: Disclosure = {
   hidesLockIn: false,
-  hiddenCooldown: null,
   showsOpponentMostPlayed: false,
   showsOpponentNextCooldowns: false,
 };

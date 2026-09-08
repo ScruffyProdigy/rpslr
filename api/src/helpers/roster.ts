@@ -73,11 +73,15 @@ const MAJORS = [
     load: 'charge', blurb: 'Move one mark from one of your moves onto one of theirs.' },
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
     load: 'charge', blurb: "Their marks don't decrement this round." },
+  // A Major because cancelling their first win is worth ~+15.6pp — first-to-3
+  // against first-to-4 is a six-round race you take with three wins, 42/64. A tier
+  // step is only worth ~3pp, so this is the defensible price rather than the right
+  // one; the effect itself is what wants revisiting. See JQ-153.
+  { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
+    load: 'passive', blurb: 'The first round you lose is a draw instead.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
-  { id: 'second-wind', name: 'Second Wind', tier: 'Minor', boundMove: 'rock',
-    load: 'passive', blurb: 'The first round you lose is a draw instead.' },
   { id: 'echo-chamber', name: 'Echo Chamber', tier: 'Minor', boundMove: 'paper',
     load: 'passive', blurb: "On a drawn round, their move takes an extra mark and yours doesn't." },
   { id: 'sharp-practice', name: 'Sharp Practice', tier: 'Minor', boundMove: 'scissors',
@@ -88,13 +92,20 @@ const MINORS = [
     load: 'passive', blurb: 'Your winning move takes 3 marks; your losing move takes 1.' },
   { id: 'featherweight', name: 'Featherweight', tier: 'Minor', boundMove: 'lizard',
     load: 'passive', blurb: 'Your Lizard takes 1 mark instead of 2.' },
-  { id: 'poker-face', name: 'Poker Face', tier: 'Minor', boundMove: 'robot',
-    load: 'passive', blurb: 'The opponent is never told you have locked in.' },
-  { id: 'blind-spot', name: 'Blind Spot', tier: 'Minor', boundMove: 'robot',
-    load: 'passive', blurb: 'One of your moves has its cooldown hidden from them all match.' },
+  // Blind Spot was cut here. It hid a cooldown that is fully derivable from the
+  // public move history, so it did nothing to an opponent doing the arithmetic and
+  // only obstructed one who wasn't — the inverse of the design doc's own case
+  // against Watchful and Old Habits. Poker Face survives the same test, because
+  // lock-in is live state and not in the history.
 ] as const satisfies readonly HelperDef<'Minor'>[];
 
 const TRINKETS = [
+  // A Trinket rather than a Minor: hiding lock-in denies a timing tell, not a
+  // number, so it belongs with Old Habits and Watchful in the tier where cards are
+  // honestly priced at nothing. Unlike Blind Spot it is at least not derivable —
+  // lock-in is live state, absent from the move history.
+  { id: 'poker-face', name: 'Poker Face', tier: 'Trinket', boundMove: null,
+    load: 'passive', blurb: 'The opponent is never told you have locked in.' },
   { id: 'small-mercy', name: 'Small Mercy', tier: 'Trinket', boundMove: null,
     load: 'passive', blurb: 'The first round you lose, the move that beat you takes an extra mark.' },
   { id: 'copycat', name: 'Copycat', tier: 'Trinket', boundMove: null,

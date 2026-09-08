@@ -82,19 +82,29 @@ describe('openingMarks', () => {
   });
 
   it('rolls the cheaper helper elsewhere when both bind the same move', () => {
-    // good-old-rock (Major, rock, 2) + second-wind (Minor, rock, 1).
-    // The Minor is cheaper, so its 1 mark rolls onto a move that is not rock.
-    const { delays, rolledMove } = openingMarks(['good-old-rock', 'second-wind'], first);
-    expect(delays.rock).toBe(2);
+    // oracle (Major, paper, 2) + echo-chamber (Minor, paper, 1).
+    // The Minor is cheaper, so its 1 mark rolls onto a move that is not paper.
+    const { delays, rolledMove } = openingMarks(['oracle', 'echo-chamber'], first);
+    expect(delays.paper).toBe(2);
     expect(rolledMove).not.toBeNull();
-    expect(rolledMove).not.toBe('rock');
+    expect(rolledMove).not.toBe('paper');
     expect(delays[rolledMove as Move]).toBe(1);
     expect(Object.values(delays).filter((n) => n > 0)).toHaveLength(2);
   });
 
   it('displaces the cheaper helper whichever order it was picked in', () => {
-    const { delays } = openingMarks(['second-wind', 'good-old-rock'], first);
+    const { delays } = openingMarks(['echo-chamber', 'oracle'], first);
+    expect(delays.paper).toBe(2);
+    expect(Object.values(delays).filter((n) => n > 0)).toHaveLength(2);
+  });
+
+  it('gives the roll to the second helper when two Majors share a move', () => {
+    // good-old-rock and second-wind are both Rock-bound Majors, so the tie keeps
+    // the first pick in place and the second one's full 2 marks are displaced.
+    const { delays, rolledMove } = openingMarks(['good-old-rock', 'second-wind'], first);
     expect(delays.rock).toBe(2);
+    expect(rolledMove).not.toBe('rock');
+    expect(delays[rolledMove as Move]).toBe(2);
     expect(Object.values(delays).filter((n) => n > 0)).toHaveLength(2);
   });
 
@@ -130,7 +140,8 @@ describe('openingMarks', () => {
     const total = (d: Record<Move, number>) => Object.values(d).reduce((n, m) => n + m, 0);
     expect(total(openingMarks(['good-old-rock', 'sacrifice'], first).delays)).toBe(4);
     expect(total(openingMarks(['tempered', 'featherweight'], first).delays)).toBe(2);
-    expect(total(openingMarks(['ferrus', 'poker-face'], first).delays)).toBe(3);
+    expect(total(openingMarks(['ferrus', 'grudge'], first).delays)).toBe(3);
+    expect(total(openingMarks(['ferrus', 'poker-face'], first).delays)).toBe(2);
   });
 });
 

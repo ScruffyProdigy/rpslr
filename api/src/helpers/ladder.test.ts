@@ -23,8 +23,9 @@ const shapeOf = (a: string, b: string) =>
   [a, b].sort((x, y) => TIER_ORDER.indexOf(x) - TIER_ORDER.indexOf(y)).join('+');
 
 describe('the tier ladder holds for every legal loadout', () => {
-  it('has 231 loadouts', () => {
-    expect(PAIRS).toHaveLength(231);
+  it('has 210 loadouts', () => {
+    // C(21, 2). Was 231 at 22 helpers, before Blind Spot was cut.
+    expect(PAIRS).toHaveLength(210);
   });
 
   it('blocks exactly one move per bound helper, whatever they are bound to', () => {
@@ -75,9 +76,7 @@ describe('the tier ladder holds for every legal loadout', () => {
     for (const [a, b] of PAIRS) {
       const loadout = [a.id, b.id] as Loadout;
       const roll = rollFor(loadout, first);
-      // Blind Spot's hidden move is named at the draft, so a loadout holding it
-      // cannot be compiled without one.
-      const rules = rulesFor(loadout, { roll, blindSpot: 'paper' });
+      const rules = rulesFor(loadout, { roll });
       // Play whatever is live, twice, so per-round hooks all get exercised.
       const opening = availableMoves(rules.initialDelays);
       const rounds = [
