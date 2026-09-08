@@ -58,7 +58,8 @@ loadout.
 | `exclusionKey` | Specified in the contract, **not built** — no consumer once Blind Spot went | Ryan, 2026-09-08 |
 | Where the pick happens | Pre-queue in the lobby only; no in-game draft | Ryan, 2026-09-08 |
 | JQ-163 contract status | **Not frozen** — the game may push changes back as real data appears | Ryan, 2026-09-08 |
-| Missing `options` on provision | Default to Ferrus + Featherweight (today's `lizard: 1, robot: 2` opening), until `REQUIRE_PREQUEUE_OPTIONS=true` | This plan, §Tandem deploy |
+| Missing `options` on provision | **`400`. No default loadout** — a missing selection is not a valid selection | Ryan, 2026-09-08 |
+| Sacrifice's round | The firer **still picks**. Marks clear, then the move they played takes its normal cost — they enter the next round at 4 live, not 5 | Claude, 2026-09-08, on Ryan's delegation |
 | Rejection code for a bad loadout | `400`, not `403` — `403` is reserved for banlist and seat-reservation | This plan |
 | The four underpriced charge Majors | Recharge on a mark cooldown on the ability's own slot, rather than being resized or converted to passives | Ryan, 2026-09-08 |
 | Where an ability's cost is charged | To the ability's own slot, **not** to the move you played | Ryan, 2026-09-08 |

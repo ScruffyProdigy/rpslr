@@ -1,21 +1,30 @@
 {
   "request": {
     "lobbyId": "https://lobby.local",
-    "lobby": { "returnUrl": "http://localhost:5173", "graphqlUrl": "http://localhost:8080/query" },
+    "lobby": {
+      "returnUrl": "http://localhost:5173",
+      "graphqlUrl": "http://localhost:8080/query"
+    },
     "assignment": {
       "externalMatchId": "fixture-missing-options",
       "gameMode": "duel-helpers",
       "bestOf": 5,
       "seats": [
-        { "seatKey": "1", "lobbyUserId": "u_1" },
-        { "seatKey": "2", "lobbyUserId": "u_2" }
+        {
+          "seatKey": "1",
+          "lobbyUserId": "u_1"
+        },
+        {
+          "seatKey": "2",
+          "lobbyUserId": "u_2"
+        }
       ]
     }
   },
   "expect": {
-    "status": 201,
-    "note": "Both seats get the default loadout Ferrus + Featherweight, which is exactly the duel opening (lizard 1, robot 2). A warning is logged per defaulted seat. With REQUIRE_PREQUEUE_OPTIONS=true this becomes 400 instead.",
-    "defaultLoadout": ["ferrus", "featherweight"],
-    "whenRequired": { "status": 400, "reason": "pre-queue selection is required" }
+    "status": 400,
+    "seatKey": "1",
+    "reason": "pre-queue selection is required",
+    "note": "There is no default loadout. A mode declaring preQueue requires a selection per seat; a missing one is not a valid selection. Ryan, 2026-09-08."
   }
 }

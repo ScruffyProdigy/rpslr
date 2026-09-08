@@ -1,6 +1,6 @@
 # Pre-Queue Options — Lobby ↔ Game Contract
 
-**Contract version:** 4
+**Contract version:** 5
 **Status:** Agreed and closed. Nothing open.
 **Game side:** [JQ-146 epic](https://linear.app/joinquest/issue/JQ-146), primarily
 [JQ-148](https://linear.app/joinquest/issue/JQ-148)
@@ -20,6 +20,7 @@ discovery, provisioning, link-out and claim. Read that first; this only adds opt
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5 | 2026-09-08 | **No default loadout.** A missing selection is a `400`; `REQUIRE_PREQUEUE_OPTIONS` removed along with the permissive mode it flagged. |
 | 4 | 2026-09-08 | Blind Spot cut from the roster (Ryan). The roster is 21 helpers. `exclusionKey` keeps its specification but has no consumer and is **not to be built** until one appears. |
 | 3 | 2026-09-08 | `exclusionKey` agreed and promoted into §2. Added the sibling-replacement rule for pickers at max, the ban on inferring exclusion from id syntax, and the degenerate-roster rule. |
 | 2 | 2026-09-08 | Negotiated with JQ-163. `group`→`section` to resolve a collision; `select`→per-group `min`/`max`; `rosterPath` dropped for the conventional path; `capabilities` dropped; `blurb`→`description`; provision options become an array of per-group selections. |
@@ -106,7 +107,7 @@ decks you built", which no manifest can express.
       "label": "Ferrus",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Your Robot takes 1 mark instead of 2.",
+      "description": "When you play Robot, the move they played takes an extra mark.",
       "locked": false
     }
   ]
@@ -257,23 +258,29 @@ live — that is a separate, deliberate step. Confirmed by the JQ-163 session,
 3. Game's manifest declares `preQueue`. This is the moment the feature goes live,
    and the moment §2's fail-closed roster starts mattering: from here a slow or
    unreachable `queue-options` makes `duel-helpers` unjoinable rather than degraded.
-4. `REQUIRE_PREQUEUE_OPTIONS=true` once real selections are arriving.
+There is no fourth step. Provision was never permissive, so there is nothing to
+tighten afterwards — the mode either has selections or it rejects the match.
 
 Step 3 is the risky one, not the merges. Do not put `queue-options` behind anything
 with a cold start.
 
-What remains on the game side:
+What remains on the game side: **nothing**. There is no default loadout.
 
-A `duel-helpers` provision with **no** `options` on a seat gets a default loadout of
-Ferrus + Featherweight — 2 marks on Robot, 1 on Lizard, exactly RPSLR's existing
-`lizard: 1, robot: 2` opening. Every defaulted seat logs a warning, and
-`REQUIRE_PREQUEUE_OPTIONS=true` turns it into a `400`.
+A `duel-helpers` provision with no `options` on a seat is rejected with a `400`.
+A mode that declares `preQueue` requires a selection per seat, and a missing
+selection is not a valid one — Ryan's call, 2026-09-08.
 
-This is now a **narrow** safety net rather than the deploy mechanism it was in v1:
-it covers standalone mode, the stub-lobby harness, and any provision that omits
-options for a reason neither side anticipated.
+v1 through v3 specified a default of Ferrus + Featherweight, chosen because it
+reproduces `lizard: 1, robot: 2`. That was wrong twice over. It reproduces the
+*opening marks* of `duel` but not its play, because both cards carry permanent
+effects — so it silently handed two real abilities to a player who chose nothing.
+That is the same silent-wrong-state pattern this contract asked the lobby to close
+in JQ-211, and there is no honest neutral loadout available: every Major and Minor
+has an ongoing effect, and Trinkets cost 0 marks so cannot supply an opening at all.
 
----
+Standalone mode and `scripts/stub-lobby.sh` name a loadout explicitly instead, which
+is both clearer and testable. `REQUIRE_PREQUEUE_OPTIONS` is gone with the default —
+there is no longer a permissive mode to flag off.
 
 ## 6. Fixtures
 
