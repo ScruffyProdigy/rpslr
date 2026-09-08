@@ -560,6 +560,15 @@ describe('Sacrifice', () => {
     expect(b.paper).toBe(2);
   });
 
+  it('is a real draw, so the opponent’s draw cards still reach across it', () => {
+    // Echo Chamber is "on a drawn round, their move takes an extra mark and yours
+    // doesn't". The clear lands at fire time, so a mark the round goes on to add
+    // survives it: the firer does not get to wipe what the round costs them.
+    const echo = rulesFor(['echo-chamber', 'watchful']);
+    const { a } = replayMatch([round], firer, echo);
+    expect(a).toEqual({ rock: 3, paper: 0, scissors: 0, lizard: 0, robot: 0 });
+  });
+
   it('is a real draw, so the opponent’s draw cards price it as one', () => {
     // Copycat is "on a drawn round, your move takes 1 mark instead of 2". A
     // sacrificed round is drawn, so it does — giving up the round is not a way to
