@@ -29,3 +29,18 @@ describe('loadConfig CORS', () => {
     ]);
   });
 });
+
+describe('client origin', () => {
+  it('falls back to the play URL when no client origin is configured', () => {
+    const config = loadConfig({ GAME_PLAY_URL: 'https://rpsls-duel.win' } as NodeJS.ProcessEnv);
+    expect(config.clientOrigin).toBe('https://rpsls-duel.win');
+  });
+
+  it('prefers an explicit client origin, so k8s can point at the in-cluster service', () => {
+    const config = loadConfig({
+      GAME_PLAY_URL: 'https://rpsls-duel.win',
+      GAME_CLIENT_ORIGIN: 'http://rps-game-client',
+    } as NodeJS.ProcessEnv);
+    expect(config.clientOrigin).toBe('http://rps-game-client');
+  });
+});

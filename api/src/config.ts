@@ -16,6 +16,12 @@ export interface AppConfig {
   tokenAudiences: string[];
   /** Browser play URL for launch link minting (GAME_PLAY_URL). */
   playUrl: string;
+  /**
+   * Where /replay fetches the SPA shell from (GAME_CLIENT_ORIGIN). Defaults to
+   * playUrl; in Kubernetes it is the in-cluster client service, so the request
+   * does not hairpin out through the ingress and back.
+   */
+  clientOrigin: string;
 }
 
 function splitList(raw: string | undefined): string[] {
@@ -92,6 +98,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     bannedLobbyUsers: splitList(env.BANNED_LOBBY_USERS),
     tokenAudiences,
     playUrl,
+    clientOrigin: (env.GAME_CLIENT_ORIGIN ?? '').trim() || playUrl,
   };
 }
 
