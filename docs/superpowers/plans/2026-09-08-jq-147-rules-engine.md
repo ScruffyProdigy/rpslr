@@ -29,8 +29,10 @@ Inherited from the epic plan — every task's requirements include these:
 - Only a Major may carry a charge — enforced at the **type level**, so a Minor with
   a charge fails `tsc`, not a runtime assertion.
 - The tier ladder is fitted to a two-helper loadout and `DELAY_ON_CHOICE = 2`.
-- All 22 helpers. **Except:** no charge Major is implemented until Task 1.0 of the
-  epic plan (the resize sign-off) closes. Sub-task 1.6 is gated on it.
+- All 22 helpers. An ability is not spent once per match: it sits on its own slot on
+  the cooldown track with **opening marks** and **recharge marks**, both in the same
+  delay marks a move uses. "Once per match" is a recharge of never. Firing costs the
+  ability's slot, never the move you played. — Ryan's call, 2026-09-08.
 
 ---
 
@@ -835,22 +837,77 @@ git commit -m "JQ-147: the rules arrive as an argument, and a round can reach ac
 
 ---
 
-## Task 1.6: The charge Majors and Quarantine
+## Task 1.6: The cooldown abilities and Quarantine
 
-**Gated on the epic plan's Task 1.0 sign-off. Do not start before it closes.**
+**No longer gated.** The resize this used to wait on is gone; the shape below is
+settled even though the per-card numbers are not, and the numbers are only data.
 
 **Files:**
-- Modify: `api/src/helpers/rules.ts`, `api/src/helpers/rules.test.ts`
+- Modify: `api/src/helpers/roster.ts`, `api/src/helpers/rules.ts`
+- Modify: `api/src/game.ts` — `PlayerRules` gains ability state
+- Modify: `api/src/service.ts`, and the round-result shape
+- Test: `api/src/helpers/rules.test.ts`, `api/src/helpers/abilities.test.ts`
 
-Sacrifice, Rust, Thief, Freeze and Quarantine are not pure functions of the round —
-each is a state transition over a per-match charge, and Quarantine takes a named
-move each round. They need `PlayerRules` to gain a charge-state parameter, whose
-shape depends on the resized effects Task 1.0 settles. Oracle's sub-phase is JQ-150.
+**Interfaces:**
+- Consumes: everything in 1.1–1.5.
+- Produces: `AbilityState`, `abilityMarks(loadout, firings)`, and a `fired` field on
+  the round record. JQ-149's picker and JQ-151's pentagon both read the first.
 
-Writing the steps now would mean inventing signatures for effects whose values are
-not yet decided. This sub-task's plan is written when Task 1.0 closes — that is a
-deliberate deferral of *planning*, not of work, and it is the only one in this
-document.
+### What changes, and the one thing that is not free
+
+`Load` stops being a bare string. An ability carries its two numbers, and the
+type-level rule — only a Major may have one — survives unchanged:
+
+```ts
+export type Load =
+  | { kind: 'passive' }
+  | { kind: 'per-round' }
+  /** `recharge: null` is "once per match"; there is no separate charge kind. */
+  | { kind: 'ability'; opening: number; recharge: number | null };
+```
+
+The ability's marks decrement once per round with everything else, so they replay
+from the round list exactly as a move's do — **except for one thing.** Firing is a
+*choice*, not a consequence of the moves played, so it is not derivable and has to be
+recorded. `replayMatch` stays pure only if the decision arrives with the round:
+
+```ts
+export interface PlayedRound {
+  a: Move;
+  b: Move;
+  /** Ability ids each seat fired this round. Empty for every duel round. */
+  firedA?: HelperId[];
+  firedB?: HelperId[];
+}
+```
+
+That is the schema line this task costs, and it belongs in JQ-148's migration
+alongside the loadout columns rather than in a migration of its own.
+
+### Order
+
+1. **`Load` gains the two numbers.** Roster only; `rules.ts` untouched. The
+   `duel` byte-identity fixture must not move — nothing about a duel reads `Load`.
+2. **`abilityMarks`** — pure, in `helpers/`: given a loadout and the firings so far,
+   what each ability's marks stand at. Mirrors `computeDelays` and is tested the
+   same way, including that an ability with `recharge: null` never returns.
+3. **`PlayerRules` gains `abilities`** — available/marks per ability, plus the hook
+   each effect needs. `BASE_RULES` gets an empty map, so `duel` is still the
+   identity element and the fixture still holds.
+4. **The four effects**, one commit each, each a pure state transition tested on its
+   own: Rust, Thief, Freeze, Sacrifice.
+5. **Quarantine** — per-round, so it takes a named move per round rather than a
+   firing. Same `PlayedRound` extension, different field.
+6. **Service wiring and the round record.**
+
+Oracle stays out: its mid-round reveal sub-phase is JQ-150, and it is the one ability
+whose recharge is `null` anyway.
+
+### What a failure here looks like
+
+The ladder test in 1.7 covers opening marks on *moves*. Abilities need the
+equivalent: for all 231 loadouts, every ability is either available on the round its
+opening marks say or never, and no sequence of firings drives any mark below zero.
 
 ---
 
@@ -981,11 +1038,12 @@ handling → 1.4. `computeDelays` takes the loadout and replays purely → 1.5
 (`replayMatch`). Charge only on a Major, as a build error → 1.1's type. All 231
 loadouts match the shape table → 1.7. Duplicate helper rejected → 1.2 (the `400`
 itself is JQ-148). `duel` tests pass unchanged and state is byte-identical → 1.7.
-Unit tests per passive helper → 1.4; per charge Major → 1.6, gated.
+Unit tests per passive helper → 1.4; per cooldown ability → 1.6, now planned.
 
-**Placeholders.** One deliberate deferral, 1.6, with its reason stated: its
-signatures depend on values Ryan has not yet signed off, and inventing them would be
-worse than waiting. Everything else carries real code.
+**Placeholders.** None. 1.6 was the one deferral, on the grounds that its signatures
+depended on effects nobody had signed off. The cooldown model settles the shape
+without settling the numbers — the numbers are data in `roster.ts`, not signatures —
+so 1.6 now carries a real plan and the deferral is closed.
 
 **Type consistency.** `PlayerOutcome` (player-relative) is deliberately distinct
 from `game.ts`'s `RoundOutcome` (seat-relative); `replayMatch` converts between them

@@ -31,8 +31,13 @@ loadout.
   There is no in-game draft screen. See "Consequences of pre-queue-only" below.
 - A loadout is any **two distinct** helpers. No slot rule.
 - Mark costs: Major 2, Minor 1, Trinket 0, placed on the helper's bound move.
-- Only a Major may carry a charge. A Minor or Trinket with one is a **build error**
+- Only a Major may carry an ability. A Minor or Trinket with one is a **build error**
   (a TypeScript type error), not a runtime check.
+- An ability is not spent once per match. It sits on its **own slot on the cooldown
+  track** and carries two numbers, both in delay marks: **opening marks** (how long
+  before it is first available) and **recharge marks** (what firing costs, and so how
+  often it returns). "Once per match" is just a recharge of never. — Ryan's call,
+  2026-09-08; see "Abilities recharge" below.
 - Tier ladder prices one tier step at 3pp of ability. It is fitted to two constants:
   a two-helper loadout and `DELAY_ON_CHOICE = 2`. Changing either invalidates it.
 - Colour/type tokens: `--warn` for urgency, never `--danger`; never `--you`/`--opp`
@@ -50,6 +55,9 @@ loadout.
 | JQ-163 contract status | **Not frozen** — the game may push changes back as real data appears | Ryan, 2026-09-08 |
 | Missing `options` on provision | Default to Ferrus + Featherweight (today's `lizard: 1, robot: 2` opening), until `REQUIRE_PREQUEUE_OPTIONS=true` | This plan, §Tandem deploy |
 | Rejection code for a bad loadout | `400`, not `403` — `403` is reserved for banlist and seat-reservation | This plan |
+| The four underpriced charge Majors | Recharge on a mark cooldown on the ability's own slot, rather than being resized or converted to passives | Ryan, 2026-09-08 |
+| Where an ability's cost is charged | To the ability's own slot, **not** to the move you played | Ryan, 2026-09-08 |
+| Sacrifice's availability | Gated out of the early game with opening marks; starting point 3 opening / 3 recharge | Ryan, 2026-09-08 |
 
 ### Consequences of pre-queue-only
 
@@ -82,14 +90,81 @@ yet reflect. Each is handled by a task below.
    test's 231 stands. Plain (b) would take the engine to 26 helpers and **325**
    loadouts. The constant in `ladder.test.ts` depends on which way Ryan goes.
 
-### Open, and blocking JQ-147
+### Abilities recharge
 
-**The four charge Majors are underpriced and must be resized before they are built.**
-The design doc is explicit: Rust, Freeze, Thief and Sacrifice are each a one-off
-tempo nudge worth about +0.2 for one round (≈ +3.7pp of match win) against passives
-earning 9–10pp. Under "all 22" they cannot be deferred. Task 1.0 puts concrete
-numbers in front of Ryan for sign-off; **no charge Major is implemented until that
-is signed off.**
+**This replaces the resize that used to block JQ-147.**
+
+Rust, Freeze, Thief and Sacrifice are each a one-off tempo nudge worth about +0.2
+for one round (≈ +3.7pp of match win) against passives earning 9–10pp — underpriced
+by roughly 2.5×. The original answer was to rewrite the four effects until each was
+several times its current size. The answer now is to leave the effects alone and let
+them **fire more than once**: at ~2–3 uses a match the arithmetic lands on the 9–10pp
+target with one number per card instead of four new abilities to design and re-derive.
+
+An ability occupies **its own slot on the cooldown track**. Firing it costs that slot
+N delay marks, which decrement once per round exactly as a move's do. Nothing new to
+learn and nothing new to render — it is the mechanic and the pentagon the player
+already reads, with a sixth thing on it.
+
+**The cost is charged to the ability, never to the move you played.** That variant was
+considered and rejected. Marks only bite when they push you below three live, so
+charging the played move gives a cost curve of *free → real → you have deleted that
+move for the rest of the match* with nothing usable at the top, and the pain lands two
+rounds after the decision, where players systematically underprice it.
+
+Two knobs per ability, both in existing vocabulary:
+
+| | Meaning | What it tunes |
+| --- | --- | --- |
+| **Opening marks** | How long before it is first available. The same fabricated history that opens Robot at 2 and Lizard at 1 | **Pacing** — which phase of the match a card is allowed to matter in |
+| **Recharge marks** | What firing costs, so how often it comes back | **Power** — uses per match |
+
+Opening marks are what give per-card range. A best-of-5 runs about five or six rounds,
+so recharge length alone is close to a two-position switch (2 uses or 3); opening marks
+are the second dimension.
+
+**Sacrifice is the worked example.** Without opening marks its strongest line is also
+its dullest: round 1 carries the most loadout marks, so clearing them pays best exactly
+when the card is cheapest to use, and skipping round 1 to emerge five-live against four
+is a lame opening gambit rather than a desperate reset. Starting point **3 opening / 3
+recharge** — first available round 4, and it only returns in a match that grinds past
+round 7. The matches where it recharges are the long ones, which are the close ones, so
+the card self-selects into the comeback slot without "when behind" appearing in its text.
+
+An earlier worry that a repeatable "clear all your marks" trends toward the cut
+Metronome does not hold: Sacrifice's cost is paid **in the race itself**, since a forced
+draw is a round that cannot be a win, and that cost scales with every use. Metronome's
+did not. Keep Sacrifice slow for pacing, not for power.
+
+**Oracle keeps recharge = never.** The design doc has it correctly sized as a one-shot
+at ≈ +9pp, and a sustained edge is worth roughly 5× the same edge used once, so
+recharging it would break the one charge that already works. Quarantine is untouched —
+it is per-round, a different load type.
+
+#### The dynamic this creates, and what it costs to measure
+
+A public, timed power spike splits the two players' interests: the Sacrifice holder
+wants the match to reach round 4, the opponent wants it over first. In RPSLR that is
+not an abstract preference, because **the draw-seeking move is the predictable one** —
+a draw is only possible inside the overlap of the two live sets, so a player buying
+time picks inside the overlap and accepts being readable, which is the thing the design
+doc says loses you games. The opponent forces a decision by picking outside the overlap,
+often paying EV for it. The dial already exists and currently has nothing to reward it.
+
+Two consequences:
+
+- **The stall archetype is already taxed.** Its core is Good Old Rock + Sacrifice, both
+  Rock-bound Majors, so it is a Major + Major loadout — the shape the tier ladder
+  already sits at −3.8pp. Do not undo that by accident.
+- **There is no round cap.** `matchWinner` returns null until someone reaches
+  `winsNeeded` and rounds simply increment. Unbounded matches were already possible in
+  principle, since draws do not score; a deliberate draw-seeking archetype makes it
+  reachable in practice. Worth deciding rather than discovering.
+
+And it changes what JQ-152 has to collect: a *threatened* Sacrifice warps the opponent's
+play whether or not it ever fires, so win-rate-by-loadout will systematically under-read
+it — the card wins matches it never activates in. That telemetry needs **draw rate and
+round count per loadout**, not only pick rate and win rate.
 
 ---
 
@@ -458,17 +533,34 @@ git commit -m "JQ-146: agree the shape of a pre-queue loadout before building on
 
 ---
 
-## Task 1.0: Resize the four charge Majors (blocks JQ-147)
+## Task 1.0: Pick opening and recharge marks per ability (no longer blocks JQ-147)
 
 **Files:**
-- Modify: the Notion design doc's Majors table (via `notion-update-page`)
+- Modify: `api/src/helpers/roster.ts` — `Load` carries the two numbers
 - Modify: `docs/prequeue-options-contract.md` fixture blurbs, if wording changes
 
-Not a code task. Rust, Freeze, Thief and Sacrifice are each worth ≈ +3.7pp against
-passives earning 9–10pp. Put concrete resized effects in front of Ryan — each
-either scaled up to roughly a +0.5 one-shot swing (Oracle's proven size) or
-converted to a passive — get sign-off, then update the design doc and the roster
-fixture. **No charge Major is implemented before this closes.**
+Not the sign-off gate it used to be. The resize is gone: the effects stay as written
+and the tuning is two numbers per ability, in a currency the design doc has already
+priced at ~3pp a mark. That is small enough to pick plausible values, ship, and let
+JQ-152 move them — which is what telemetry is load-bearing for — rather than holding
+the epic on a solver run nobody has.
+
+Starting values to build against, all revisable:
+
+| Ability | Opening | Recharge | Uses in a bo5 | Why |
+| --- | --- | --- | --- | --- |
+| Rust | 0 | 3 | 2 | Standard. 2 × 3.7pp lands near the 9–10pp target |
+| Thief | 0 | 3 | 2 | Standard |
+| Freeze | 0 | 3 | 2 | Standard |
+| Sacrifice | 3 | 3 | 1, late | Late-game only; see "Abilities recharge" |
+| Oracle | 0 | never | 1 | Already correctly sized as a one-shot; do not recharge |
+
+Repeated edges compound superlinearly in the doc's model (+0.10 once is +1.9pp, +0.10
+sustained is +10.1pp — ~5× for three or four firings, not 3×), so 1 → 2 uses is likely
+worth ~2.5–3×, not 2×. That is why recharge 3 rather than 2: a 2-round recharge gives
+three uses and probably overshoots to 13–15pp.
+
+Take these to Ryan as a batch once JQ-152 has data, not before.
 
 ---
 
