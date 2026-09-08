@@ -28,6 +28,7 @@ import {
   type Move,
   type PlayerRules,
 } from '../game.js';
+import { slotsFor } from './abilities.js';
 import { helpersIn, openingMarks, type Loadout, type MovePicker } from './loadout.js';
 import type { HelperId } from './roster.js';
 
@@ -99,6 +100,7 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
     rolledMove,
     beats,
     disclosure,
+    abilities: slotsFor(loadout),
 
     /**
      * Marks the chosen move takes. Order is the semantics, so it is spelled out
@@ -112,6 +114,49 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      *  3. A per-move discount beats an outcome surcharge: Featherweight says Lizard
      *     takes 1, full stop, rather than bending to how the round went.
      */
+    /**
+     * What this seat's fired abilities do to the round. Firing is validated by the
+     * caller; a firing naming an ability this loadout does not hold is ignored
+     * here rather than trusted.
+     */
+    fireEffects({ firings, opponent, opponentDelays, ownDelays }) {
+      const fired = (id: HelperId) => (has(id) ? firings.find((f) => f.id === id) : undefined);
+      const marks: MarkAdjustment = { own: {}, opponent: {} };
+      const markTheirs = (move: Move, n: number) => {
+        marks.opponent[move] = (marks.opponent[move] ?? 0) + n;
+      };
+
+      // Quarantine names a move before the round; it lands only if they play it.
+      // The charge is spent either way, which `abilityMarks` handles by charging
+      // every firing — so a miss costs the same as a hit, as the card says.
+      const quarantine = fired('quarantine');
+      if (quarantine && quarantine.target === opponent) markTheirs(opponent, 2);
+
+      // Rust deepens a move already on cooldown, so a target they have clear is
+      // not a legal firing. The caller rejects one; ignoring it here means a bad
+      // firing cannot quietly become a free mark.
+      const rust = fired('rust');
+      if (rust?.target && opponentDelays[rust.target] > 0) markTheirs(rust.target, 2);
+
+      // Thief moves a mark rather than adding one, so it needs a mark to move: a
+      // source they have clear is not a legal firing and lands as nothing.
+      const thief = fired('thief');
+      if (thief?.source && thief.target && ownDelays[thief.source] > 0) {
+        marks.own[thief.source] = (marks.own[thief.source] ?? 0) - 1;
+        markTheirs(thief.target, 1);
+      }
+
+      return {
+        freezesOpponentDecay: Boolean(fired('freeze')),
+        marks,
+      };
+    },
+
+    /** Sacrifice gives up the round to wipe the board. Fired before either picks. */
+    declaresDraw(firings) {
+      return has('sacrifice') && firings.some((f) => f.id === 'sacrifice');
+    },
+
     delayOnChoice({ move, outcome, roundIndex }) {
       if (has('bookend') && roundIndex === 0) return 1;
       if (outcome === 'draw') {

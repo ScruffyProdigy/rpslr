@@ -112,6 +112,67 @@ export interface Disclosure {
 }
 
 /**
+ * One ability's cooldown slot, as the engine sees it.
+ *
+ * Declared here rather than in `helpers/` for the same reason `PlayerRules` is:
+ * it is a parameter of this engine, so the dependency keeps running one way. The
+ * roster fills these in; the engine only ever reads them.
+ */
+export interface AbilitySlot {
+  /** Marks the ability starts the match on, and so how long before it may fire. */
+  opening: number;
+  /** Marks firing costs. `null` is "once per match": firing spends it for good. */
+  recharge: number | null;
+}
+
+/** The ability slots one seat holds, keyed by the helper id that granted them. */
+export type AbilitySlots = Record<string, AbilitySlot>;
+
+/**
+ * One ability fired in one round.
+ *
+ * `id` is a plain `string` rather than a roster type on purpose: this engine
+ * imports nothing from the cards, so it knows an ability only by the name the
+ * rules it was handed answer to.
+ */
+export interface Firing {
+  id: string;
+  /** The opponent move this firing names: Quarantine's guess, Rust's and Thief's target. */
+  target?: Move;
+  /** Thief alone also names one of its owner's moves, to take the mark from. */
+  source?: Move;
+}
+
+/** What a seat fired this round, as the effects hook sees it. */
+export interface FiringContext {
+  firings: readonly Firing[];
+  own: Move;
+  opponent: Move;
+  /**
+   * The opponent's marks as they stand *entering* the round, before the decrement.
+   *
+   * Rust needs it: "a move they currently have live" is what the firing player was
+   * looking at when they named it, not what survives the end of the round.
+   */
+  opponentDelays: DelayMap;
+  /** This seat's own marks entering the round. Thief takes from these. */
+  ownDelays: DelayMap;
+}
+
+/** What a seat's firings do to the round, beyond what its moves do. */
+export interface FiringEffect {
+  /** Freeze: the opponent's marks do not come off at the end of this round. */
+  freezesOpponentDecay: boolean;
+  /** Marks the firings add, on either side of the table. */
+  marks: MarkAdjustment;
+}
+
+export const NO_FIRING_EFFECT: FiringEffect = {
+  freezesOpponentDecay: false,
+  marks: { own: {}, opponent: {} },
+};
+
+/**
  * Every rule the engine needs from one seat. A loadout compiles to one of these;
  * a plain duel uses `BASE_RULES`.
  */
@@ -121,6 +182,17 @@ export interface PlayerRules {
   rolledMove: Move | null;
   beats: Record<Move, readonly Move[]>;
   disclosure: Disclosure;
+  /** Abilities this seat may fire. Empty for a duel, and for an all-passive loadout. */
+  abilities: AbilitySlots;
+  /** What this seat's abilities do to a round when fired. */
+  fireEffects(ctx: FiringContext): FiringEffect;
+  /**
+   * Sacrifice: fired *before* either seat picks, so it settles the round on its
+   * own rather than adjusting one that happened. Kept apart from `fireEffects`
+   * because of that timing — it needs none of the round's moves or marks, and it
+   * runs before every hook that does.
+   */
+  declaresDraw(firings: readonly Firing[]): boolean;
   delayOnChoice(ctx: DelayContext): number;
   transformOutcome(raw: PlayerOutcome, ctx: OutcomeContext): PlayerOutcome;
   adjustAfterRound(ctx: OutcomeContext & { outcome: PlayerOutcome }): MarkAdjustment;
@@ -143,6 +215,9 @@ export const BASE_RULES: PlayerRules = {
   rolledMove: null,
   beats: BEATS,
   disclosure: NO_DISCLOSURE,
+  abilities: {},
+  fireEffects: () => NO_FIRING_EFFECT,
+  declaresDraw: () => false,
   delayOnChoice: () => DELAY_ON_CHOICE,
   transformOutcome: (raw) => raw,
   adjustAfterRound: () => NO_ADJUSTMENT,
@@ -168,6 +243,15 @@ export function computeDelays(moves: Move[]): DelayMap {
 export interface PlayedRound {
   a: Move;
   b: Move;
+  /**
+   * What each seat fired this round.
+   *
+   * The one thing here a replay cannot derive: every other input to the marks
+   * follows from the moves, but firing is a *choice*, so it has to arrive with
+   * the round or be lost. Absent on every duel round.
+   */
+  firedA?: readonly Firing[];
+  firedB?: readonly Firing[];
 }
 
 /**
@@ -195,10 +279,35 @@ export function replayMatch(
       lossesB,
     });
 
+    // Firings are read before anything else in the round moves: Freeze acts on the
+    // decrement below, so it has to be known before it happens.
+    const firedA = rulesA.fireEffects({
+      firings: round.firedA ?? [],
+      own: round.a,
+      opponent: round.b,
+      opponentDelays: { ...b },
+      ownDelays: { ...a },
+    });
+    const firedB = rulesB.fireEffects({
+      firings: round.firedB ?? [],
+      own: round.b,
+      opponent: round.a,
+      opponentDelays: { ...a },
+      ownDelays: { ...b },
+    });
+
     for (const m of MOVES) {
-      a[m] = Math.max(0, a[m] - 1);
-      b[m] = Math.max(0, b[m] - 1);
+      if (!firedB.freezesOpponentDecay) a[m] = Math.max(0, a[m] - 1);
+      if (!firedA.freezesOpponentDecay) b[m] = Math.max(0, b[m] - 1);
     }
+    // Sacrifice clears its owner's board when it is *fired*, which is before either
+    // seat picks — so the move they go on to play still takes its normal cost, and
+    // they enter the next round with four moves live rather than five. Clearing at
+    // the end of the round instead would hand back the tempo too, making a Major
+    // that costs nothing to fire and yields the strongest board in the game.
+    if (rulesA.declaresDraw(round.firedA ?? [])) for (const m of MOVES) a[m] = 0;
+    if (rulesB.declaresDraw(round.firedB ?? [])) for (const m of MOVES) b[m] = 0;
+
     a[round.a] += rulesA.delayOnChoice({ move: round.a, outcome: outcomeA, roundIndex });
     b[round.b] += rulesB.delayOnChoice({ move: round.b, outcome: outcomeB, roundIndex });
 
@@ -210,6 +319,16 @@ export function replayMatch(
     for (const [m, n] of Object.entries(adjA.opponent)) b[m as Move] += n ?? 0;
     for (const [m, n] of Object.entries(adjB.own)) b[m as Move] += n ?? 0;
     for (const [m, n] of Object.entries(adjB.opponent)) a[m as Move] += n ?? 0;
+    // Floored, unlike the passive adjustments above: Thief is the first effect that
+    // subtracts, and a mark it names entering the round may already have decremented
+    // away by the time the adjustment lands.
+    const add = (marks: DelayMap, m: Move, n: number) => {
+      marks[m] = Math.max(0, marks[m] + n);
+    };
+    for (const [m, n] of Object.entries(firedA.marks.own)) add(a, m as Move, n ?? 0);
+    for (const [m, n] of Object.entries(firedA.marks.opponent)) add(b, m as Move, n ?? 0);
+    for (const [m, n] of Object.entries(firedB.marks.own)) add(b, m as Move, n ?? 0);
+    for (const [m, n] of Object.entries(firedB.marks.opponent)) add(a, m as Move, n ?? 0);
 
     if (outcomeA === 'loss') lossesA += 1;
     if (outcomeB === 'loss') lossesB += 1;
@@ -263,6 +382,13 @@ export function resolveRound(
   rulesB: PlayerRules,
   at: { roundIndex: number; lossesA: number; lossesB: number },
 ): { seat: RoundOutcome; outcomeA: PlayerOutcome; outcomeB: PlayerOutcome } {
+  // A sacrificed round is a draw before either seat picks, so there is no result
+  // for `transformOutcome` to read: Sharp Practice cannot turn it into a win, and
+  // Good Old Rock has no loss to spare.
+  if (rulesA.declaresDraw(round.firedA ?? []) || rulesB.declaresDraw(round.firedB ?? [])) {
+    return { seat: 'draw', outcomeA: 'draw', outcomeB: 'draw' };
+  }
+
   const seat = seatWinner(round, rulesA, rulesB);
   const rawA: PlayerOutcome = seat === 'a' ? 'win' : seat === 'b' ? 'loss' : 'draw';
   const rawB: PlayerOutcome = seat === 'b' ? 'win' : seat === 'a' ? 'loss' : 'draw';
