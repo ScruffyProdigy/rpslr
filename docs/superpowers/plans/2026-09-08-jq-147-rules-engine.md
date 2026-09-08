@@ -865,6 +865,8 @@ export type Load =
   | { kind: 'ability'; opening: number; recharge: number | null };
 ```
 
+This already landed — see step 1 below.
+
 The ability's marks decrement once per round with everything else, so they replay
 from the round list exactly as a move's do — **except for one thing.** Firing is a
 *choice*, not a consequence of the moves played, so it is not derivable and has to be
@@ -885,8 +887,10 @@ alongside the loadout columns rather than in a migration of its own.
 
 ### Order
 
-1. **`Load` gains the two numbers.** Roster only; `rules.ts` untouched. The
-   `duel` byte-identity fixture must not move — nothing about a duel reads `Load`.
+1. ~~**`Load` gains the two numbers.**~~ Done ahead of this task: the numbers were
+   settled, and the roster is the source of truth JQ-148's picker renders from, so
+   leaving `'charge'` and `'per-round'` there meant declaring load kinds the design
+   had stopped having. `isAbility` and the value table ship with it.
 2. **`abilityMarks`** — pure, in `helpers/`: given a loadout and the firings so far,
    what each ability's marks stand at. Mirrors `computeDelays` and is tested the
    same way, including that an ability with `recharge: null` never returns.
