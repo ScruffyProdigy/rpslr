@@ -120,7 +120,7 @@ function showdown(model: CardModel, layout: StoryLayout): string {
 
   // Asked for, not sliced out of the caption: a verb is a word about two moves,
   // and the table that knows it is one import away.
-  const verb = beatVerb(winnerMove, loserMove) ?? '';
+  const verb = beatVerb(winnerMove, loserMove);
 
   return [
     moveArtSvg(
