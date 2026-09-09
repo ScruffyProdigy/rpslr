@@ -18,7 +18,6 @@ import {
   cooldownPhrase,
   describeBeatsGraph,
   describeBeatsOf,
-  forcedPickCost,
   isForcedPick,
   isPlayable,
   opponentCooldownPhrase,
@@ -338,7 +337,7 @@ export function MovePicker({
           const isTarget = preview != null && preview !== m && beatsOf(preview).includes(m);
           const label = [
             MOVE_META[m].label,
-            forced ? `marked but playable, costs ${forcedPickCost(m, myDelays)} turns` : '',
+            forced ? 'marked but playable, costs you more' : '',
             blocked ? cooldownPhrase(myDelay) : '',
             blocked ? cooldownCause(m, myRecentMoves, myOpeningDelays).toLowerCase() : '',
             oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
@@ -381,8 +380,8 @@ export function MovePicker({
               <span className="move-btn__name">{MOVE_META[m].label}</span>
               {myDelay > 0 &&
                 (forced ? (
-                  // The button's own label says "marked but playable, costs N
-                  // turns". A second voice saying "on cooldown" would
+                  // The button's own label says "marked but playable, costs
+                  // you more". A second voice saying "on cooldown" would
                   // contradict it, so here the pill is decoration.
                   <span className="cooldown-pill" aria-hidden="true">
                     <UiIcon name="hourglass" /> {myDelay}
@@ -552,7 +551,7 @@ function PickerCenter({
         <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
         <p className="picker-center__forced">
           Every move is marked — {MOVE_META[shown].label} is your cheapest. Playing it puts it
-          down to {forcedPickCost(shown, myDelays)}.
+          further down.
         </p>
         {commitForced && (
           <button className="picker-center__lock" onClick={() => onCommit(commitForced)}>
@@ -584,7 +583,12 @@ function PickerCenter({
   return (
     <div className="picker-center">
       <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
-      {oppDelay > 0 && (
+      {/* "Opponent can't play X" is a playability claim, not a mark count —
+          so it has to ask isPlayable, which knows about the floor, rather
+          than merely reading oppDelay > 0. A fully-marked opponent's
+          least-marked moves are still playable, and saying otherwise here
+          hands the player a false all-clear (JQ-215). */}
+      {!isPlayable(shown, oppDelays) && (
         <p className="picker-center__opp">{opponentCooldownPhrase(shown, oppDelay)}</p>
       )}
       {commitTarget && (

@@ -197,6 +197,24 @@ describe('<MovePicker> opponent cooldown is drawn on the graph (JQ 2.3)', () => 
     expect(screen.getByText("Opponent can't play Robot for 2 turns")).toBeInTheDocument();
   });
 
+  it('withholds "opponent can\'t play" when the floor leaves them the move (JQ-215)', async () => {
+    // Own board ordinary — this is not about what I can play. Opponent is
+    // fully marked, with Paper and Lizard tied for fewest, so the floor keeps
+    // both playable for them. Saying "can't play" here would be a false
+    // all-clear the round itself disproves.
+    const user = userEvent.setup();
+    renderPicker({ oppDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(screen.queryByText(/Opponent can't play Paper/)).toBeNull();
+  });
+
+  it('still shows it for a move the floor genuinely did not reach (JQ-215)', async () => {
+    const user = userEvent.setup();
+    renderPicker({ oppDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(screen.getByText("Opponent can't play Robot for 4 turns")).toBeInTheDocument();
+  });
+
   it('shows a two-item legend', () => {
     renderPicker();
     const legend = screen.getByText(/your cooldown/);
@@ -681,23 +699,22 @@ describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
     expect(container.querySelectorAll('.move-btn--forced')).toHaveLength(2);
   });
 
-  it('says in words that it is playable and what it costs', () => {
+  it('says in words that it is playable and costs more', () => {
     renderPicker({ myDelays: ALL_MARKED });
     // Not colour-only: the same sentence the sighted player reads off the pill
     // and the centre has to reach a screen reader too.
     expect(
-      screen.getByRole('button', { name: /^Paper, marked but playable, costs 2 turns/ }),
+      screen.getByRole('button', { name: /^Paper, marked but playable, costs you more/ }),
     ).toBeInTheDocument();
   });
 
-  it('offers Lock in and names the cost in the centre', async () => {
+  it('offers Lock in and names the cost qualitatively in the centre', async () => {
     const user = userEvent.setup();
     const { container } = renderPicker({ myDelays: ALL_MARKED });
     await user.click(screen.getByRole('button', { name: /^Paper/ }));
     const centre = container.querySelector('.picker-center') as HTMLElement;
-    // 1 mark, minus this round's decrement, plus DELAY_ON_CHOICE = 2.
     expect(centre).toHaveTextContent('Every move is marked — Paper is your cheapest.');
-    expect(centre).toHaveTextContent('Playing it puts it down to 2.');
+    expect(centre).toHaveTextContent('Playing it puts it further down.');
     expect(container.querySelector('.picker-center--why')).toBeNull();
     expect(screen.getByRole('button', { name: /^Lock in Paper/ })).toBeInTheDocument();
   });

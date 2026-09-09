@@ -1,4 +1,4 @@
-import { DELAY_ON_CHOICE, MOVES, availableMoves, type DelayMap } from '@game/game';
+import { MOVES, availableMoves, type DelayMap } from '@game/game';
 import type { Move } from './api';
 
 /**
@@ -238,16 +238,4 @@ export function isPlayable(move: Move, delays: Record<string, number>): boolean 
  */
 export function isForcedPick(move: Move, delays: Record<string, number>): boolean {
   return isPlayable(move, delays) && (delays[move] ?? 0) > 0;
-}
-
-/**
- * What a forced pick leaves the move sitting on.
- *
- * `computeDelays` decrements every move by one and *then* adds
- * `DELAY_ON_CHOICE` to the one played, so playing a move that already carries
- * marks digs the hole deeper than playing a clear one — the cost the player
- * should be able to see before committing rather than discover next round.
- */
-export function forcedPickCost(move: Move, delays: Record<string, number>): number {
-  return Math.max(0, (delays[move] ?? 0) - 1) + DELAY_ON_CHOICE;
 }
