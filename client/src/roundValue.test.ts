@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { Move } from './api';
 import { ALL_MOVES, threatsTo } from './moves';
-import { INITIAL_DELAYS, advanceDelays, type DelayMap } from './replay';
+import { DELAY_ON_CHOICE, INITIAL_DELAYS, type DelayMap } from '@game/game';
 import { roundEdge, roundValue } from './roundValue';
+
+/**
+ * A duel's cooldown step: every move −1, then the pick +2.
+ *
+ * Spelled out here rather than imported because this search is about `duel` and
+ * nothing else — it enumerates the positions that mode can reach so `roundValue`
+ * can be checked against all of them. A helpers match reaches different ones, and
+ * would be a different search. The two numbers still come from the engine, so the
+ * duel it walks stays the duel the server plays.
+ */
+function advanceDelays(delays: DelayMap, chosen: Move): DelayMap {
+  const next = { ...delays };
+  for (const move of ALL_MOVES) next[move] = Math.max(0, next[move] - 1);
+  next[chosen] += DELAY_ON_CHOICE;
+  return next;
+}
 
 /** Every cooldown position the game can actually reach, to a useful depth. */
 function reachablePositions(depth = 6): [DelayMap, DelayMap][] {

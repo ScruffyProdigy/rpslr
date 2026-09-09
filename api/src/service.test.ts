@@ -403,6 +403,27 @@ describe('GameService — ability firings', () => {
     ]);
   });
 
+  it('charges the marks a fired ability landed to the seat it landed on', async () => {
+    // Quarantine names Rock; the other seat plays Rock into it. A firing is the one
+    // thing a board cannot be replayed without, so a state that ignored it would
+    // hand that player their move back two rounds early.
+    const { code, matchId, seatId, hostId, challengerId } = await playingMatch();
+    await repo.recordAbilityFiring({
+      matchId,
+      seatId,
+      round: 1,
+      helperId: 'quarantine',
+      target: 'rock',
+    });
+
+    await service.submitMove(code, hostId, 'paper');
+    await service.submitMove(code, challengerId, 'rock');
+
+    const state = await service.getState(code);
+    const challengerSeat = state.seats.find((s) => s.seatKey === '2')!;
+    expect(challengerSeat.delays.rock).toBe(4);
+  });
+
   it('refuses a second firing from the same seat in the same round', async () => {
     const { matchId, seatId } = await playingMatch();
     const firing = { matchId, seatId, round: 1, helperId: 'rust', target: null };

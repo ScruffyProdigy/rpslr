@@ -1,0 +1,236 @@
+{
+  "state": {
+    "match": {
+      "id": "498ad043-6215-4ae0-bb93-95f3bafc1c3f",
+      "code": "RPS-BQ5M",
+      "externalMatchId": null,
+      "lobbyId": null,
+      "lobbyReturnUrl": null,
+      "lobbyGraphqlUrl": null,
+      "lobbyServiceToken": null,
+      "lobbyPlayerProfiles": {},
+      "name": "Helpers replay",
+      "gameMode": "duel-helpers",
+      "status": "finished",
+      "bestOf": 3,
+      "currentRound": 6,
+      "phase": null,
+      "phaseStartedAt": null,
+      "phaseDeadline": null,
+      "endReason": "played",
+      "winnerSeatKey": "1",
+      "createdAt": "2026-09-08T23:39:51.550Z"
+    },
+    "seats": [
+      {
+        "id": "35d19568-e879-4fcc-be3f-8f908c2d3fac",
+        "matchId": "498ad043-6215-4ae0-bb93-95f3bafc1c3f",
+        "seatKey": "1",
+        "teamKey": null,
+        "role": null,
+        "position": 0,
+        "reservedForLobbyUser": null,
+        "lobbyProfile": null,
+        "player": {
+          "id": "4d4fe906-5bca-4154-9696-76615bf266dd",
+          "name": "Alice",
+          "lobbyUserId": null,
+          "score": 2,
+          "profile": null,
+          "expiryStrikes": 0
+        },
+        "delays": {
+          "rock": 0,
+          "paper": 2,
+          "scissors": 0,
+          "lizard": 2,
+          "robot": 0
+        },
+        "loadout": [
+          "grudge",
+          "small-mercy"
+        ],
+        "loadoutRoll": null
+      },
+      {
+        "id": "68515fc5-3c9b-4c31-bea3-477576c37671",
+        "matchId": "498ad043-6215-4ae0-bb93-95f3bafc1c3f",
+        "seatKey": "2",
+        "teamKey": null,
+        "role": null,
+        "position": 1,
+        "reservedForLobbyUser": null,
+        "lobbyProfile": null,
+        "player": {
+          "id": "89e1dde9-6549-44b8-83ba-7e8e579a2906",
+          "name": "Bob",
+          "lobbyUserId": null,
+          "score": 1,
+          "profile": null,
+          "expiryStrikes": 0
+        },
+        "delays": {
+          "rock": 2,
+          "paper": 0,
+          "scissors": 1,
+          "lizard": 0,
+          "robot": 0
+        },
+        "loadout": [
+          "echo-chamber",
+          "bookend"
+        ],
+        "loadoutRoll": null
+      }
+    ],
+    "results": [
+      {
+        "round": 1,
+        "outcome": "draw",
+        "moves": {
+          "4d4fe906-5bca-4154-9696-76615bf266dd": "rock",
+          "89e1dde9-6549-44b8-83ba-7e8e579a2906": "rock"
+        },
+        "autoPicked": []
+      },
+      {
+        "round": 2,
+        "outcome": "2",
+        "moves": {
+          "4d4fe906-5bca-4154-9696-76615bf266dd": "paper",
+          "89e1dde9-6549-44b8-83ba-7e8e579a2906": "scissors"
+        },
+        "autoPicked": []
+      },
+      {
+        "round": 3,
+        "outcome": "1",
+        "moves": {
+          "4d4fe906-5bca-4154-9696-76615bf266dd": "scissors",
+          "89e1dde9-6549-44b8-83ba-7e8e579a2906": "paper"
+        },
+        "autoPicked": []
+      },
+      {
+        "round": 4,
+        "outcome": "draw",
+        "moves": {
+          "4d4fe906-5bca-4154-9696-76615bf266dd": "lizard",
+          "89e1dde9-6549-44b8-83ba-7e8e579a2906": "lizard"
+        },
+        "autoPicked": []
+      },
+      {
+        "round": 5,
+        "outcome": "1",
+        "moves": {
+          "4d4fe906-5bca-4154-9696-76615bf266dd": "paper",
+          "89e1dde9-6549-44b8-83ba-7e8e579a2906": "rock"
+        },
+        "autoPicked": []
+      }
+    ],
+    "submittedPlayerIds": [],
+    "currentRoundMoves": {},
+    "matchWinnerSeatKey": "1",
+    "abilityFirings": [],
+    "serverNow": "2026-01-01T00:00:00.000Z"
+  },
+  "boards": [
+    {
+      "round": 1,
+      "delays": {
+        "1": {
+          "rock": 0,
+          "paper": 0,
+          "scissors": 1,
+          "lizard": 0,
+          "robot": 0
+        },
+        "2": {
+          "rock": 0,
+          "paper": 1,
+          "scissors": 0,
+          "lizard": 0,
+          "robot": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "delays": {
+        "1": {
+          "rock": 3,
+          "paper": 0,
+          "scissors": 0,
+          "lizard": 0,
+          "robot": 0
+        },
+        "2": {
+          "rock": 1,
+          "paper": 0,
+          "scissors": 0,
+          "lizard": 0,
+          "robot": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "delays": {
+        "1": {
+          "rock": 2,
+          "paper": 2,
+          "scissors": 0,
+          "lizard": 0,
+          "robot": 0
+        },
+        "2": {
+          "rock": 0,
+          "paper": 0,
+          "scissors": 4,
+          "lizard": 0,
+          "robot": 0
+        }
+      }
+    },
+    {
+      "round": 4,
+      "delays": {
+        "1": {
+          "rock": 1,
+          "paper": 1,
+          "scissors": 2,
+          "lizard": 0,
+          "robot": 0
+        },
+        "2": {
+          "rock": 0,
+          "paper": 2,
+          "scissors": 3,
+          "lizard": 0,
+          "robot": 0
+        }
+      }
+    },
+    {
+      "round": 5,
+      "delays": {
+        "1": {
+          "rock": 0,
+          "paper": 0,
+          "scissors": 1,
+          "lizard": 3,
+          "robot": 0
+        },
+        "2": {
+          "rock": 0,
+          "paper": 1,
+          "scissors": 2,
+          "lizard": 0,
+          "robot": 0
+        }
+      }
+    }
+  ]
+}

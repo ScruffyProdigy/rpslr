@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Loadout } from '@game/helpers/loadout';
 import type { MatchState, Move, RoundResult, Seat } from './api';
 import {
   RULE_CARDS,
@@ -16,7 +17,13 @@ import { buildReplay, type Replay } from './replay';
  * reads cooldown state, and a fixture that made its own would be free to
  * invent one the game can never actually reach.
  */
-function seat(position: number, seatKey: string, playerId: string, name: string): Seat {
+function seat(
+  position: number,
+  seatKey: string,
+  playerId: string,
+  name: string,
+  loadout: Loadout | null = null,
+): Seat {
   return {
     id: `seat-${seatKey}`,
     matchId: 'm1',
@@ -28,6 +35,8 @@ function seat(position: number, seatKey: string, playerId: string, name: string)
     player: { id: playerId, name, lobbyUserId: null, score: 0, profile: null, expiryStrikes: 0 },
     lobbyProfile: null,
     delays: {},
+    loadout,
+    loadoutRoll: null,
   };
 }
 
@@ -35,7 +44,11 @@ function round(n: number, a: Move, b: Move, outcome: string): RoundResult {
   return { round: n, outcome, moves: { pa: a, pb: b }, autoPicked: [] };
 }
 
-function state(results: RoundResult[], overrides: Partial<MatchState['match']> = {}): MatchState {
+function state(
+  results: RoundResult[],
+  overrides: Partial<MatchState['match']> = {},
+  seats: Seat[] = [seat(0, 'a', 'pa', 'Ana'), seat(1, 'b', 'pb', 'Ben')],
+): MatchState {
   return {
     match: {
       id: 'm1',
@@ -57,17 +70,22 @@ function state(results: RoundResult[], overrides: Partial<MatchState['match']> =
       createdAt: '2026-09-07T00:00:00.000Z',
       ...overrides,
     },
-    seats: [seat(0, 'a', 'pa', 'Ana'), seat(1, 'b', 'pb', 'Ben')],
+    seats,
     results,
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: overrides.winnerSeatKey ?? 'a',
+    abilityFirings: [],
     serverNow: '2026-09-07T00:05:00.000Z',
   };
 }
 
-function replayOf(results: RoundResult[], overrides: Partial<MatchState['match']> = {}): Replay {
-  return buildReplay(state(results, overrides));
+function replayOf(
+  results: RoundResult[],
+  overrides: Partial<MatchState['match']> = {},
+  seats?: Seat[],
+): Replay {
+  return buildReplay(state(results, overrides, seats));
 }
 
 /** Narration for the nth round (1-based) of a replay. */
@@ -229,12 +247,12 @@ describe('ruleCardSchedule', () => {
   ]);
 
   it('teaches each rule once, in the order a watcher meets it', () => {
-    const placed = ruleCardSchedule(long.frames).filter((id): id is RuleCardId => id !== null);
+    const placed = ruleCardSchedule(long).filter((id): id is RuleCardId => id !== null);
     expect(placed).toEqual(['three', 'cooldown', 'unlock', 'safe']);
   });
 
   it('never lands two cards on the same round', () => {
-    const schedule = ruleCardSchedule(long.frames);
+    const schedule = ruleCardSchedule(long);
     expect(schedule.length).toBe(long.frames.length);
     expect(new Set(schedule.filter(Boolean)).size).toBe(schedule.filter(Boolean).length);
   });
@@ -243,22 +261,22 @@ describe('ruleCardSchedule', () => {
     // Round 1 is played into the opening state, where nothing has been played
     // yet — the lock on lizard and robot there is the starting one, so round
     // one carries the rule that is true of every round instead.
-    expect(ruleCardSchedule(long.frames)[0]).toBe('three');
-    expect(ruleCardSchedule(long.frames)[1]).toBe('cooldown');
+    expect(ruleCardSchedule(long)[0]).toBe('three');
+    expect(ruleCardSchedule(long)[1]).toBe('cooldown');
   });
 
   it('leaves out the safe-move card when no move was ever safe', () => {
     const short = replayOf([round(1, 'rock', 'paper', 'b'), round(2, 'scissors', 'rock', 'b')]);
-    expect(ruleCardSchedule(short.frames)).not.toContain('safe');
+    expect(ruleCardSchedule(short)).not.toContain('safe');
   });
 
   it('always has a rule for round one, which demonstrates none of the others', () => {
     const short = replayOf([round(1, 'rock', 'paper', 'b')]);
-    expect(ruleCardSchedule(short.frames)).toEqual(['three']);
+    expect(ruleCardSchedule(short)).toEqual(['three']);
   });
 
   it('has copy for every card it can schedule', () => {
-    for (const id of ruleCardSchedule(long.frames)) {
+    for (const id of ruleCardSchedule(long)) {
       if (id) expect(RULE_CARDS[id].body.length).toBeGreaterThan(0);
     }
   });
@@ -538,5 +556,79 @@ describe('calloutsFor tempo', () => {
     expect(insights.length).toBeLessThanOrEqual(2);
     expect(insights.map((c) => c.kind)).toContain('tempo-gap');
     expect(callouts.map((c) => c.kind)).toContain('cooldown');
+  });
+});
+
+describe('commentary at a helpers match', () => {
+  /** Ana brought Copycat, so a drawn round costs her move 1 mark instead of 2. */
+  const copycatSeats = (): Seat[] => [
+    seat(0, 'a', 'pa', 'Ana', ['copycat', 'poker-face']),
+    seat(1, 'b', 'pb', 'Ben'),
+  ];
+
+  /** Ana brought Tempered, so the move she wins with rests 3 rounds, not 2. */
+  const temperedSeats = (): Seat[] => [
+    seat(0, 'a', 'pa', 'Ana', ['tempered', 'poker-face']),
+    seat(1, 'b', 'pb', 'Ben'),
+  ];
+
+  it('does not claim a drawn move comes back for both when only one paid full price', () => {
+    const replay = replayOf(
+      [
+        round(1, 'rock', 'rock', 'draw'),
+        round(2, 'paper', 'paper', 'draw'),
+        round(3, 'scissors', 'scissors', 'draw'),
+        round(4, 'lizard', 'lizard', 'draw'),
+      ],
+      {},
+      copycatSeats(),
+    );
+    const cooldown = calloutsFor(replay.frames[0], replay).find((c) => c.kind === 'cooldown');
+
+    expect(cooldown?.text).not.toContain('for both');
+    // Copycat charges her Rock 1, so it is live again in round 3; his takes the
+    // full 2 and is not. One sentence cannot honestly name a single round.
+    expect(cooldown?.text).toBe("Ana's Rock is back in round 3, Ben's in round 4.");
+  });
+
+  it('counts a winning move back from what that player actually paid for it', () => {
+    const replay = replayOf(
+      [
+        round(1, 'rock', 'scissors', 'a'),
+        round(2, 'paper', 'scissors', 'b'),
+        round(3, 'lizard', 'lizard', 'draw'),
+        round(4, 'scissors', 'rock', 'b'),
+        round(5, 'paper', 'robot', 'a'),
+      ],
+      {},
+      temperedSeats(),
+    );
+    const cooldown = calloutsFor(replay.frames[0], replay).find((c) => c.kind === 'cooldown');
+
+    // Tempered prices a win at 3 marks, so Rock is out a round longer than the
+    // duel arithmetic would have said.
+    expect(cooldown?.text).toBe("Ana's Rock is back in round 5.");
+  });
+
+  it('withholds the rule cards whose copy states a duel’s own numbers', () => {
+    const replay = replayOf(
+      [round(1, 'rock', 'paper', 'b'), round(2, 'paper', 'rock', 'a')],
+      {},
+      copycatSeats(),
+    );
+    expect(ruleCardSchedule(replay)).not.toContain('unlock');
+  });
+
+  it('does not tell a helpers watcher that every move rests exactly 2 rounds', () => {
+    const replay = replayOf(
+      [round(1, 'rock', 'paper', 'b'), round(2, 'paper', 'rock', 'a')],
+      {},
+      copycatSeats(),
+    );
+    const shown = ruleCardSchedule(replay)
+      .filter((id): id is RuleCardId => id !== null)
+      .map((id) => RULE_CARDS[id].body);
+
+    expect(shown).not.toContain('Every move you play goes on cooldown for 2 rounds');
   });
 });

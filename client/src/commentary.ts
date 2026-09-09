@@ -8,14 +8,8 @@ import {
   threatsTo,
   winsNeeded,
 } from './moves';
-import {
-  DELAY_ON_CHOICE,
-  advanceDelays,
-  type DelayMap,
-  type Replay,
-  type ReplayFrame,
-  type ReplaySide,
-} from './replay';
+import { INITIAL_DELAYS } from '@game/game';
+import { type DelayMap, type Replay, type ReplayFrame, type ReplaySide } from './replay';
 import { roundEdge, roundValue } from './roundValue';
 
 /**
@@ -189,9 +183,9 @@ function whySafe(move: Move, oppDelays: DelayMap): string {
  * other round. "What will I be holding next round" is small and exactly
  * computable, which is the whole reason a tempo note can be stated as fact.
  *
- * `advanceDelays` is imported rather than rewritten: the −1/+2 rule already
- * lives in `api/src/game.ts` and is mirrored once in `replay.ts`, and a third
- * copy of it is a third thing to keep in step.
+ * Read off the boards `buildReplay` already reconstructed rather than advanced
+ * here: what a pick costs is the loadout's business, not this file's, and a
+ * second opinion about it would be a second rules engine (JQ-207).
  *
  * One round, and no further. Two rounds would need a search over what gets
  * played in between, and a replay says what was true, not what might have been.
@@ -206,8 +200,8 @@ export interface Lookahead {
 }
 
 export function lookahead(frame: ReplayFrame): Lookahead {
-  const a = advanceDelays(frame.a.delaysBefore, frame.a.move);
-  const b = advanceDelays(frame.b.delaysBefore, frame.b.move);
+  const { delaysAfter: a } = frame.a;
+  const { delaysAfter: b } = frame.b;
   return {
     round: frame.round + 1,
     a,
@@ -238,13 +232,19 @@ function outcomePhrase(frame: ReplayFrame, side: ReplaySide): string {
 /**
  * The round a move played this round can be played again.
  *
- * The pick is charged +2 on top of the −1 every move takes, so it enters the
- * next round on 2, the one after on 1, and comes free the round after that.
- * Said as a round number rather than a duration: a round number can be checked
- * against the strip, where "out for 2 rounds" has to be counted.
+ * Counted from the marks the move actually came out of the round holding, not
+ * from a fixed price: Tempered, Featherweight, Copycat and Bookend all change
+ * what a pick costs its owner, and the two players can pay differently for the
+ * same move in the same round. Said as a round number rather than a duration —
+ * a round number can be checked against the strip, where "out for 2 rounds"
+ * has to be counted.
+ *
+ * A projection, and only ever one round deep in practice: a later Rust or
+ * Quarantine could still put the move back down. It says when the move is next
+ * free if nothing else touches it, which is what a watcher reads off the board.
  */
-function returnsInRound(round: number): number {
-  return round + DELAY_ON_CHOICE + 1;
+function returnsInRound(round: number, side: ReplaySide): number {
+  return round + side.delaysAfter[side.move] + 1;
 }
 
 /**
@@ -443,25 +443,36 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
   // Named by the round it comes back rather than by a duration, so it can be
   // read straight off the strip. A rest that outlasts the match has no round
   // to name, so it says that instead of pointing at a round nobody will see.
-  const back = returnsInRound(frame.round);
-  const overruns = back > lastRound;
+  const backA = returnsInRound(frame.round, frame.a);
+  const backB = returnsInRound(frame.round, frame.b);
 
   if (frame.outcome === 'draw') {
+    // A mirror normally costs both players the same, so one sentence covers it.
+    // A loadout can price it differently on each side — Copycat and Echo Chamber
+    // both discount a draw — and then "back for both" is simply not true.
+    const move = label(frame.a.move);
+    const whenBack = (back: number) =>
+      back > lastRound ? 'not again this match' : `in round ${back}`;
     always.push({
       kind: 'cooldown',
-      text: overruns
-        ? `Neither plays ${label(frame.a.move)} again this match.`
-        : `${label(frame.a.move)} is back for both in round ${back}.`,
+      text:
+        backA > lastRound && backB > lastRound
+          ? `Neither plays ${move} again this match.`
+          : backA === backB
+            ? `${move} is back for both in round ${backA}.`
+            : `${nameA}'s ${move} is back ${whenBack(backA)}, ${nameB}'s ${whenBack(backB)}.`,
     });
   } else {
     const aWon = frame.outcome === frame.a.seatKey;
     const winner = aWon ? frame.a : frame.b;
     const name = aWon ? nameA : nameB;
+    const back = aWon ? backA : backB;
     always.push({
       kind: 'cooldown',
-      text: overruns
-        ? `${name}'s ${label(winner.move)} is out for the rest of the match.`
-        : `${name}'s ${label(winner.move)} is back in round ${back}.`,
+      text:
+        back > lastRound
+          ? `${name}'s ${label(winner.move)} is out for the rest of the match.`
+          : `${name}'s ${label(winner.move)} is back in round ${back}.`,
     });
   }
 
@@ -517,23 +528,38 @@ export const RULE_CARDS: Record<RuleCardId, RuleCard> = {
   },
 };
 
-/** Moves that begin a match locked — `INITIAL_DELAYS` in `replay.ts`. */
-const STARTS_LOCKED: Move[] = ['lizard', 'robot'];
-
 /** A move the player has already thrown is resting because they threw it. */
 function hasRestingPick(side: ReplaySide): boolean {
   return side.recentMoves.some((m) => side.delaysBefore[m] > 0);
 }
 
 /**
+ * Lizard and Robot, read off the engine's own opening rather than listed here.
+ * Only ever asked of a duel — the card that uses it names these two by name, so
+ * it is withheld from a match whose loadouts moved them.
+ */
+const DUEL_STARTS_LOCKED: Move[] = ALL_MOVES.filter((m) => INITIAL_DELAYS[m] > 0);
+
+/**
  * A move that started the match locked and has come free without being
  * played — the opening lock lifting, rather than a cooldown expiring.
  */
 function hasFreshUnlock(side: ReplaySide): boolean {
-  return STARTS_LOCKED.some((m) => side.delaysBefore[m] === 0 && !side.recentMoves.includes(m));
+  return DUEL_STARTS_LOCKED.some(
+    (m) => side.delaysBefore[m] === 0 && !side.recentMoves.includes(m),
+  );
 }
 
 const RULE_ORDER: RuleCardId[] = ['three', 'cooldown', 'unlock', 'safe'];
+
+/**
+ * Rules whose copy states a duel's numbers outright — a pick costing 2 rounds,
+ * Lizard and Robot being the locked pair. Both are things a loadout changes, and
+ * writing helper-aware rule copy is a content pass of its own (JQ-207 is about
+ * not being wrong, not about saying more). So at a helpers match they are simply
+ * not offered, and the rules that read the board instead still are.
+ */
+const DUEL_ONLY_RULES: RuleCardId[] = ['cooldown', 'unlock'];
 
 const RULE_APPLIES: Record<RuleCardId, (frame: ReplayFrame) => boolean> = {
   // Always true, which is exactly why it is worth saying — and it gives round
@@ -555,9 +581,11 @@ const RULE_APPLIES: Record<RuleCardId, (frame: ReplayFrame) => boolean> = {
  * only locked moves are the opening ones, which is the *unlock* rule's
  * business rather than the cooldown rule's.
  */
-export function ruleCardSchedule(frames: ReplayFrame[]): (RuleCardId | null)[] {
-  const left = new Set(RULE_ORDER);
-  return frames.map((frame) => {
+export function ruleCardSchedule(replay: Replay): (RuleCardId | null)[] {
+  const left = new Set(
+    replay.hasLoadouts ? RULE_ORDER.filter((r) => !DUEL_ONLY_RULES.includes(r)) : RULE_ORDER,
+  );
+  return replay.frames.map((frame) => {
     const id = RULE_ORDER.find((r) => left.has(r) && RULE_APPLIES[r](frame));
     if (!id) return null;
     left.delete(id);

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { rulesForSeats, type SeatLoadout } from '@game/replayBoard';
 import {
   api,
   type Move,
@@ -33,6 +34,9 @@ const debug = isDebugMode();
  * Full name on wide screens, "RPSLR" once it stops fitting. Both are hidden from
  * assistive tech so the spoken name stays the same at every width.
  */
+/** A seat that brought no helpers — the duel opening, and the `b` side we ignore. */
+const NO_LOADOUT: SeatLoadout = { loadout: null, loadoutRoll: null };
+
 export function Wordmark() {
   return (
     <span className="wordmark">
@@ -554,6 +558,9 @@ export function Board({
     .reverse()
     .map((r) => r.moves[myPlayerId])
     .filter((m): m is Move => Boolean(m));
+  // The marks your loadout opened on, so a cooldown with no pick behind it is
+  // only blamed on the opening where this match actually had one (JQ-207).
+  const myOpeningDelays = rulesForSeats(mySeat ?? NO_LOADOUT, NO_LOADOUT)[0].initialDelays;
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -659,6 +666,7 @@ export function Board({
             disabled={!connected || !allSeated || youMovedThisRound || revealingNow}
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
+            myOpeningDelays={myOpeningDelays}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}

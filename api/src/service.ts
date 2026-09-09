@@ -19,16 +19,20 @@ import {
   computeDelays,
   isMove,
   matchWinner,
-  replayMatch,
   resolveRound,
   winsNeeded,
   type DelayMap,
   type Move,
-  type PlayedRound,
   type PlayerRules,
 } from './game.js';
-import { rollFor, rulesFor } from './helpers/rules.js';
+import { rollFor } from './helpers/rules.js';
 import { uniformPicker } from './helpers/loadout.js';
+import {
+  boardsThroughMatch,
+  playedRoundsFrom,
+  rulesForSeats,
+  type ReconstructionSeat,
+} from './replayBoard.js';
 import {
   isPreQueueRejection,
   resolvePreQueueOptions,
@@ -377,7 +381,7 @@ export class GameService {
     // outranks the score-derived one.
     const scoredWinner = seats.find((s) => (s.player?.score ?? 0) >= need);
     // Each seat's delay marks are replayed from the resolved rounds.
-    const delays = delaysBySeat(results, seats);
+    const delays = delaysBySeat(results, seats, firings);
     for (const seat of seats) {
       seat.delays = delays[seat.seatKey];
     }
@@ -452,7 +456,8 @@ export class GameService {
     // the mark count, so the "you always have something to play" floor is honoured
     // here too — re-deriving the rule is how the two drift apart.
     const results = await this.repo.listResults(match.id);
-    const delays = delaysBySeat(results, seats)[mySeat.seatKey];
+    const firings = await this.repo.listAbilityFirings(match.id);
+    const delays = delaysBySeat(results, seats, firings)[mySeat.seatKey];
     if (!availableMoves(delays).includes(move as Move)) {
       throw new ValidationError(
         `'${move}' is on cooldown (${delays[move]} delay mark${delays[move] === 1 ? '' : 's'})`,
@@ -622,7 +627,8 @@ export class GameService {
     if (expired.length === 0) return;
 
     const results = await this.repo.listResults(matchId);
-    const delays = delaysBySeat(results, seats);
+    const firings = await this.repo.listAbilityFirings(matchId);
+    const delays = delaysBySeat(results, seats, firings);
     const autoPicked: string[] = [];
     for (const { seat } of expired) {
       const player = seat.player!;
@@ -753,7 +759,7 @@ function playerMoveSequence(results: RoundResult[], playerId: string): Move[] {
  * it here would make a match's opening depend on when it was read.
  */
 function rulesForSeat(seat: Seat): PlayerRules {
-  return rulesFor(seat.loadout, { roll: seat.loadoutRoll });
+  return rulesForSeats(seat, seat)[0];
 }
 
 /**
@@ -770,37 +776,29 @@ function resolvedFirings(firings: AbilityFiring[], results: RoundResult[]): Abil
   return firings.filter((f) => resolved.has(f.round));
 }
 
-/**
- * Both moves of each resolved round, in round order, seat A's first.
- *
- * The filter is defensive only, and cannot fire today: a round is recorded once both
- * players have moved, and Sacrifice was ruled to draw a round the firer still picks
- * in, so every resolved round carries both moves by construction. It is written down
- * because a card that produced a round without one would be discarded here in
- * silence, taking its decrement and recharge with it — so this line would need
- * revisiting rather than being relied on.
- */
-function playedRounds(results: RoundResult[], idA: string, idB: string): PlayedRound[] {
-  return [...results]
-    .sort((a, b) => a.round - b.round)
-    .map((r) => ({ a: r.moves[idA], b: r.moves[idB] }))
-    .filter((r): r is PlayedRound => Boolean(r.a && r.b));
-}
-
 /** How many resolved rounds this seat has lost. */
 function lossesFor(results: RoundResult[], seat: Seat, opponent: Seat): number {
   return results.filter((r) => r.outcome === opponent.seatKey && r.moves[seat.player!.id]).length;
 }
 
 /**
- * Delay marks for every seat, replayed from the resolved rounds.
+ * Delay marks for every seat, replayed from the resolved rounds and the abilities
+ * spent in them.
  *
  * A helpers match cannot be replayed one seat at a time — Grudge, Echo Chamber and
  * Small Mercy let one player's round mark the *other* player's moves, so the two
  * sequences are coupled. A duel holds none of those, and DUEL_RULES makes the
  * two-seat replay land on exactly what the old per-seat one produced.
+ *
+ * The walk itself lives in `replayBoard.ts` rather than here, because the replay
+ * page needs the same one and a mirror of it in the frontend is a second rules
+ * engine to keep in step (JQ-207).
  */
-function delaysBySeat(results: RoundResult[], seats: Seat[]): Record<string, DelayMap> {
+function delaysBySeat(
+  results: RoundResult[],
+  seats: Seat[],
+  firings: readonly AbilityFiring[],
+): Record<string, DelayMap> {
   if (seats.length !== 2) {
     // No mode has anything but two seats today. If one ever does, it keeps the old
     // per-seat replay rather than silently being handed a two-player one.
@@ -812,11 +810,22 @@ function delaysBySeat(results: RoundResult[], seats: Seat[]): Record<string, Del
     );
   }
   const [seatA, seatB] = seats;
-  const idA = seatA.player?.id;
-  const idB = seatB.player?.id;
-  const rounds = idA && idB ? playedRounds(results, idA, idB) : [];
-  const { a, b } = replayMatch(rounds, rulesForSeat(seatA), rulesForSeat(seatB));
-  return { [seatA.seatKey]: a, [seatB.seatKey]: b };
+  const a = reconstructionSeat(seatA);
+  const b = reconstructionSeat(seatB);
+  const rounds = a && b ? playedRoundsFrom(results, firings, a, b) : [];
+  const board = boardsThroughMatch(rounds, ...rulesForSeats(seatA, seatB)).at(-1)!;
+  return { [seatA.seatKey]: board.a, [seatB.seatKey]: board.b };
+}
+
+/** A claimed seat as the shared reconstruction wants it; null while it is empty. */
+function reconstructionSeat(seat: Seat): ReconstructionSeat | null {
+  if (!seat.player) return null;
+  return {
+    seatKey: seat.seatKey,
+    playerId: seat.player.id,
+    loadout: seat.loadout,
+    loadoutRoll: seat.loadoutRoll,
+  };
 }
 
 function seatsFromMode(mode: GameModeManifest): SeatReservation[] {

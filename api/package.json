@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "golden:duel": "tsx scripts/captureGolden.ts",
     "card:preview": "tsx scripts/cardPreview.ts",
-    "story:preview": "tsx scripts/storyPreview.ts"
+    "story:preview": "tsx scripts/storyPreview.ts",
+    "golden:helpers-replay": "tsx scripts/captureHelpersReplay.ts"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",

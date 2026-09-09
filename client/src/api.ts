@@ -1,6 +1,16 @@
+import type { AbilityFiring } from '@game/types';
+import type { Loadout } from '@game/helpers/loadout';
 import { getEnv } from './env';
 
-export type Move = 'rock' | 'paper' | 'scissors' | 'lizard' | 'robot';
+/**
+ * Re-exported from the server's own engine rather than spelled out again. The
+ * replay hands these moves straight back to `api/src/game.ts` to rebuild a board
+ * (JQ-207), so the two lists being the same list is load-bearing, not tidiness.
+ */
+import type { Move } from '@game/game';
+
+export type { Move };
+
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
 /** A timed segment of a match. Only 'pick' exists today. */
 export type Phase = 'pick';
@@ -33,6 +43,10 @@ export interface Seat {
   player: SeatPlayer | null;
   lobbyProfile: LobbyPlayerProfile | null;
   delays: Record<string, number>;
+  /** The two helpers this seat brought. Null in `duel`, which brings none. */
+  loadout: Loadout | null;
+  /** Where a same-move collision displaced the cheaper helper's opening marks. */
+  loadoutRoll: Move | null;
 }
 
 export interface Match {
@@ -77,6 +91,12 @@ export interface MatchState {
   /** In-progress moves (your id only until the round resolves; opponent move hidden). */
   currentRoundMoves: Record<string, Move>;
   matchWinnerSeatKey: string | null;
+  /**
+   * Abilities spent in rounds that have already resolved. The round in progress is
+   * withheld server-side, because naming a move with Quarantine is a hedge an
+   * opponent who could read it would simply play around.
+   */
+  abilityFirings: AbilityFiring[];
   /**
    * The server's clock when this snapshot was built. The countdown is rendered
    * as an offset from this, never from the device clock, which may be far off.

@@ -35,6 +35,8 @@ function seat(
       : null,
     lobbyProfile: null,
     delays,
+    loadout: null,
+    loadoutRoll: null,
   };
 }
 
@@ -92,6 +94,7 @@ function state(over: {
     submittedPlayerIds: submitted,
     currentRoundMoves: {},
     serverNow: new Date(now).toISOString(),
+    abilityFirings: [],
     matchWinnerSeatKey: finished ? MY_SEAT : null,
   };
 }
