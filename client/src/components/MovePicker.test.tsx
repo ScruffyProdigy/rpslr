@@ -744,4 +744,31 @@ describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
     expect(arrow(container, 'lizard', 'robot')).not.toHaveClass('beat-arrow--opp-off');
     expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
   });
+
+  /**
+   * A forced pick, already locked in. Unreachable until JQ-150 made the seat's
+   * own move survive a reload — `currentRoundMoves` was stripped from every
+   * snapshot, so a mid-round reload came back looking unlocked and `lockedIn`
+   * plus a marked move could not co-occur. It can now.
+   */
+  it('reads as your pick, not as a cost, once it is locked in', () => {
+    const { container } = renderPicker({
+      myDelays: ALL_MARKED,
+      myChosenMove: 'paper',
+      lockedIn: true,
+      disabled: true,
+    });
+    const paper = screen.getByRole('button', { name: /^Paper/ });
+    // Still marked, so still forced — but `--selected` is declared after
+    // `--forced` in styles.css and both are single-class, so the border reads
+    // in your colour rather than warn. The pick outranks the price.
+    expect(paper).toHaveClass('move-btn--forced');
+    expect(paper).toHaveClass('move-btn--selected');
+    expect(paper).not.toHaveClass('move-btn--dimmed');
+    // The centre is the wait, not the sales pitch: "puts it further down" is a
+    // decision you have already taken.
+    expect(container.querySelector('.picker-center--waiting')).toBeInTheDocument();
+    expect(container.querySelector('.picker-center__forced')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
 });
