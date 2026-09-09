@@ -156,6 +156,35 @@ describe('calloutsFor safe picks', () => {
     const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
     expect(calloutsFor(replay.frames[0], replay).some((c) => c.kind === 'safe-pick')).toBe(false);
   });
+
+  it('reads reachable off playability, not marks, so a marked-but-played safe move is not called missed (JQ-215)', () => {
+    // Same position as the test above — Ana's Lizard is safe entering round
+    // 3, and she plays it — but here her own board is fully marked when she
+    // does, with Rock and Lizard tied for fewest. `reachable` used to ask
+    // `delaysBefore.lizard === 0`, which is false here, and the round would
+    // then be reported as "Lizard was the one move Ben had no answer to, and
+    // it was resting for Ana" — false on its face, since Ana played it.
+    const replay = replayOf([
+      round(1, 'paper', 'rock', 'a'),
+      round(2, 'rock', 'scissors', 'a'),
+      round(3, 'lizard', 'paper', 'a'),
+    ]);
+    const frame = replay.frames[2];
+    expect(frame.a.safeMoves).toContain('lizard');
+    expect(frame.a.move).toBe('lizard');
+    frame.a.delaysBefore = { rock: 1, paper: 3, scissors: 4, lizard: 1, robot: 4 };
+
+    const notes = calloutsFor(frame, replay);
+    expect(notes.some((n) => n.kind === 'safe-out-of-reach')).toBe(false);
+    expect(notes).toContainEqual({
+      kind: 'safe-pick',
+      text:
+        'Rock crushes Lizard and Scissors decapitates it, but Ben had both resting — ' +
+        "nothing could beat Ana's Lizard. The only answer left was Lizard back for the " +
+        'draw, and Ana still held Rock, which beats that: the strongest edge this ' +
+        'game offers.',
+    });
+  });
 });
 
 describe('calloutsFor cooldowns', () => {
@@ -329,8 +358,10 @@ describe('calloutsFor a move with nothing left to beat', () => {
   });
 
   it('withholds the trap line when the floor leaves them an answer (JQ-215)', () => {
-    // Every move marked, so Paper and Lizard are playable. Paper beats Rock, so
-    // "nothing they could play beat it" is simply untrue of a Rock pick.
+    // The trap check asks what Ana's Rock beats — Scissors and Lizard — and
+    // whether Ben can play either. Every move marked, with Paper and Lizard
+    // tied for fewest, so the floor keeps Lizard playable for Ben: it stays
+    // silent because Ben has an answer, not because anything beats Rock.
     const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
     replay.frames[0].b.delaysBefore = {
       rock: 2,

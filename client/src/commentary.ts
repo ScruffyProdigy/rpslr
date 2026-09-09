@@ -164,7 +164,13 @@ function safeRead(side: ReplaySide): SafeRead | null {
   if (move === undefined) return null;
   return {
     move,
-    reachable: side.delaysBefore[move] === 0,
+    // `reachable` and `punish` both ask "can this side actually play it",
+    // and have to share one definition of that or they contradict each
+    // other in the same object. `punish` already asks `isPlayable` (via
+    // `threatsTo`), which knows about the floor — a fully-marked mover can
+    // still play their least-marked move, and `delaysBefore[move] === 0`
+    // used to call that unreachable even on the round they played it (JQ-215).
+    reachable: isPlayable(move, side.delaysBefore),
     punish: threatsTo(move, side.delaysBefore).live,
   };
 }
