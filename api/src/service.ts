@@ -1023,7 +1023,20 @@ function rulesForSeat(seat: Seat): PlayerRules {
   return rulesForSeats(seat, seat)[0];
 }
 
-/** The one ability that changes the round protocol rather than the marks. */
+/**
+ * The first ability to change the round protocol rather than the marks.
+ *
+ * The first, not the only one there can be. Anything that reaches a player after
+ * their commitment and before the round resolves wants this same window, and a
+ * firing the opponent can *see* gets there too — it hands the seat it acts
+ * against something to answer, at a moment their pick is already locked. Every
+ * ability is secret today, which is the only reason Oracle is alone in here.
+ *
+ * So the sub-phase below is a class's machinery wearing one card's name. It is
+ * spelled Oracle-shaped because a general predicate with exactly one member is
+ * harder to read than the member, not because generalising it is a mistake —
+ * JQ-239 does that when the second member arrives.
+ */
 const ORACLE = 'oracle';
 
 /**
