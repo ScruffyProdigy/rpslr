@@ -18,6 +18,8 @@ import {
   cooldownPhrase,
   describeBeatsGraph,
   describeBeatsOf,
+  forcedPickCost,
+  isForcedPick,
   isPlayable,
   opponentCooldownPhrase,
   type WinningEdge,
@@ -196,12 +198,12 @@ export function MovePicker({
   }
 
   const graphText = describeBeatsGraph(oppDelays, oppName);
-  const myCooldowns = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
+  const myMarked = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
-    !showTapHint && cooldownNote.show && !lockedIn && myCooldowns.length > 0;
+    !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
 
 
   return (
@@ -324,14 +326,21 @@ export function MovePicker({
           const pos = circleNodePos(i);
           const myDelay = myDelays[m] ?? 0;
           const oppDelay = oppDelays[m] ?? 0;
-          const onCooldown = myDelay > 0;
+          // Two flags, not one. `onCooldown` used to mean both "carries marks"
+          // and "cannot be played", which is the bug: under the floor a marked
+          // move may be the only thing you can play. `blocked || forced` is
+          // exactly the old test, so the pill and the opponent badge below are
+          // untouched (JQ-215).
+          const blocked = !isPlayable(m, myDelays);
+          const forced = isForcedPick(m, myDelays);
           const selected = myChosenMove === m;
           const previewed = preview === m;
           const isTarget = preview != null && preview !== m && beatsOf(preview).includes(m);
           const label = [
             MOVE_META[m].label,
-            onCooldown ? cooldownPhrase(myDelay) : '',
-            onCooldown ? cooldownCause(m, myRecentMoves, myOpeningDelays).toLowerCase() : '',
+            forced ? `marked but playable, costs ${forcedPickCost(m, myDelays)} turns` : '',
+            blocked ? cooldownPhrase(myDelay) : '',
+            blocked ? cooldownCause(m, myRecentMoves, myOpeningDelays).toLowerCase() : '',
             oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
           ]
             .filter(Boolean)
@@ -341,7 +350,8 @@ export function MovePicker({
               key={m}
               className={[
                 'move-btn',
-                onCooldown ? 'move-btn--cooldown' : '',
+                blocked ? 'move-btn--cooldown' : '',
+                forced ? 'move-btn--forced' : '',
                 selected ? 'move-btn--selected' : '',
                 previewed && !selected ? 'move-btn--preview' : '',
                 isTarget ? 'move-btn--target' : '',
@@ -351,7 +361,7 @@ export function MovePicker({
                 .join(' ')}
               style={{ left: boardPct(pos.x), top: boardPct(pos.y) }}
               disabled={disabled}
-              aria-disabled={onCooldown || undefined}
+              aria-disabled={blocked || undefined}
               onClick={() => handleClick(m)}
               onPointerEnter={(e) => {
                 if (e.pointerType === 'mouse') setHovered(m);
@@ -369,11 +379,19 @@ export function MovePicker({
               )}
               <MoveIcon move={m} className="move-btn__emoji" />
               <span className="move-btn__name">{MOVE_META[m].label}</span>
-              {onCooldown && (
-                <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
-                  <UiIcon name="hourglass" /> {myDelay}
-                </span>
-              )}
+              {myDelay > 0 &&
+                (forced ? (
+                  // The button's own label says "marked but playable, costs N
+                  // turns". A second voice saying "on cooldown" would
+                  // contradict it, so here the pill is decoration.
+                  <span className="cooldown-pill" aria-hidden="true">
+                    <UiIcon name="hourglass" /> {myDelay}
+                  </span>
+                ) : (
+                  <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
+                    <UiIcon name="hourglass" /> {myDelay}
+                  </span>
+                ))}
               {oppDelay > 0 && (
                 <span className="opp-cooldown-mark" aria-hidden="true">
                   <UiIcon name="hourglass" />
@@ -522,9 +540,31 @@ function PickerCenter({
     );
   }
 
-  // An unavailable move explains itself: why it is down, and when it is back.
   const myDelay = myDelays[shown] ?? 0;
-  if (myDelay > 0) {
+
+  // Marked, and the only thing on offer. It is *not* the blocked panel below:
+  // it has to say the move can be played and what playing it costs, and it
+  // still offers Lock in. Reachable only when no move is on zero (JQ-215).
+  if (isForcedPick(shown, myDelays)) {
+    const commitForced = !lockedIn && picked != null && preview === picked ? picked : null;
+    return (
+      <div className="picker-center picker-center--forced">
+        <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
+        <p className="picker-center__forced">
+          Every move is marked — {MOVE_META[shown].label} is your cheapest. Playing it puts it
+          down to {forcedPickCost(shown, myDelays)}.
+        </p>
+        {commitForced && (
+          <button className="picker-center__lock" onClick={() => onCommit(commitForced)}>
+            Lock in {MOVE_META[commitForced].label}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // An unavailable move explains itself: why it is down, and when it is back.
+  if (!isPlayable(shown, myDelays)) {
     return (
       <div className="picker-center picker-center--why">
         <p className="picker-center__caption">{describeBeatsOf(shown)}</p>

@@ -16,6 +16,7 @@ import {
   winsNeeded,
   isPlayable,
   isForcedPick,
+  forcedPickCost,
 } from './moves';
 
 describe('moves metadata', () => {
@@ -285,5 +286,14 @@ describe('isForcedPick — marked, and playable anyway (JQ-215)', () => {
 
   it('is false for a move that is playable because it is clear', () => {
     expect(isForcedPick('rock', {})).toBe(false);
+  });
+});
+
+describe('forcedPickCost (JQ-215)', () => {
+  it('is what computeDelays will actually do to the move', () => {
+    // computeDelays decrements every move by one, then adds DELAY_ON_CHOICE to
+    // the one played — so a move on 1 comes back on 2, not on 3.
+    expect(forcedPickCost('paper', { rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 })).toBe(2);
+    expect(forcedPickCost('rock', { rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 })).toBe(4);
   });
 });

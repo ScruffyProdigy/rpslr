@@ -766,6 +766,33 @@ button.ghost {
      dim, kept well above the 28% that failed contrast in Phase 2. */
   opacity: 0.75;
 }
+/* Marked, and playable anyway — the floor is the only reason it is on offer.
+   It stays in the *playable* family, because the one thing it must not read as
+   is blocked: solid border, full-strength surface, full-colour glyph. What sets
+   it apart is the pill it shares with the blocked state, recoloured so the
+   count reads as a price rather than a lockout. Against a clear move it differs
+   by having a pill at all; against a blocked one, by border style, glyph
+   treatment and pill colour — three channels, so none of this rests on colour
+   alone. No transition or transform, so `prefers-reduced-motion` needs no new
+   rule here (JQ-215). */
+.move-btn--forced {
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line-3));
+}
+.move-btn--forced .cooldown-pill {
+  color: var(--surface-0);
+  background: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 70%, var(--line-3));
+}
+/* Inspecting one: the preview ring wins, as it does for every other state. */
+.move-btn--forced.move-btn--preview {
+  border-color: var(--you);
+}
+.picker-center__forced {
+  margin: 0;
+  color: color-mix(in srgb, var(--warn) 74%, var(--text));
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
 /* Preview: the move you are considering, plus the two it beats. */
 .move-btn--preview {
   border-color: var(--you);
