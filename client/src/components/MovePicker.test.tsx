@@ -719,4 +719,12 @@ describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
     expect(screen.getByRole('button', { name: /^Robot/ })).toHaveClass('move-btn--cooldown');
     expect(container.querySelectorAll('.move-btn--cooldown')).toHaveLength(2);
   });
+
+  it('does not fade every arrow when the opponent is fully marked', () => {
+    const { container } = renderPicker({ oppDelays: ALL_MARKED });
+    // Paper and Lizard are their least-marked, so their attacks are live.
+    expect(arrow(container, 'paper', 'rock')).not.toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'lizard', 'robot')).not.toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
+  });
 });

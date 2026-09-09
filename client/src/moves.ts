@@ -87,7 +87,10 @@ export function describeBeatsGraph(
 } {
   const edges = ALL_MOVES.map(describeBeatsOf);
   const them = oppName?.trim() || 'The opponent';
-  const off = ALL_MOVES.filter((m) => (oppDelays[m] ?? 0) > 0).map((m) => MOVE_META[m].label);
+  // Not "carries marks" — "cannot be played". The floor means a fully-marked
+  // opponent still has their least-marked moves, and saying otherwise hands
+  // the player a false all-clear (JQ-215).
+  const off = ALL_MOVES.filter((m) => !isPlayable(m, oppDelays)).map((m) => MOVE_META[m].label);
   if (off.length === 0) {
     return {
       edges,
@@ -113,7 +116,7 @@ export function threatsTo(
   oppDelays: Record<string, number>,
 ): { all: Move[]; live: Move[]; safe: boolean } {
   const all = ALL_MOVES.filter((m) => beatsOf(m).includes(move));
-  const live = all.filter((m) => (oppDelays[m] ?? 0) === 0);
+  const live = all.filter((m) => isPlayable(m, oppDelays));
   return { all, live, safe: live.length === 0 };
 }
 

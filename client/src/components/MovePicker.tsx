@@ -288,7 +288,7 @@ export function MovePicker({
             const won = winningEdge?.from === fromMove && winningEdge.to === toMove;
             // An attack the opponent can't make this round: draw it as a faded
             // threat so a node with no solid incoming arrow reads as safe.
-            const oppOff = !won && (oppDelays[fromMove] ?? 0) > 0;
+            const oppOff = !won && !isPlayable(fromMove, oppDelays);
             const highlighted = preview === fromMove;
             return (
               <line

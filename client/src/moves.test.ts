@@ -297,3 +297,28 @@ describe('forcedPickCost (JQ-215)', () => {
     expect(forcedPickCost('rock', { rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 })).toBe(4);
   });
 });
+
+describe('the opponent gets the floor too (JQ-215)', () => {
+  /** Every move marked; Paper and Lizard tied on the fewest. */
+  const THEIRS = { rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 };
+
+  it('does not call a move safe when the floor leaves a threat live', () => {
+    // Paper beats Rock, and the floor makes Paper playable — so Rock is not
+    // safe. Reading marks directly would call it safe and get you beaten.
+    const t = threatsTo('rock', THEIRS);
+    expect(t.live).toEqual(['paper']);
+    expect(t.safe).toBe(false);
+  });
+
+  it('says the graph is fully live when the floor gives them everything back', () => {
+    expect(describeBeatsGraph({ rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 }).opponent).toBe(
+      'The opponent can play every move this round, so every arrow is live.',
+    );
+  });
+
+  it('names only the moves the floor did not reach', () => {
+    expect(describeBeatsGraph(THEIRS).opponent).toBe(
+      "The opponent can't play Rock, Scissors or Robot this round, so those attacks are drawn faded.",
+    );
+  });
+});
