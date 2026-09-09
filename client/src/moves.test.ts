@@ -14,6 +14,8 @@ import {
   threatsTo,
   winningEdgeOf,
   winsNeeded,
+  isPlayable,
+  isForcedPick,
 } from './moves';
 
 describe('moves metadata', () => {
@@ -239,5 +241,74 @@ describe('describeBeatsGraph naming', () => {
 
   it('falls back to the anonymous form for a blank name', () => {
     expect(describeBeatsGraph({}, '  ').opponent).toMatch(/^The opponent/);
+  });
+});
+
+describe('isPlayable defers to the server floor (JQ-215)', () => {
+  it('is the zero-marked moves when any move is on zero', () => {
+    const delays = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
+    expect(ALL_MOVES.filter((m) => isPlayable(m, delays))).toEqual(['rock', 'paper', 'scissors']);
+  });
+
+  it('falls back to the least-marked when nothing is on zero', () => {
+    // The floor: no move is clear, so the two on 1 mark become playable.
+    const delays = { rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 };
+    expect(ALL_MOVES.filter((m) => isPlayable(m, delays))).toEqual(['paper', 'lizard']);
+  });
+
+  it('never leaves a player with nothing to play', () => {
+    const delays = { rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 };
+    expect(ALL_MOVES.filter((m) => isPlayable(m, delays))).toHaveLength(5);
+  });
+
+  it('treats a missing key as zero rather than collapsing to nothing', () => {
+    // `Math.min` over a partial map is NaN, and NaN matches no move, so an
+    // unguarded call returns the empty list — every move unplayable. The
+    // picker holds partial maps, so this case is the common one, not the edge.
+    expect(isPlayable('rock', {})).toBe(true);
+    expect(ALL_MOVES.filter((m) => isPlayable(m, {}))).toHaveLength(5);
+    expect(isPlayable('lizard', { lizard: 2 })).toBe(false);
+    expect(isPlayable('rock', { lizard: 2 })).toBe(true);
+  });
+});
+
+describe('isForcedPick — marked, and playable anyway (JQ-215)', () => {
+  it('is empty whenever any move is on zero', () => {
+    const delays = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
+    expect(ALL_MOVES.filter((m) => isForcedPick(m, delays))).toEqual([]);
+  });
+
+  it('is the least-marked moves when nothing is on zero', () => {
+    const delays = { rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 };
+    expect(ALL_MOVES.filter((m) => isForcedPick(m, delays))).toEqual(['paper', 'lizard']);
+  });
+
+  it('is false for a move that is playable because it is clear', () => {
+    expect(isForcedPick('rock', {})).toBe(false);
+  });
+});
+
+describe('the opponent gets the floor too (JQ-215)', () => {
+  /** Every move marked; Paper and Lizard tied on the fewest. */
+  const THEIRS = { rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 };
+
+  it('does not call a move safe when the floor leaves a threat live', () => {
+    // Paper beats Rock, and the floor makes Paper playable — so Rock is not
+    // safe. Reading marks directly would call it safe and get you beaten.
+    const t = threatsTo('rock', THEIRS);
+    expect(t.live).toEqual(['paper']);
+    expect(t.safe).toBe(false);
+  });
+
+  it('says the graph is fully live when the floor gives them everything back', () => {
+    expect(describeBeatsGraph({ rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 }).opponent).toBe(
+      'The opponent can play every move this round, so every arrow is live.',
+    );
+  });
+
+  it('names only the moves the floor did not reach', () => {
+    expect(describeBeatsGraph(THEIRS).opponent).toBe(
+      "The opponent can't play Rock, Scissors or Robot this round, so those attacks are drawn faded.",
+    );
   });
 });

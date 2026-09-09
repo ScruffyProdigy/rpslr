@@ -5,6 +5,7 @@ import {
   beatVerb,
   beatsOf,
   describeBeat,
+  isPlayable,
   threatsTo,
   winsNeeded,
 } from './moves';
@@ -163,7 +164,13 @@ function safeRead(side: ReplaySide): SafeRead | null {
   if (move === undefined) return null;
   return {
     move,
-    reachable: side.delaysBefore[move] === 0,
+    // `reachable` and `punish` both ask "can this side actually play it",
+    // and have to share one definition of that or they contradict each
+    // other in the same object. `punish` already asks `isPlayable` (via
+    // `threatsTo`), which knows about the floor — a fully-marked mover can
+    // still play their least-marked move, and `delaysBefore[move] === 0`
+    // used to call that unreachable even on the round they played it (JQ-215).
+    reachable: isPlayable(move, side.delaysBefore),
     punish: threatsTo(move, side.delaysBefore).live,
   };
 }
@@ -346,7 +353,11 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
       }
     }
 
-    if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
+    // "Nothing they could play beat it" — so it has to be playability, not
+    // marks. Under the floor a fully-marked opponent still holds their
+    // least-marked moves, and this line would otherwise state as fact
+    // something the round disproves (JQ-215).
+    if (beatsOf(side.move).every((m) => !isPlayable(m, oppDelays))) {
       traps.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
     }
 

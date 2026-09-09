@@ -1,4 +1,4 @@
-import type { DelayMap } from '@game/game';
+import { MOVES, availableMoves, type DelayMap } from '@game/game';
 import type { Move } from './api';
 
 /**
@@ -87,7 +87,10 @@ export function describeBeatsGraph(
 } {
   const edges = ALL_MOVES.map(describeBeatsOf);
   const them = oppName?.trim() || 'The opponent';
-  const off = ALL_MOVES.filter((m) => (oppDelays[m] ?? 0) > 0).map((m) => MOVE_META[m].label);
+  // Not "carries marks" — "cannot be played". The floor means a fully-marked
+  // opponent still has their least-marked moves, and saying otherwise hands
+  // the player a false all-clear (JQ-215).
+  const off = ALL_MOVES.filter((m) => !isPlayable(m, oppDelays)).map((m) => MOVE_META[m].label);
   if (off.length === 0) {
     return {
       edges,
@@ -113,7 +116,7 @@ export function threatsTo(
   oppDelays: Record<string, number>,
 ): { all: Move[]; live: Move[]; safe: boolean } {
   const all = ALL_MOVES.filter((m) => beatsOf(m).includes(move));
-  const live = all.filter((m) => (oppDelays[m] ?? 0) === 0);
+  const live = all.filter((m) => isPlayable(m, oppDelays));
   return { all, live, safe: live.length === 0 };
 }
 
@@ -196,4 +199,43 @@ export function opponentMoveFromResult(
   const oppId = Object.keys(moves).find((id) => id !== myPlayerId);
   const oppMove = oppId ? moves[oppId] : undefined;
   return { myMove, oppMove };
+}
+
+/**
+ * A total delay map from a partial one.
+ *
+ * The picker holds `Record<string, number>` — the maps arrive off the wire and
+ * every read of them is written `?? 0`. `availableMoves` takes `Math.min` over
+ * all five moves, and a missing key makes that `NaN`, which matches no move and
+ * silently returns *nothing playable*. That is precisely the dead board this
+ * ticket removes, so the defaulting happens once, here, rather than being
+ * remembered at each call site.
+ */
+export function asDelayMap(delays: Record<string, number>): DelayMap {
+  return Object.fromEntries(MOVES.map((m) => [m, delays[m] ?? 0])) as DelayMap;
+}
+
+/**
+ * Playable this round — the server's own rule, not a copy of it.
+ *
+ * `availableMoves` has a floor: when helpers have driven every move above zero
+ * the least-marked ones stay playable, because a player with nothing to play
+ * takes an expiry strike for a state they had no way to escape. The client used
+ * to decide this for itself and disagreed with the server on exactly that
+ * round. Asking the same function is what makes the two agree by construction
+ * rather than by care (JQ-215).
+ */
+export function isPlayable(move: Move, delays: Record<string, number>): boolean {
+  return availableMoves(asDelayMap(delays)).includes(move);
+}
+
+/**
+ * Marked, and playable anyway: the floor is the only reason it is on offer.
+ *
+ * The state that needs its own paint — neither free like a clear move nor
+ * refused like a blocked one. Empty on every round where any move is on zero,
+ * which is every duel round and nearly every helpers round.
+ */
+export function isForcedPick(move: Move, delays: Record<string, number>): boolean {
+  return isPlayable(move, delays) && (delays[move] ?? 0) > 0;
 }

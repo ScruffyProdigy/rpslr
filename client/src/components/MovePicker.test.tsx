@@ -64,6 +64,29 @@ function incomingArrows(container: HTMLElement, to: Move): SVGLineElement[] {
   return Array.from(container.querySelectorAll<SVGLineElement>(`line[data-to="${to}"]`));
 }
 
+/** Re-render with a new clock reading, keeping everything else identical. */
+function tickTo(
+  rerender: (ui: React.ReactElement) => void,
+  secondsLeft: number | null,
+  props: { onPlay: (m: Move) => void; myDelays?: Record<string, number> },
+) {
+  rerender(
+    <MovePicker
+      myDelays={props.myDelays ?? {}}
+      oppDelays={{}}
+      myChosenMove={null}
+      lockedIn={false}
+      disabled={false}
+      round={3}
+      myRecentMoves={[]}
+      myOpeningDelays={DUEL_OPENING}
+      onPlay={props.onPlay}
+      secondsLeft={secondsLeft}
+      winningEdge={null}
+    />,
+  );
+}
+
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -172,6 +195,24 @@ describe('<MovePicker> opponent cooldown is drawn on the graph (JQ 2.3)', () => 
     renderPicker({ oppDelays: { robot: 2 } });
     await user.click(screen.getByRole('button', { name: /^Robot/ }));
     expect(screen.getByText("Opponent can't play Robot for 2 turns")).toBeInTheDocument();
+  });
+
+  it('withholds "opponent can\'t play" when the floor leaves them the move (JQ-215)', async () => {
+    // Own board ordinary — this is not about what I can play. Opponent is
+    // fully marked, with Paper and Lizard tied for fewest, so the floor keeps
+    // both playable for them. Saying "can't play" here would be a false
+    // all-clear the round itself disproves.
+    const user = userEvent.setup();
+    renderPicker({ oppDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(screen.queryByText(/Opponent can't play Paper/)).toBeNull();
+  });
+
+  it('still shows it for a move the floor genuinely did not reach (JQ-215)', async () => {
+    const user = userEvent.setup();
+    renderPicker({ oppDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(screen.getByText("Opponent can't play Robot for 4 turns")).toBeInTheDocument();
   });
 
   it('shows a two-item legend', () => {
@@ -420,29 +461,6 @@ describe('<MovePicker> clearing a preview to see the board (JQ-95 follow-up)', (
 
 
 describe('<MovePicker> auto-commit at the deadline (JQ-156)', () => {
-  /** Re-render with a new clock reading, keeping everything else identical. */
-  function tickTo(
-    rerender: (ui: React.ReactElement) => void,
-    secondsLeft: number | null,
-    props: { onPlay: (m: Move) => void; myDelays?: Record<string, number> },
-  ) {
-    rerender(
-      <MovePicker
-        myDelays={props.myDelays ?? {}}
-        oppDelays={{}}
-        myChosenMove={null}
-        lockedIn={false}
-        disabled={false}
-        round={3}
-        myRecentMoves={[]}
-        myOpeningDelays={DUEL_OPENING}
-        onPlay={props.onPlay}
-        secondsLeft={secondsLeft}
-        winningEdge={null}
-      />,
-    );
-  }
-
   it('plays the move you tapped rather than letting the server pick at random', async () => {
     const user = userEvent.setup();
     const onPlay = vi.fn();
@@ -604,5 +622,153 @@ describe('<MovePicker> speaks through one live region (JQ-157)', () => {
   it('announces the pick and the wait through it after lock-in', () => {
     const { container } = renderPicker({ lockedIn: true, myChosenMove: 'rock' });
     expect(container.querySelector('[role="status"]')).toHaveTextContent(/Waiting for opponent/);
+  });
+});
+
+/**
+ * Every move marked, two tied on the fewest. The server's floor makes Paper and
+ * Lizard playable; the client used to grey out all five and refuse every tap.
+ * Unreachable before JQ-210 gave the abilities something to do.
+ */
+const ALL_MARKED: Record<string, number> = {
+  rock: 2,
+  paper: 1,
+  scissors: 3,
+  lizard: 1,
+  robot: 4,
+};
+
+describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
+  it('commits the least-marked move on the second tap', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker({ myDelays: ALL_MARKED });
+    const paper = screen.getByRole('button', { name: /^Paper/ });
+    await user.click(paper);
+    expect(onPlay).not.toHaveBeenCalled(); // one tap is a preview, as ever
+    await user.click(paper);
+    expect(onPlay).toHaveBeenCalledWith('paper');
+  });
+
+  it('still refuses a move that is not among the least-marked', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker({ myDelays: ALL_MARKED });
+    const robot = screen.getByRole('button', { name: /^Robot/ });
+    await user.click(robot);
+    await user.click(robot);
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('auto-commits a forced pick rather than letting it expire into a strike', async () => {
+    // The whole point: the player has no clear move, so if the deadline path
+    // declines to commit they take an expiry strike, and strikes forfeit.
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10, myDelays: ALL_MARKED });
+
+    await user.click(screen.getByRole('button', { name: /^Lizard/ }));
+    tickTo(rerender, 1, { onPlay, myDelays: ALL_MARKED });
+    expect(onPlay).toHaveBeenCalledWith('lizard');
+  });
+
+  it('does not auto-commit a move the floor did not reach', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10, myDelays: ALL_MARKED });
+
+    await user.click(screen.getByRole('button', { name: /^Scissors/ }));
+    tickTo(rerender, 1, { onPlay, myDelays: ALL_MARKED });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('paints a forced pick as playable, not as blocked', () => {
+    const { container } = renderPicker({ myDelays: ALL_MARKED });
+    const paper = screen.getByRole('button', { name: /^Paper/ });
+    expect(paper).toHaveClass('move-btn--forced');
+    expect(paper).not.toHaveClass('move-btn--cooldown');
+    expect(paper).not.toHaveAttribute('aria-disabled');
+    // Still marked, so it still carries its count — but the pill no longer
+    // says "on cooldown" about a move you can play.
+    expect(within(paper).getByText('1', { selector: '.cooldown-pill' })).toBeInTheDocument();
+    expect(paper.querySelector('.cooldown-pill')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByLabelText('on cooldown, 1 turn')).toBeNull();
+    // And the moves the floor did not reach are unchanged.
+    const robot = screen.getByRole('button', { name: /^Robot/ });
+    expect(robot).toHaveClass('move-btn--cooldown');
+    expect(robot).not.toHaveClass('move-btn--forced');
+    expect(robot).toHaveAttribute('aria-disabled', 'true');
+    expect(container.querySelectorAll('.move-btn--forced')).toHaveLength(2);
+  });
+
+  it('says in words that it is playable and costs more', () => {
+    renderPicker({ myDelays: ALL_MARKED });
+    // Not colour-only: the same sentence the sighted player reads off the pill
+    // and the centre has to reach a screen reader too.
+    expect(
+      screen.getByRole('button', { name: /^Paper, marked but playable, costs you more/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('offers Lock in and names the cost qualitatively in the centre', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    const centre = container.querySelector('.picker-center') as HTMLElement;
+    expect(centre).toHaveTextContent('Every move is marked — Paper is your cheapest.');
+    expect(centre).toHaveTextContent('Playing it puts it further down.');
+    expect(container.querySelector('.picker-center--why')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Lock in Paper/ })).toBeInTheDocument();
+  });
+
+  it('still explains a move the floor did not reach', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myDelays: ALL_MARKED });
+    await user.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(container.querySelector('.picker-center--why')).toHaveTextContent('back in 4 turns');
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
+
+  it('leaves an ordinary round exactly as it was', () => {
+    // Criterion 4. One move on zero is every duel round and nearly every
+    // helpers round; the new state must be unreachable there.
+    const { container } = renderPicker({ myDelays: { rock: 0, lizard: 1, robot: 2 } });
+    expect(container.querySelector('.move-btn--forced')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toHaveClass('move-btn--cooldown');
+    expect(screen.getByRole('button', { name: /^Robot/ })).toHaveClass('move-btn--cooldown');
+    expect(container.querySelectorAll('.move-btn--cooldown')).toHaveLength(2);
+  });
+
+  it('does not fade every arrow when the opponent is fully marked', () => {
+    const { container } = renderPicker({ oppDelays: ALL_MARKED });
+    // Paper and Lizard are their least-marked, so their attacks are live.
+    expect(arrow(container, 'paper', 'rock')).not.toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'lizard', 'robot')).not.toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
+  });
+
+  /**
+   * A forced pick, already locked in. Unreachable until JQ-150 made the seat's
+   * own move survive a reload — `currentRoundMoves` was stripped from every
+   * snapshot, so a mid-round reload came back looking unlocked and `lockedIn`
+   * plus a marked move could not co-occur. It can now.
+   */
+  it('reads as your pick, not as a cost, once it is locked in', () => {
+    const { container } = renderPicker({
+      myDelays: ALL_MARKED,
+      myChosenMove: 'paper',
+      lockedIn: true,
+      disabled: true,
+    });
+    const paper = screen.getByRole('button', { name: /^Paper/ });
+    // Still marked, so still forced — but `--selected` is declared after
+    // `--forced` in styles.css and both are single-class, so the border reads
+    // in your colour rather than warn. The pick outranks the price.
+    expect(paper).toHaveClass('move-btn--forced');
+    expect(paper).toHaveClass('move-btn--selected');
+    expect(paper).not.toHaveClass('move-btn--dimmed');
+    // The centre is the wait, not the sales pitch: "puts it further down" is a
+    // decision you have already taken.
+    expect(container.querySelector('.picker-center--waiting')).toBeInTheDocument();
+    expect(container.querySelector('.picker-center__forced')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
   });
 });
