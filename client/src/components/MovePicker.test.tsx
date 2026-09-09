@@ -64,6 +64,29 @@ function incomingArrows(container: HTMLElement, to: Move): SVGLineElement[] {
   return Array.from(container.querySelectorAll<SVGLineElement>(`line[data-to="${to}"]`));
 }
 
+/** Re-render with a new clock reading, keeping everything else identical. */
+function tickTo(
+  rerender: (ui: React.ReactElement) => void,
+  secondsLeft: number | null,
+  props: { onPlay: (m: Move) => void; myDelays?: Record<string, number> },
+) {
+  rerender(
+    <MovePicker
+      myDelays={props.myDelays ?? {}}
+      oppDelays={{}}
+      myChosenMove={null}
+      lockedIn={false}
+      disabled={false}
+      round={3}
+      myRecentMoves={[]}
+      myOpeningDelays={DUEL_OPENING}
+      onPlay={props.onPlay}
+      secondsLeft={secondsLeft}
+      winningEdge={null}
+    />,
+  );
+}
+
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -420,29 +443,6 @@ describe('<MovePicker> clearing a preview to see the board (JQ-95 follow-up)', (
 
 
 describe('<MovePicker> auto-commit at the deadline (JQ-156)', () => {
-  /** Re-render with a new clock reading, keeping everything else identical. */
-  function tickTo(
-    rerender: (ui: React.ReactElement) => void,
-    secondsLeft: number | null,
-    props: { onPlay: (m: Move) => void; myDelays?: Record<string, number> },
-  ) {
-    rerender(
-      <MovePicker
-        myDelays={props.myDelays ?? {}}
-        oppDelays={{}}
-        myChosenMove={null}
-        lockedIn={false}
-        disabled={false}
-        round={3}
-        myRecentMoves={[]}
-        myOpeningDelays={DUEL_OPENING}
-        onPlay={props.onPlay}
-        secondsLeft={secondsLeft}
-        winningEdge={null}
-      />,
-    );
-  }
-
   it('plays the move you tapped rather than letting the server pick at random', async () => {
     const user = userEvent.setup();
     const onPlay = vi.fn();
@@ -604,5 +604,61 @@ describe('<MovePicker> speaks through one live region (JQ-157)', () => {
   it('announces the pick and the wait through it after lock-in', () => {
     const { container } = renderPicker({ lockedIn: true, myChosenMove: 'rock' });
     expect(container.querySelector('[role="status"]')).toHaveTextContent(/Waiting for opponent/);
+  });
+});
+
+/**
+ * Every move marked, two tied on the fewest. The server's floor makes Paper and
+ * Lizard playable; the client used to grey out all five and refuse every tap.
+ * Unreachable before JQ-210 gave the abilities something to do.
+ */
+const ALL_MARKED: Record<string, number> = {
+  rock: 2,
+  paper: 1,
+  scissors: 3,
+  lizard: 1,
+  robot: 4,
+};
+
+describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
+  it('commits the least-marked move on the second tap', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker({ myDelays: ALL_MARKED });
+    const paper = screen.getByRole('button', { name: /^Paper/ });
+    await user.click(paper);
+    expect(onPlay).not.toHaveBeenCalled(); // one tap is a preview, as ever
+    await user.click(paper);
+    expect(onPlay).toHaveBeenCalledWith('paper');
+  });
+
+  it('still refuses a move that is not among the least-marked', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = renderPicker({ myDelays: ALL_MARKED });
+    const robot = screen.getByRole('button', { name: /^Robot/ });
+    await user.click(robot);
+    await user.click(robot);
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('auto-commits a forced pick rather than letting it expire into a strike', async () => {
+    // The whole point: the player has no clear move, so if the deadline path
+    // declines to commit they take an expiry strike, and strikes forfeit.
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10, myDelays: ALL_MARKED });
+
+    await user.click(screen.getByRole('button', { name: /^Lizard/ }));
+    tickTo(rerender, 1, { onPlay, myDelays: ALL_MARKED });
+    expect(onPlay).toHaveBeenCalledWith('lizard');
+  });
+
+  it('does not auto-commit a move the floor did not reach', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const { rerender } = renderPicker({ onPlay, secondsLeft: 10, myDelays: ALL_MARKED });
+
+    await user.click(screen.getByRole('button', { name: /^Scissors/ }));
+    tickTo(rerender, 1, { onPlay, myDelays: ALL_MARKED });
+    expect(onPlay).not.toHaveBeenCalled();
   });
 });

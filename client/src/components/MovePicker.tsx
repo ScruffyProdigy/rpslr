@@ -18,6 +18,7 @@ import {
   cooldownPhrase,
   describeBeatsGraph,
   describeBeatsOf,
+  isPlayable,
   opponentCooldownPhrase,
   type WinningEdge,
 } from '../moves';
@@ -173,16 +174,20 @@ export function MovePicker({
     // not already locked in, not disabled. Reusing it keeps the auto-commit
     // from carrying a second, drifting notion of the same thing.
     if (boardState !== 'picking' || !picked || autoCommitted.current) return;
-    // A tapped move on cooldown was a "why can't I play this?", not a choice.
-    if ((myDelays[picked] ?? 0) > 0) return;
+    // A tapped move you cannot play was a "why can't I play this?", not a
+    // choice. Asked of the same helper the tap path uses, so the two cannot
+    // disagree about what is playable — they used to hold separate copies of
+    // the test, and the copies were both wrong under the floor (JQ-215).
+    if (!isPlayable(picked, myDelays)) return;
     autoCommitted.current = true;
     commit(picked);
   }, [secondsLeft, boardState, picked, myDelays, commit]);
 
   function handleClick(move: Move) {
-    // A move on cooldown can be inspected but never committed: tapping it asks
-    // "why can't I play this?", which previously got no answer at all.
-    if ((myDelays[move] ?? 0) > 0) {
+    // A move you cannot play can be inspected but never committed: tapping it
+    // asks "why can't I play this?", which previously got no answer at all.
+    // A *marked* move may still be playable — see `isPlayable`.
+    if (!isPlayable(move, myDelays)) {
       setPicked(move);
       return;
     }
