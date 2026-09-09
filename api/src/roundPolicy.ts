@@ -15,11 +15,11 @@
  *
  * ## Why a *phase* deadline rather than a round deadline
  *
- * A round is not always one decision. The planned `duel-helpers` mode adds an
- * Oracle sub-phase — after both players lock in, the charge-holder may re-pick
- * before the round resolves — and its draft screen has a deadline of its own
- * before round 1. Keying the deadline to a phase costs one field today and
- * saves touching every call site when those land.
+ * A round is not always one decision. `duel-helpers` has an Oracle sub-phase —
+ * after both players lock in, a charge-holder who paid for it may re-pick before
+ * the round resolves — and its draft screen will have a deadline of its own
+ * before round 1. Keying the deadline to a phase is what let Oracle land without
+ * touching a single existing call site.
  *
  * @see docs/superpowers/specs/2026-09-07-jq-156-round-timer-design.md
  */
@@ -27,10 +27,11 @@
 import { availableMoves, type DelayMap, type Move } from './game.js';
 
 /**
- * A timed segment of a match. Only `pick` exists today; `duel-helpers` adds
- * `draft` and `oracle`, which is the reason this is a union and not a boolean.
+ * A timed segment of a match. `oracle` is the mid-round sub-phase JQ-150 adds —
+ * between both-locked and resolve, and only when the Oracle holder has paid for
+ * it. `duel-helpers` will add `draft` too, which is why this stays a union.
  */
-export type Phase = 'pick';
+export type Phase = 'pick' | 'oracle';
 
 export interface RoundPolicy {
   /** How long a player has in this phase. Round 1 is deliberately longer. */
@@ -68,9 +69,25 @@ const LATER_ROUND_MS = 20_000;
  */
 const REVEAL_DEAD_TIME_MS = 3_200;
 
+/**
+ * Oracle's sub-phase: one narrow decision — keep the move you already chose, or
+ * swap it for another live one — taken with the reveal already in hand. Shorter
+ * than a pick because the thinking that a pick pays for has already happened,
+ * and because the opponent is locked in and waiting through every second of it.
+ *
+ * Round-independent: there is no first-round reading to do here, and no reveal
+ * animation to sit through, so neither of the pick allowances' two adjustments
+ * applies.
+ */
+const ORACLE_MS = 12_000;
+
 export const DUEL_POLICY: RoundPolicy = {
-  allowanceMs: (_phase, round) =>
-    round <= 1 ? FIRST_ROUND_MS : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,
+  allowanceMs: (phase, round) =>
+    phase === 'oracle'
+      ? ORACLE_MS
+      : round <= 1
+        ? FIRST_ROUND_MS
+        : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,
   strikesToForfeit: 2,
   disconnectGraceMs: 45_000,
 };

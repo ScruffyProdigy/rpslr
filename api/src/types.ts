@@ -95,6 +95,21 @@ export interface RoundResult {
   autoPicked: string[];
 }
 
+/**
+ * Oracle's reveal, for the one seat that paid for it.
+ *
+ * Only ever populated for the holder, and only while the sub-phase is running.
+ * `namedMove` is a move the opponent did **not** play — never the one they did,
+ * which is what keeps commit-then-reveal intact. Null when the opponent played
+ * their only live move: there was nothing they did not play to name.
+ */
+export interface OracleReveal {
+  /** The round this reveal belongs to, so a stale one cannot be rendered. */
+  round: number;
+  /** A live move the opponent did not play, or null when there was none. */
+  namedMove: Move | null;
+}
+
 export interface MatchState {
   match: Match;
   seats: Seat[];
@@ -120,6 +135,16 @@ export interface MatchState {
    * identify, and for any seat holding no abilities.
    */
   abilities: AbilityMap;
+  /**
+   * Oracle's mid-round reveal while `match.phase` is `oracle`, or null.
+   *
+   * Seat-private for the same reason `abilities` is, and more sharply: the set of
+   * moves the server is willing to name is the complement of the move the
+   * opponent played. An opponent who could read this would learn nothing, but a
+   * holder who could provoke a *second* draw would learn everything — which is
+   * why the named move is written down once rather than re-rolled per read.
+   */
+  oracle: OracleReveal | null;
   /**
    * The server's clock when this snapshot was built, ISO. The client renders
    * `match.phaseDeadline` as an offset from this rather than trusting its own

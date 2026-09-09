@@ -355,6 +355,21 @@ export class PgGameRepository implements GameRepository {
     }
   }
 
+  async replaceMove(input: {
+    matchId: string;
+    round: number;
+    playerId: string;
+    move: Move;
+  }): Promise<void> {
+    const res = await this.pool.query(
+      `UPDATE moves SET move = $4 WHERE match_id = $1 AND round = $2 AND player_id = $3`,
+      [input.matchId, input.round, input.playerId, input.move],
+    );
+    // Nothing to replace is a caller error, not an insert: only Oracle's
+    // sub-phase reaches this, and it runs strictly after both moves are in.
+    if (res.rowCount === 0) throw new NotFoundError('no move to replace for this round');
+  }
+
   async getMovesForRound(matchId: string, round: number): Promise<Record<string, Move>> {
     const res = await this.pool.query(
       'SELECT player_id, move FROM moves WHERE match_id = $1 AND round = $2',
@@ -411,6 +426,23 @@ export class PgGameRepository implements GameRepository {
       }
       throw err;
     }
+  }
+
+  async nameAbilityFiringTarget(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    target: Move | null;
+  }): Promise<boolean> {
+    // `AND target IS NULL` is the whole point: it makes the draw a
+    // write-once, so two readers racing into the sub-phase cannot name two
+    // different moves and hand the holder the opponent's move by elimination.
+    const res = await this.pool.query(
+      `UPDATE ability_firings SET target = $4
+        WHERE match_id = $1 AND round = $2 AND seat_id = $3 AND target IS NULL`,
+      [input.matchId, input.round, input.seatId, input.target],
+    );
+    return (res.rowCount ?? 0) > 0;
   }
 
   async listAbilityFirings(matchId: string): Promise<AbilityFiring[]> {

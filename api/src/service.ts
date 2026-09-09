@@ -28,6 +28,7 @@ import {
   type PlayerRules,
 } from './game.js';
 import { chargesNow, slotsFor, type AbilityMap } from './helpers/abilities.js';
+import { nameUnplayedMove } from './helpers/oracle.js';
 import { viewSnapshotAs, type MatchSnapshot } from './matchView.js';
 import { rollFor } from './helpers/rules.js';
 import { uniformPicker } from './helpers/loadout.js';
@@ -64,6 +65,7 @@ import type {
   Match,
   MatchEndReason,
   MatchState,
+  OracleReveal,
   RoundResult,
   Seat,
   SeatReservation,
@@ -406,19 +408,22 @@ export class GameService {
         matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
         abilityFirings: resolvedFirings(firings, results),
         abilities: {},
+        oracle: null,
         serverNow: new Date(this.now()).toISOString(),
       }),
       abilitiesByPlayerId: chargesByPlayerId(seats, results, firings, match.currentRound),
+      movesByPlayerId: rawRoundMoves,
+      oracleByPlayerId: oracleByPlayerId(match, seats, firings),
     };
   }
 
   /**
    * Hide in-progress opponent moves; resolved rounds still expose both in `results`.
-   * `abilities` is emptied for the same reason and by the same hand — a seat's
-   * charge state is only ever added back by `viewSnapshotAs`, for that seat.
+   * `abilities` and `oracle` are emptied for the same reason and by the same hand —
+   * seat-private state is only ever added back by `viewSnapshotAs`, for that seat.
    */
   private publicView(state: MatchState): MatchState {
-    return { ...state, currentRoundMoves: {}, abilities: {} };
+    return { ...state, currentRoundMoves: {}, abilities: {}, oracle: null };
   }
 
   /** The shared view, for callers with no seat to view as (provisioning, mostly). */
@@ -488,6 +493,40 @@ export class GameService {
       );
     }
 
+    // Oracle's sub-phase: this is a re-pick, not a first pick. Both moves are
+    // already recorded, so the holder's is replaced rather than inserted, and the
+    // round resolves on the spot — re-sending the move they already had is how a
+    // holder says "keep it" without waiting out the clock.
+    if (match.phase === 'oracle') {
+      const holders = oracleHoldersIn(seats, firings, match.currentRound);
+      if (!holders.some((s) => s.seatKey === mySeat.seatKey)) {
+        throw new ConflictError('your move is locked while the round resolves');
+      }
+      await this.repo.replaceMove({
+        matchId: match.id,
+        round: match.currentRound,
+        playerId,
+        move: move as Move,
+      });
+      // Both seats may hold Oracle — a loadout is per seat, and nothing stops the
+      // two matching. Then both are deciding in secret at the same time, and
+      // resolving on the first re-pick would both cut the other's sub-phase short
+      // and tell them, by the round simply ending, that their opponent had
+      // already moved. A mirror waits the clock out, which is the rule the pick
+      // phase runs on and for the same reason.
+      if (holders.length > 1) return this.publishState(match.id, playerId);
+      return this.resolveDuelRound(
+        match.id,
+        match.currentRound,
+        match.bestOf,
+        seats,
+        await this.repo.getMovesForRound(match.id, match.currentRound),
+        results,
+        [],
+        playerId,
+      );
+    }
+
     await this.repo.recordMove({
       matchId: match.id,
       round: match.currentRound,
@@ -500,10 +539,16 @@ export class GameService {
     }
 
     const moves = await this.repo.getMovesForRound(match.id, match.currentRound);
+    // The projection hands the caller back their own move, so their UI can lock
+    // in without the opponent's pick ever being in the payload.
     if (Object.keys(moves).length < occupied.length) {
-      const broadcast = await this.publishState(match.id, playerId);
-      // Echo the caller's move so their UI can lock in without exposing the opponent's pick.
-      return { ...broadcast, currentRoundMoves: { [playerId]: move as Move } };
+      return this.publishState(match.id, playerId);
+    }
+
+    // Both locked. A charge already spent on Oracle buys a sub-phase here, before
+    // anything resolves; every other round goes straight through, unchanged.
+    if (await this.enterOracleSubPhase(match, seats, moves, results, firings)) {
+      return this.publishState(match.id, playerId);
     }
 
     return this.resolveDuelRound(
@@ -516,6 +561,61 @@ export class GameService {
       [],
       playerId,
     );
+  }
+
+  /**
+   * Open Oracle's mid-round sub-phase if this round bought one, and say whether
+   * it did.
+   *
+   * Reached only from a round both players locked in on time. A round that ran
+   * out of clock resolves instead: it has already overrun, and granting a further
+   * allowance on top would be rewarding the overrun. The holder's charge is spent
+   * either way — it was spent when they fired.
+   */
+  private async enterOracleSubPhase(
+    match: Match,
+    seats: Seat[],
+    moves: Record<string, Move>,
+    results: RoundResult[],
+    firings: AbilityFiring[],
+  ): Promise<boolean> {
+    const holders = oracleHoldersIn(seats, firings, match.currentRound);
+    if (holders.length === 0) return false;
+
+    // Marks as they stand *entering* the round, which is what the opponent was
+    // choosing from — the same basis `submitMove` validates a pick against, so
+    // Oracle can never name a move they could not have played.
+    const delays = delaysBySeat(results, seats, firings);
+    let wroteAny = false;
+    // Every holder is named a move, not just the first one found: two Oracles
+    // facing each other is a legal pairing, and a holder whose charge was spent
+    // to be told nothing would have been robbed by an implementation detail.
+    for (const holder of holders) {
+      const opponent = seats.find((s) => s.seatKey !== holder.seatKey);
+      if (!opponent?.player) continue;
+      const named = nameUnplayedMove(
+        delays[opponent.seatKey],
+        moves[opponent.player.id],
+        this.rng,
+      );
+      // Write-once. Two readers racing in here must not draw two different moves:
+      // a holder who could provoke a re-roll would learn the opponent's move as
+      // the one the server never names. The loser reads the winner's move back.
+      if (
+        await this.repo.nameAbilityFiringTarget({
+          matchId: match.id,
+          seatId: holder.id,
+          round: match.currentRound,
+          target: named,
+        })
+      ) {
+        wroteAny = true;
+      }
+    }
+    // Only a writer starts the clock, so a reader that lost every race cannot
+    // hand the holders a second allowance by resetting the deadline.
+    if (wroteAny) await this.startPhase(match.id, match.gameMode, match.currentRound, 'oracle');
+    return true;
   }
 
   /**
@@ -568,11 +668,12 @@ export class GameService {
     if (!slotsFor(mySeat.loadout)[helperId]) {
       throw new ValidationError(`this seat does not hold '${helperId}'`);
     }
-    if (helperId === ORACLE) {
-      // Oracle's effect is the mid-round reveal sub-phase JQ-150 owns, and it does
-      // not exist yet. Taking the firing would spend the charge and do nothing —
-      // worse for the player than being told no, and unrecoverable by design.
-      throw new ValidationError(`'${helperId}' cannot be fired yet`);
+    // Oracle is declared during the pick phase and pays off after both players
+    // lock in, so firing it once the sub-phase is already running is too late —
+    // and firing it *into* the sub-phase, where the charge is already spent,
+    // would be a second spend on a round that has one slot.
+    if (match.phase === 'oracle') {
+      throw new ConflictError('the round is already resolving');
     }
 
     const results = await this.repo.listResults(match.id);
@@ -696,9 +797,13 @@ export class GameService {
     if (match) this.presence?.disconnect(match.id, playerId);
   }
 
-  /** Put the next phase on the clock. */
-  private async startPhase(matchId: string, gameMode: string, round: number): Promise<void> {
-    const phase: Phase = 'pick';
+  /** Put a phase on the clock. Rounds open on `pick`; Oracle adds the other one. */
+  private async startPhase(
+    matchId: string,
+    gameMode: string,
+    round: number,
+    phase: Phase = 'pick',
+  ): Promise<void> {
     const startedAt = this.now();
     const deadline = deadlineFor(policyForMode(gameMode), phase, round, startedAt);
     await this.repo.setPhase(
@@ -740,6 +845,26 @@ export class GameService {
     const policy = policyForMode(match.gameMode);
     const now = this.now();
     const deadline = match.phaseDeadline ? Date.parse(match.phaseDeadline) : null;
+
+    // Oracle's sub-phase answers to the clock but not to the idle policy. Both
+    // players picked on time — the strike system counts a run of silence, and
+    // there has been none — so expiry costs nobody a strike and cannot forfeit
+    // anyone. It simply resolves the round on the moves as they stand: the
+    // holder's original pick, since they did not replace it. The charge stays
+    // spent, which is what declining to use what you paid for costs.
+    if (match.phase === 'oracle') {
+      if (deadline === null || now < deadline) return;
+      await this.resolveDuelRound(
+        matchId,
+        match.currentRound,
+        match.bestOf,
+        seats,
+        moves,
+        await this.repo.listResults(matchId),
+        [],
+      );
+      return;
+    }
 
     const verdicts = occupied.map((seat) => ({
       seat,
@@ -898,8 +1023,21 @@ function rulesForSeat(seat: Seat): PlayerRules {
   return rulesForSeats(seat, seat)[0];
 }
 
-/** Oracle is held and charged like any ability, but has no effect until JQ-150. */
+/** The one ability that changes the round protocol rather than the marks. */
 const ORACLE = 'oracle';
+
+/**
+ * The seats that spent Oracle on this round.
+ *
+ * Plural on purpose. A loadout is chosen per seat and nothing makes the two
+ * differ, so both players facing each other with Oracle is a legal pairing —
+ * rare, but every code path that assumes a single holder is wrong when it lands.
+ */
+function oracleHoldersIn(seats: Seat[], firings: AbilityFiring[], round: number): Seat[] {
+  return seats.filter(
+    (s) => s.player && firedIn(firings, round, s.seatKey).some((f) => f.id === ORACLE),
+  );
+}
 
 /**
  * One seat's firings per resolved round, in round order — the sequence
@@ -934,6 +1072,33 @@ function chargesByPlayerId(
     );
   }
   return byPlayer;
+}
+
+/**
+ * Oracle's reveal, keyed by the one player entitled to see it.
+ *
+ * Empty unless the sub-phase is actually running: outside it there is nothing to
+ * decide, and once the round resolves the named move becomes public through
+ * `abilityFirings` like every other spent ability. Reading the move back from
+ * the firing row rather than re-drawing it is the whole safety property — see
+ * `nameAbilityFiringTarget`.
+ */
+function oracleByPlayerId(
+  match: Match,
+  seats: Seat[],
+  firings: AbilityFiring[],
+): Record<string, OracleReveal> {
+  if (match.phase !== 'oracle') return {};
+  const out: Record<string, OracleReveal> = {};
+  for (const seat of seats) {
+    if (!seat.player) continue;
+    const oracle = firedIn(firings, match.currentRound, seat.seatKey).find(
+      (f) => f.id === ORACLE,
+    );
+    if (!oracle) continue;
+    out[seat.player.id] = { round: match.currentRound, namedMove: oracle.target ?? null };
+  }
+  return out;
 }
 
 /**
@@ -987,6 +1152,15 @@ function namedMovesFor(
         );
       }
       return { target, source };
+    }
+    // Oracle names a move, but the *server* names it, and not until both players
+    // have locked in — the whole point is a move the opponent did not play, which
+    // is unknowable while they can still change it. A target from the client is
+    // refused rather than trusted; `nameAbilityFiringTarget` fills the column in.
+    case ORACLE: {
+      if (target != null) throw new ValidationError(`'${helperId}' takes no target`);
+      noSource();
+      return { target: null, source: null };
     }
     // Sacrifice and Freeze act on the round itself, not on a move. Anything an
     // ability has no use for is refused rather than stored and ignored.

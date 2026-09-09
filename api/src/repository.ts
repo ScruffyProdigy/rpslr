@@ -74,6 +74,20 @@ export interface GameRepository {
     playerId: string;
     move: Move;
   }): Promise<void>;
+  /**
+   * Overwrite a move already recorded for this round. Oracle's sub-phase is the
+   * only thing that may do this: the holder paid a charge for the right to
+   * reconsider, and there is no other point in a round where a committed move
+   * stops being final. Separate from `recordMove` so that the ordinary path
+   * keeps its "a move already submitted is a conflict" guarantee rather than
+   * gaining a silent overwrite nobody asked for.
+   */
+  replaceMove(input: {
+    matchId: string;
+    round: number;
+    playerId: string;
+    move: Move;
+  }): Promise<void>;
   getMovesForRound(matchId: string, round: number): Promise<Record<string, Move>>;
   saveRoundResult(input: {
     matchId: string;
@@ -96,6 +110,26 @@ export interface GameRepository {
     /** Thief's own-side move; null for every other ability. */
     source: Move | null;
   }): Promise<void>;
+  /**
+   * Write the move Oracle named onto a firing that has none yet, and report
+   * whether this call is the one that wrote it.
+   *
+   * Oracle is the one ability whose target the *server* chooses, and it cannot
+   * choose it at fire time: the opponent has not moved yet. So the firing is
+   * recorded with a null target and named later, when both moves are in.
+   *
+   * Conditional on the target still being null, because the draw must happen
+   * exactly once. Two readers racing into the sub-phase would otherwise name two
+   * different moves, and a holder who could provoke a re-roll would learn the
+   * opponent's move by elimination — it is the one the server never names. The
+   * loser of the race is told `false` and reads the winner's move back.
+   */
+  nameAbilityFiringTarget(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    target: Move | null;
+  }): Promise<boolean>;
   /** Every firing in the match, in round order. Callers decide what to disclose. */
   listAbilityFirings(matchId: string): Promise<AbilityFiring[]>;
   close(): Promise<void>;
