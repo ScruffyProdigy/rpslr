@@ -5,6 +5,7 @@ import {
   beatVerb,
   beatsOf,
   describeBeat,
+  isPlayable,
   threatsTo,
   winsNeeded,
 } from './moves';
@@ -346,7 +347,11 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
       }
     }
 
-    if (beatsOf(side.move).every((m) => oppDelays[m] > 0)) {
+    // "Nothing they could play beat it" — so it has to be playability, not
+    // marks. Under the floor a fully-marked opponent still holds their
+    // least-marked moves, and this line would otherwise state as fact
+    // something the round disproves (JQ-215).
+    if (beatsOf(side.move).every((m) => !isPlayable(m, oppDelays))) {
       traps.push({ kind: 'trap', text: trapText(mover, blocked, side.move) });
     }
 

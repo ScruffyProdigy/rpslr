@@ -327,6 +327,21 @@ describe('calloutsFor a move with nothing left to beat', () => {
     const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
     expect(calloutsFor(replay.frames[0], replay).some((c) => c.kind === 'trap')).toBe(false);
   });
+
+  it('withholds the trap line when the floor leaves them an answer (JQ-215)', () => {
+    // Every move marked, so Paper and Lizard are playable. Paper beats Rock, so
+    // "nothing they could play beat it" is simply untrue of a Rock pick.
+    const replay = replayOf([round(1, 'rock', 'paper', 'b')]);
+    replay.frames[0].b.delaysBefore = {
+      rock: 2,
+      paper: 1,
+      scissors: 3,
+      lizard: 1,
+      robot: 4,
+    };
+    const notes = calloutsFor(replay.frames[0], replay);
+    expect(notes.some((n) => n.kind === 'trap')).toBe(false);
+  });
 });
 
 describe('calloutsFor a safe move out of reach', () => {
