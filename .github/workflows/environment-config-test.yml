@@ -122,7 +122,7 @@ jobs:
       - name: Docker env.js injection test
         run: |
           set -e
-          docker build -t rps-client-envtest ./client
+          docker build -t rps-client-envtest -f client/Dockerfile .
           cid=$(docker run -d \
             -e GAME_APP_ENV=staging \
             -e GAME_API_BASE_URL=https://rps.staging.example/api \
@@ -145,7 +145,7 @@ jobs:
       - name: Cache headers let a deploy actually reach a browser
         run: |
           set -e
-          docker build -t rps-client-cachetest ./client
+          docker build -t rps-client-cachetest -f client/Dockerfile .
           cid=$(docker run -d -p 8099:80 rps-client-cachetest)
           sleep 4
           html_cc=$(curl -sI http://localhost:8099/ | tr -d '\r' | grep -i '^cache-control:' || true)
