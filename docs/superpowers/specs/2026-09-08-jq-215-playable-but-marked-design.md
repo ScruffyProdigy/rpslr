@@ -50,7 +50,7 @@ reachable now.
 JQ-207 made `api/src/game.ts` reachable from the frontend: `vite.config.ts`
 aliases `@game/*` at `api/src/*` and rewrites the api's NodeNext `./foo.js`
 imports back to `.ts`, so the rules engine bundles into the client. The client
-already imports `INITIAL_DELAYS` and `DELAY_ON_CHOICE` through it.
+already imports `INITIAL_DELAYS` through it.
 
 So the shared helper is not a reimplementation of the floor. It is a call to it:
 
@@ -143,9 +143,15 @@ cannot, because you are not choosing for them and there is nothing to price:
    i.e. *nothing they could play beat it*. As prose in a replay this is not a
    greyed button but a false statement of fact, so it takes the negated helper.
 
-Sites 5 and 6 (`oppDelay` in the node badge and in `PickerCenter`'s caption) are
-left alone. They report a mark count, which is true either way; they make no
-claim about playability.
+Site 5 — `oppDelay` on the node badge — is left alone. It reports a mark count,
+which is true either way; it makes no claim about playability.
+
+Site 6 — `opponentCooldownPhrase` in `PickerCenter`'s caption — was originally
+left alone on the same grounds, and that was wrong. The string reads "Opponent
+can't play Paper for 1 turn", which *is* a playability claim, so under the floor
+it is the same false all-clear as `threatsTo(...).safe`. It is reachable while
+your own board is perfectly ordinary, so nothing on the your-side path catches
+it. It takes the same `!isPlayable` gate as the other four.
 
 ### How it reads
 
@@ -181,13 +187,25 @@ So `PickerCenter` gains a third branch, between the blocked "why" panel and the
 ordinary caption:
 
 > Rock crushes Scissors & Lizard
-> **Every move is marked — Rock is your cheapest. Playing it puts it down to 3.**
+> **Every move is marked — Rock is your cheapest. Playing it puts it further down.**
 > `[ Lock in Rock ]`
 
-"down to 3" is computed as `myDelays[move] - 1 + DELAY_ON_CHOICE`, mirroring the
-decrement-then-add order `computeDelays` uses, so the number is what will
-actually happen and not an approximation of it. The node's `aria-label` carries
-the same sentence, so the state is not colour-only for a screen reader.
+Qualitative, and deliberately so. This first said "puts it down to 3", computed
+as `myDelays[move] - 1 + DELAY_ON_CHOICE` to mirror `computeDelays` — on the
+claim that the number was what would actually happen rather than an
+approximation. That claim was false. `DELAY_ON_CHOICE` is the *duel* constant;
+in a helpers match the cost is `rules.delayOnChoice(...)`, which Ferrus,
+Featherweight, Tempered, Copycat and Bookend all change, and which for some of
+them depends on the round's outcome — not knowable while you are still picking.
+Since this panel is reachable *only* in a helpers match, every render of that
+number would have been a duel constant asserted about a helpers match: the
+ticket's own bug, in the copy meant to explain it.
+
+Plumbing the real `delayOnChoice` down would fix the fixed-cost cards and still
+be wrong for the outcome-dependent ones, so the sentence names the direction and
+leaves the magnitude to the board. The node's `aria-label` carries the same
+claim ("marked but playable, costs you more"), so the state is not colour-only
+for a screen reader.
 
 The blocked branch is untouched: `cooldownCause` still explains a move that is
 genuinely down, and on a forced round the more-marked moves still get it.

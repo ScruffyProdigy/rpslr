@@ -11,6 +11,33 @@
 Spec: `docs/superpowers/specs/2026-09-08-jq-215-playable-but-marked-design.md`
 Linear: [JQ-215](https://linear.app/joinquest/issue/JQ-215/move-selector-needs-a-playable-but-marked-state)
 
+## Amendments after execution
+
+The steps below are kept as executed. The final whole-branch review overturned
+three of them; the shipped code follows the amendments, not the original text.
+
+1. **`forcedPickCost` was deleted, not shipped** (Task 3, Steps 1/3/4/5).
+   `DELAY_ON_CHOICE` is the duel constant, but the forced panel renders only in
+   helpers matches, where the cost is `rules.delayOnChoice(...)` — loadout-
+   dependent, and for some cards outcome-dependent, so unknowable at pick time.
+   The copy is qualitative instead: **"Playing it puts it further down"**, and
+   the label fragment is **"marked but playable, costs you more"**.
+2. **A ninth site was found and fixed** (not in any task below).
+   `opponentCooldownPhrase` in `PickerCenter` renders "Opponent can't play X for
+   N turns" — a playability claim, which Task 4's site list wrongly excused as a
+   mark count. It takes the same `!isPlayable` gate.
+3. **`safeRead` in `commentary.ts` needed a tenth swap.** Task 4 made
+   `threatsTo` floor-aware, which left `reachable` (`delaysBefore[move] === 0`)
+   contradicting its sibling `punish` one line below. Both now use `isPlayable`.
+
+One error of fact in Task 4's Step 5 rationale: `HowToPlayGraph` is named as a
+`threatsTo` consumer. It is not — it imports only `describeBeatsOf`. The real
+consumers are `commentary.ts` and `replay.ts`.
+
+Left for a follow-up ticket, pre-existing and not introduced here: `liveMoves`
+(`commentary.ts`) hardcodes "exactly three playable moves", and `roundValue`
+hard-indexes a 3×3 grid — so a frame leaving either side fully marked throws.
+
 ## Global Constraints
 
 - All work happens in the worktree `.claude/worktrees/jq-215-marked-playable` on branch `ryanckohler/jq-215-move-selector-needs-a-playable-but-marked-state`. Never edit the primary clone.
