@@ -28,14 +28,26 @@ describe('playedRoundsFrom', () => {
 
   it('hands each seat the abilities that seat fired in that round', () => {
     const firings: RecordedFiring[] = [
-      { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock' },
-      { round: 2, seatKey: 'a', helperId: 'freeze', target: null },
+      { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
+      { round: 2, seatKey: 'a', helperId: 'freeze', target: null, source: null },
     ];
     const rounds = playedRoundsFrom([round(1, 'rock', 'paper'), round(2, 'paper', 'rock')], firings, A, B);
 
     expect(rounds[0].firedA).toEqual([]);
-    expect(rounds[0].firedB).toEqual([{ id: 'quarantine', target: 'rock' }]);
-    expect(rounds[1].firedA).toEqual([{ id: 'freeze', target: undefined }]);
+    expect(rounds[0].firedB).toEqual([{ id: 'quarantine', target: 'rock', source: undefined }]);
+    expect(rounds[1].firedA).toEqual([{ id: 'freeze', target: undefined, source: undefined }]);
+  });
+
+  it("carries Thief's own-side move, which is half of what Thief names", () => {
+    // Regression: this mapping dropped `source` while nothing could fire (JQ-220
+    // owns that path). `fireEffects` refuses a Thief firing with no source, so the
+    // omission would not have made Thief approximate — it would have made Thief
+    // inert, silently, in the one place both the live board and the replay read.
+    const firings: RecordedFiring[] = [
+      { round: 1, seatKey: 'a', helperId: 'thief', target: 'scissors', source: 'lizard' },
+    ];
+    const rounds = playedRoundsFrom([round(1, 'rock', 'paper')], firings, A, B);
+    expect(rounds[0].firedA).toEqual([{ id: 'thief', target: 'scissors', source: 'lizard' }]);
   });
 
   it('drops a round the server recorded without both picks', () => {

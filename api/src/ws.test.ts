@@ -165,7 +165,8 @@ describe('an unresolved ability firing never reaches the socket', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'rock',
-    });
+      source: null,
+});
 
     // The opponent's own socket, which is the one that would give the game away.
     const opponent = await open();
@@ -186,9 +187,119 @@ describe('an unresolved ability firing never reaches the socket', () => {
     await service.submitMove(code, challengerId, 'scissors');
     const after = await resolved;
     expect((after.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([
-      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock' },
+      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock', source: null },
     ]);
 
     opponent.close();
+  });
+});
+
+
+/**
+ * JQ-220's disclosure rule, asserted where it actually matters: on the bytes that
+ * leave the server. The service-level test proves the projection is computed; this
+ * one proves nothing else on the socket carries the secret out anyway.
+ */
+describe('WebSocket ability firings', () => {
+  async function helpersMatch() {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 5,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['rust', 'poker-face'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    return { code, alice: created.you.playerId, bob: joined.you.playerId };
+  }
+
+  it('never sends one seat an unresolved firing by the other', async () => {
+    const { code, alice, bob } = await helpersMatch();
+
+    const aliceWs = await open();
+    const bobWs = await open();
+    send(aliceWs, { type: 'subscribe', ref: code, playerId: alice });
+    send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
+    await waitFor(aliceWs, (m) => m.type === 'state');
+    await waitFor(bobWs, (m) => m.type === 'state');
+
+    // Both waiters are armed before the firing goes out: one push fans out to both
+    // sockets at once, and a listener attached afterwards would simply miss it.
+    const bobPush = waitFor(bobWs, (m) => m.type === 'state');
+    const alicePush = waitFor(
+      aliceWs,
+      (m) =>
+        m.type === 'state' &&
+        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.quarantine
+          ?.available === false,
+    );
+
+    // Alice names the move she fears. Bob is about to be pushed the resulting state.
+    send(aliceWs, { type: 'fire', playerId: alice, helperId: 'quarantine', target: 'rock' });
+
+    const pushed = await bobPush;
+    // Asserted on the raw payload: the guess must not be anywhere in it, under any
+    // field name. Bob can read Alice's *loadout* — that is public — so the string
+    // 'quarantine' is not the secret; the firing and its target are.
+    const raw = JSON.stringify(pushed.state);
+    expect(JSON.parse(raw).abilityFirings).toEqual([]);
+    expect(raw).not.toContain('"target"');
+    // Bob is told about his own charge and only his own.
+    expect(Object.keys(JSON.parse(raw).abilities)).toEqual(['rust']);
+
+    // Alice's own socket, by contrast, is told her charge is spent.
+    expect(await alicePush).toBeTruthy();
+
+    aliceWs.close();
+    bobWs.close();
+  });
+
+  it('discloses the firing to both seats once the round resolves', async () => {
+    const { code, alice, bob } = await helpersMatch();
+
+    const bobWs = await open();
+    send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
+    await waitFor(bobWs, (m) => m.type === 'state');
+
+    send(bobWs, { type: 'fire', playerId: bob, helperId: 'rust', target: 'scissors' });
+    await waitFor(
+      bobWs,
+      (m) =>
+        m.type === 'state' &&
+        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.rust
+          ?.available === false,
+    );
+
+    // Both hold a scissors-binding Major, so rock is what either can play.
+    await service.submitMove(code, alice, 'rock');
+    await service.submitMove(code, bob, 'rock');
+
+    const resolved = await waitFor(
+      bobWs,
+      (m) => (m.state as { results: unknown[] }).results?.length === 1,
+    );
+    expect((resolved.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([
+      { round: 1, seatKey: '2', helperId: 'rust', target: 'scissors', source: null },
+    ]);
+    bobWs.close();
+  });
+
+  it('refuses a firing the seat has no right to make, without killing the socket', async () => {
+    const { code, alice } = await helpersMatch();
+    const ws = await open();
+    send(ws, { type: 'subscribe', ref: code, playerId: alice });
+    await waitFor(ws, (m) => m.type === 'state');
+
+    send(ws, { type: 'fire', playerId: alice, helperId: 'rust', target: 'rock' });
+    const err = await waitFor(ws, (m) => m.type === 'error');
+    expect(err.error).toContain("does not hold 'rust'");
+
+    // Still usable afterwards.
+    send(ws, { type: 'ping' });
+    expect(await waitFor(ws, (m) => m.type === 'pong')).toBeTruthy();
+    ws.close();
   });
 });

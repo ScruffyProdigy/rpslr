@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MatchHub } from './matchHub.js';
-import type { MatchState } from './types.js';
+import type { MatchSnapshot } from './matchView.js';
 
-const fakeState = (id: string) => ({ match: { id } }) as unknown as MatchState;
+// The hub forwards snapshots, not states (JQ-220): one match has as many views as
+// it has seats, and picking one is the subscriber's job, not the bus's.
+const fakeState = (id: string) =>
+  ({ shared: { match: { id } }, abilitiesByPlayerId: {} }) as unknown as MatchSnapshot;
 
 describe('MatchHub', () => {
   it('delivers published state to subscribers of that match only', () => {

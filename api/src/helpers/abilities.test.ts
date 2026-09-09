@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { abilityMarks, slotMarks } from './abilities.js';
+import { abilityMarks, chargesNow, slotMarks } from './abilities.js';
 import type { Loadout } from './loadout.js';
 
 const load = (a: string, b: string) => [a, b] as unknown as Loadout;
@@ -52,6 +52,35 @@ describe('an ability that never recharges', () => {
   it('does not come back however many rounds pass', () => {
     expect(slotMarks(relic, [[{ id: 'relic' }], [], [], [], [], []])).toEqual({
       relic: { marks: null, available: false },
+    });
+  });
+});
+
+describe('chargesNow', () => {
+  const loadout = load('freeze', 'poker-face');
+
+  it('reads the resolved fold when nothing is pending', () => {
+    expect(chargesNow(loadout, [[]])).toEqual({ freeze: { marks: 0, available: true } });
+  });
+
+  it('marks a charge spent in the round being played without moving its arithmetic', () => {
+    // The recharge lands when the round resolves, so `marks` is untouched — only
+    // the offer is withdrawn.
+    expect(chargesNow(loadout, [[]], [{ id: 'freeze' }])).toEqual({
+      freeze: { marks: 0, available: false },
+    });
+  });
+
+  it('leaves a pending firing this loadout does not hold to the caller to reject', () => {
+    expect(chargesNow(loadout, [[]], [{ id: 'rust' }])).toEqual({
+      freeze: { marks: 0, available: true },
+    });
+  });
+
+  it('cannot make an uncharged ability look any more spent than it is', () => {
+    // Fired on the opening round: still 3 marks out, still unavailable.
+    expect(chargesNow(load('sacrifice', 'poker-face'), [], [{ id: 'sacrifice' }])).toEqual({
+      sacrifice: { marks: 3, available: false },
     });
   });
 });

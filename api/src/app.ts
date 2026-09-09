@@ -147,10 +147,14 @@ export function createApp(
     }),
   );
 
+  // `?playerId=` says whose seat is asking. It changes only the seat-private
+  // `abilities`; without it the response is the shared view, which is what a
+  // spectator or a link preview should get anyway.
   api.get(
     '/matches/:ref',
     asyncHandler(async (req: Request, res: Response) => {
-      res.json(await service.getState(req.params.ref));
+      const playerId = typeof req.query.playerId === 'string' ? req.query.playerId : null;
+      res.json(await service.getState(req.params.ref, playerId));
     }),
   );
 
@@ -203,6 +207,22 @@ export function createApp(
       const { playerId, move, round } = req.body ?? {};
       if (!playerId) return res.status(400).json({ error: 'playerId is required' });
       res.json(await service.submitMove(req.params.ref, playerId, move, round));
+    }),
+  );
+
+  // Spending a charge is a separate act from committing a move, so it is a
+  // separate route — see `GameService.fireAbility` for why.
+  api.post(
+    '/matches/:ref/fire',
+    asyncHandler(async (req: Request, res: Response) => {
+      const { playerId, helperId, target, source, round } = req.body ?? {};
+      if (!playerId) return res.status(400).json({ error: 'playerId is required' });
+      res.json(await service.fireAbility(req.params.ref, playerId, {
+        helperId,
+        target,
+        source,
+        round,
+      }));
     }),
   );
 

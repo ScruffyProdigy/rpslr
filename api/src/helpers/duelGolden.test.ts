@@ -11,10 +11,17 @@
  * diff names the exact move sequence, or `rulesFor(null, …)` stopped being the
  * rules this game already had — which is the whole back-compatibility strategy.
  *
- * The `duel` snapshot was re-captured once, for JQ-148: `MatchState` gained
- * `abilityFirings`, and a seat gained `loadout` and `loadoutRoll`. That diff was
- * thirty insertions and no deletions — no recorded value moved — and the test below
- * pins those three fields at their duel values so the shape change cannot be a rules
+ * The `duel` snapshot has been re-captured twice, both times for a `MatchState`
+ * shape change and never for a rules change:
+ *
+ *   - JQ-148: `MatchState` gained `abilityFirings`, and a seat gained `loadout` and
+ *     `loadoutRoll`. Thirty insertions, no deletions.
+ *   - JQ-220: `MatchState` gained `abilities`, the viewing seat's charge state.
+ *     Six insertions — one empty object per captured snapshot — and no deletions.
+ *
+ * "No deletions" is the whole argument in both cases: not one recorded value moved,
+ * so the new field is additive by proof rather than by assertion. The test below
+ * pins all four fields at their duel values so a shape change cannot be a rules
  * change wearing a new field's clothes. `opening`, `outcomes` and `engineTable` are
  * untouched from the original capture, and they are where the guarantee really sits.
  */
@@ -55,12 +62,16 @@ describe('duel is byte-identical to the engine it had before loadouts', () => {
 });
 
 describe('the null loadout is the duel path, not a copy of it', () => {
-  it('leaves a duel seat carrying no loadout, and the match no firings', () => {
+  it('leaves a duel seat carrying no loadout, no charges, and the match no firings', () => {
     const state = FIXTURE.duel.final as {
       abilityFirings: unknown[];
+      abilities: Record<string, unknown>;
       seats: { loadout: unknown; loadoutRoll: unknown }[];
     };
     expect(state.abilityFirings).toEqual([]);
+    // A duel seat holds no abilities, so it has no charges to report — the firing
+    // path is not merely unused here, it has nothing to be used on.
+    expect(state.abilities).toEqual({});
     for (const seat of state.seats) {
       expect(seat.loadout).toBeNull();
       expect(seat.loadoutRoll).toBeNull();
