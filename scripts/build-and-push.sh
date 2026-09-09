@@ -115,7 +115,7 @@ echo "Building API image..."
 docker build "${LABEL_ARGS[@]}" -t "${API_IMAGE}:${TAG}" ./api
 
 echo "Building client image..."
-docker build "${LABEL_ARGS[@]}" -t "${CLIENT_IMAGE}:${TAG}" ./client
+docker build "${LABEL_ARGS[@]}" -t "${CLIENT_IMAGE}:${TAG}" -f client/Dockerfile .
 
 if [ "$PUSH" = true ]; then
   echo "Pushing images..."
