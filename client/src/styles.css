@@ -783,10 +783,6 @@ button.ghost {
   background: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 70%, var(--line-3));
 }
-/* Inspecting one: the preview ring wins, as it does for every other state. */
-.move-btn--forced.move-btn--preview {
-  border-color: var(--you);
-}
 .picker-center__forced {
   margin: 0;
   color: color-mix(in srgb, var(--warn) 74%, var(--text));
