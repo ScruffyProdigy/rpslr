@@ -1,0 +1,10 @@
+DROP VIEW IF EXISTS v_charge_usage;
+DROP VIEW IF EXISTS v_ability_firings;
+DROP VIEW IF EXISTS v_shape_win_rate;
+DROP VIEW IF EXISTS v_pairing_win_rate;
+DROP VIEW IF EXISTS v_helper_win_rate;
+DROP VIEW IF EXISTS v_helper_pick_rate;
+DROP VIEW IF EXISTS v_loadout_outcomes;
+DROP VIEW IF EXISTS v_match_telemetry;
+DROP VIEW IF EXISTS v_seat_loadouts;
+DROP TABLE IF EXISTS helper_catalog;

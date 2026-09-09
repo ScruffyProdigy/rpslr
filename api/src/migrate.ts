@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { loadConfig } from './config.js';
+import { syncHelperCatalog } from './helpers/catalogSync.js';
 
 /**
  * Minimal forward-only SQL migration runner. Applies every `*.sql` file in
@@ -50,6 +51,16 @@ async function run() {
     }
     // eslint-disable-next-line no-console
     console.log(count === 0 ? '[migrate] already up to date' : `[migrate] applied ${count} migration(s)`);
+
+    // JQ-152's telemetry views read helper tiers from `helper_catalog`, and the
+    // roster is the only place a tier is declared. Syncing here rather than seeding
+    // in a migration means a re-priced card reaches SQL with the next deploy
+    // instead of with a migration written to correct the last one.
+    const catalog = await syncHelperCatalog(pool);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[migrate] helper catalog: ${catalog.upserted} synced, ${catalog.removed} removed`,
+    );
   } finally {
     await pool.end();
   }

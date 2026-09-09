@@ -10,6 +10,7 @@ import {
 } from './repository.js';
 import type { LobbyPlayerProfile } from './lobbyProfile.js';
 import type { Phase } from './roundPolicy.js';
+import { syncHelperCatalog, type CatalogSyncResult } from './helpers/catalogSync.js';
 import type {
   AbilityFiring,
   Match,
@@ -70,6 +71,15 @@ export class PgGameRepository implements GameRepository {
 
   static fromUrl(databaseUrl: string): PgGameRepository {
     return new PgGameRepository(new Pool({ connectionString: databaseUrl }));
+  }
+
+  /**
+   * Push the roster into `helper_catalog`, which JQ-152's telemetry views read for
+   * tiers. Postgres-only and deliberately off `GameRepository`: it is a fact about
+   * this backing store, not about the game.
+   */
+  async syncHelperCatalog(): Promise<CatalogSyncResult> {
+    return syncHelperCatalog(this.pool);
   }
 
   private async tx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {

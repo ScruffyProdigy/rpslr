@@ -17,6 +17,25 @@ const service = new GameService(repo, {
   presence,
 });
 
+// The telemetry views are only as honest as the catalog behind them, and the
+// migration leaves it empty on purpose. Boot is the second place it is filled —
+// `npm run migrate` is the first — so a server started against a database someone
+// else migrated still ends up with the roster this build ships.
+void repo
+  .syncHelperCatalog()
+  .then((result) => {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[api] helper catalog: ${result.upserted} synced, ${result.removed} removed`,
+    );
+  })
+  .catch((err) => {
+    // A stale catalog mislabels telemetry; it does not stop anyone playing. So this
+    // is logged loudly and not allowed to take the server down with it.
+    // eslint-disable-next-line no-console
+    console.error('[api] helper catalog sync failed:', err);
+  });
+
 const app = createApp(service, config);
 const server = createServer(app);
 const wss = attachWebsocketServer(server, { service, hub, config });
