@@ -790,8 +790,8 @@ button.ghost {
 .picker-center__forced {
   margin: 0;
   color: color-mix(in srgb, var(--warn) 74%, var(--text));
-  font-size: 0.78rem;
-  line-height: 1.35;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  line-height: 1.3;
 }
 /* Preview: the move you are considering, plus the two it beats. */
 .move-btn--preview {
