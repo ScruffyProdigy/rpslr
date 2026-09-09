@@ -21,6 +21,15 @@ the board greys out every move and refuses every tap while the server stands
 ready to accept any of the least-marked ones. The player sees a dead board and
 takes the strike anyway.
 
+The same lie is told about the opponent. Four more reads treat
+`oppDelays[m] > 0` as "they cannot play that", which drives the faded threat
+arrows, the `safe` flag meaning *this move cannot lose*, the screen-reader
+legend, and the replay commentary's prose. Against a fully-marked opponent all
+four say they can play nothing: every arrow draws faded, every move reads safe.
+That is worse than a dead board — a dead board stops you, whereas this hands you
+a false all-clear and you lose to a least-marked pick the server was always
+going to allow.
+
 Unreachable until JQ-210, because nothing drove all five moves above zero. It is
 reachable now.
 
@@ -50,15 +59,26 @@ So the shared helper is not a reimplementation of the floor. It is a call to it:
 import { availableMoves } from '@game/game';
 
 /** Playable this round — the server's own rule, not a copy of it. */
-export function isPlayable(move: Move, myDelays: DelayMap): boolean {
-  return availableMoves(myDelays).includes(move);
+export function isPlayable(move: Move, delays: Record<string, number>): boolean {
+  return availableMoves(asDelayMap(delays)).includes(move);
 }
 
 /** Marked, and playable anyway: the floor is the only reason it is offered. */
-export function isForcedPick(move: Move, myDelays: DelayMap): boolean {
-  return isPlayable(move, myDelays) && (myDelays[move] ?? 0) > 0;
+export function isForcedPick(move: Move, delays: Record<string, number>): boolean {
+  return isPlayable(move, delays) && (delays[move] ?? 0) > 0;
 }
 ```
+
+`Record<string, number>` and not `DelayMap`, because that is what the picker
+holds — `myDelays` and `oppDelays` both arrive off the wire loosely typed, and
+every existing read of them is written `?? 0` against a missing key.
+`availableMoves` needs a total `Record<Move, number>` or its `Math.min` over the
+five moves goes `NaN` and the floor silently returns nothing, so a small
+`asDelayMap` fills the gaps with zero. That is the one piece of arithmetic this
+module owns, and it is defaulting, not rule-keeping.
+
+Both take the delay map as the second argument rather than closing over a side,
+so the opponent's board can ask the same question about the opponent.
 
 This is the first acceptance criterion, and it is the whole of it. There is no
 arithmetic here to keep in step with the server, because there is no arithmetic
@@ -103,6 +123,29 @@ All four become one question, asked of the helper:
 3. `PickerCenter`'s "why this is down" panel — gated on `myDelay > 0`, which
    would swallow a forced pick's Lock in button. Gated on `blocked` instead.
 4. The node's class/`aria-disabled`/label derivation, per the table above.
+
+### The opponent's four
+
+Same swap, no new visual state — the opponent side has only two cases, can and
+cannot, because you are not choosing for them and there is nothing to price:
+
+1. `threatsTo` — `live` is the moves that beat yours *and* the opponent can
+   play, and `safe` means none of them can. `oppDelays[m] === 0` becomes
+   `isPlayable(m, oppDelays)`. This is the load-bearing one: `safe` is the claim
+   that a move cannot lose.
+2. `describeBeatsGraph` — the screen-reader line naming the attacks they cannot
+   make. Against a fully-marked opponent it currently claims all five are off;
+   after, it names only the ones actually out of reach, and falls through to
+   "every arrow is live" when the floor leaves them everything.
+3. `MovePicker`'s `oppOff` — the faded arrow flag, which is the sighted player's
+   version of the same sentence and has to agree with it.
+4. `commentary.ts` — the trap line asserts `beatsOf(move).every(m => oppDelays[m] > 0)`,
+   i.e. *nothing they could play beat it*. As prose in a replay this is not a
+   greyed button but a false statement of fact, so it takes the negated helper.
+
+Sites 5 and 6 (`oppDelay` in the node badge and in `PickerCenter`'s caption) are
+left alone. They report a mark count, which is true either way; they make no
+claim about playability.
 
 ### How it reads
 
@@ -156,6 +199,13 @@ genuinely down, and on a forced round the more-marked moves still get it.
 - `isPlayable` agrees with `availableMoves` across the mark maps `game.test.ts`
   already pins, including the all-marked and tied-least cases.
 - `isForcedPick` is false for every move whenever any move is on zero.
+- `isPlayable` against a partial map — a key missing rather than zero — does not
+  return the empty list. This is the `NaN` trap `asDelayMap` exists for, and it
+  fails loudly rather than quietly greying the board.
+- `threatsTo` against a fully-marked opponent reports their least-marked movers
+  as live, and `safe` is false for a move one of them beats.
+- `describeBeatsGraph` says "every arrow is live" when the floor gives the
+  opponent every move back.
 
 `MovePicker.test.tsx`:
 
@@ -169,3 +219,10 @@ genuinely down, and on a forced round the more-marked moves still get it.
   forced class. Criterion 4, as a test rather than a claim.
 - The centre names the resulting mark count for a forced pick, and offers Lock
   in for it.
+- A fully-marked opponent does not draw every arrow faded.
+
+`commentary.test.ts`:
+
+- The trap line is withheld when the floor leaves the opponent a move that beats
+  the pick. A replay that says "nothing they could play beat it" about a round
+  where something could is the failure this prevents.
