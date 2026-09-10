@@ -51,11 +51,17 @@ describe('helper roster', () => {
   });
 
   /**
-   * AC #6: this ticket retiers nothing and recharges nothing. The ladder shape
-   * table and the duel golden fixture both read these, so a card moved here without
-   * meaning to shows up as a diff in this list rather than as a balance surprise.
+   * JQ-237 added this to prove its own ticket retiered and recharged nothing. It is
+   * kept, and moved, because it does the same job for JQ-209 in the other
+   * direction: this pass *does* retier, so the list below is the reviewable record
+   * of exactly which cards moved and which did not.
+   *
+   * The ladder shape table and the duel golden fixture both read these, so a card
+   * moved without meaning to still shows up as a diff here rather than as a balance
+   * surprise. Since JQ-209: Small Mercy is a Minor bound to Rock, Well Oiled is new
+   * on Robot, and nothing else changed tier.
    */
-  it('leaves every shipping card on the tier and load it already had', () => {
+  it('leaves every shipping card on the tier and load JQ-209 priced it at', () => {
     expect(HELPERS.map((h) => `${h.id}:${h.tier}:${h.load.kind}`)).toEqual([
       'good-old-rock:Major:passive',
       'chimera:Major:passive',
@@ -72,8 +78,9 @@ describe('helper roster', () => {
       'grudge:Minor:passive',
       'tempered:Minor:passive',
       'featherweight:Minor:passive',
+      'small-mercy:Minor:passive',
+      'well-oiled:Minor:passive',
       'poker-face:Trinket:passive',
-      'small-mercy:Trinket:passive',
       'copycat:Trinket:passive',
       'bookend:Trinket:passive',
       'old-habits:Trinket:passive',
