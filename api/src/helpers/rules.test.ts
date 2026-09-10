@@ -263,78 +263,6 @@ describe('Sharp Practice — the Scissors mirror is a win', () => {
   });
 });
 
-describe('Second Wind — the first loss is a draw', () => {
-  it('saves the first loss and no later one', () => {
-    expect(
-      outcome(load('second-wind'), 'loss', {
-        own: 'paper',
-        opponent: 'scissors',
-        roundIndex: 1,
-        lossesSoFar: 0,
-      }),
-    ).toBe('draw');
-    expect(
-      outcome(load('second-wind'), 'loss', {
-        own: 'paper',
-        opponent: 'scissors',
-        roundIndex: 3,
-        lossesSoFar: 1,
-      }),
-    ).toBe('loss');
-  });
-
-  /**
-   * What the save costs, added by JQ-209. Cancelling their first win is ~15.6pp on
-   * its own — a six-round race you take with three wins rather than four, 42/64 —
-   * against a 9-10pp Major target. One mark on the move that lost is ~7.3pp back.
-   *
-   * `adjustAfterRound` sees the outcome `transformOutcome` already produced, so the
-   * save reads here as a draw the two seats did not both pick. A genuine draw in
-   * RPSLR is a mirror, since every move beats two others and loses to two.
-   */
-  it('charges the move that lost an extra mark for the save', () => {
-    // One, not two. At 0.383 a mark taken on, two marks was 14.6pp of cost against a
-    // 15.6pp save, which left the card worth about a point.
-    expect(
-      marks(load('second-wind'), { own: 'paper', opponent: 'scissors', outcome: 'draw' }),
-    ).toEqual({ own: { paper: 1 }, opponent: {} });
-  });
-
-  it('leaves a genuine draw alone, since it saved nothing there', () => {
-    expect(marks(load('second-wind'), { own: 'rock', opponent: 'rock', outcome: 'draw' })).toEqual({
-      own: {},
-      opponent: {},
-    });
-  });
-
-  it('charges nothing once it has been spent', () => {
-    expect(
-      marks(load('second-wind'), {
-        own: 'paper',
-        opponent: 'scissors',
-        outcome: 'draw',
-        lossesSoFar: 1,
-      }),
-    ).toEqual({ own: {}, opponent: {} });
-  });
-
-  it('does not charge for a save Good Old Rock made', () => {
-    // Rock's save comes first in `transformOutcome`, so Second Wind is still armed
-    // and must not bill for a round it did not rescue. Same precedence, both places.
-    // Both bind rock, so the pairing needs a stored roll for the displaced mark.
-    const rules = rulesFor(['good-old-rock', 'second-wind'], { roll: 'paper' });
-    expect(
-      rules.adjustAfterRound({
-        own: 'rock',
-        opponent: 'paper',
-        outcome: 'draw',
-        roundIndex: 1,
-        lossesSoFar: 0,
-      }),
-    ).toEqual({ own: {}, opponent: {} });
-  });
-});
-
 describe('Well Oiled — the Minor that gave Robot a Minor', () => {
   /**
    * The effect Ferrus used to carry, which was cut for being Featherweight at twice
@@ -478,18 +406,14 @@ describe('the helper whose effect is not implemented yet', () => {
 });
 
 describe('the stacking pairs the design doc says to watch', () => {
-  // Both bound to Rock, so they collide and are now draftable together. Both turn
-  // a loss into a draw, and the doc calls this "the pairing to check first".
-  it('Good Old Rock spares a Rock loss without spending Second Wind', () => {
-    const rules = rulesFor(['good-old-rock', 'second-wind'], { roll: 'paper' });
-    const rockLoss = { own: 'rock' as Move, opponent: 'paper' as Move, roundIndex: 0, lossesSoFar: 0 };
-    expect(rules.transformOutcome('loss', rockLoss)).toBe('draw');
-    // Because that never became a loss, Second Wind is still armed for the next one.
-    const laterLoss = { own: 'paper' as Move, opponent: 'scissors' as Move, roundIndex: 2, lossesSoFar: 0 };
-    expect(rules.transformOutcome('loss', laterLoss)).toBe('draw');
-    // And once Second Wind has genuinely been spent, losses land.
-    expect(rules.transformOutcome('loss', { ...laterLoss, lossesSoFar: 1 })).toBe('loss');
-  });
+  // The doc's own "pairing to check first" was Good Old Rock + Second Wind — both
+  // Rock-bound, both turning a loss into a draw. It is gone rather than fixed:
+  // JQ-236 retired Second Wind to make room for Tripwire, and cutting it retires
+  // the concern with it. No card now converts a loss to a draw except Good Old
+  // Rock, so there is no second save to stack, and nothing to test here.
+  //
+  // The remaining pair worth watching is Quarantine + Tripwire, which has its own
+  // block above — that one is a real interaction rather than a redundancy.
 
   it('Copycat and Good Old Rock together cool Rock every other round, not every third', () => {
     const rules = rulesFor(['good-old-rock', 'copycat'], {});
@@ -647,6 +571,83 @@ describe('Feint — this round\'s marks land on a move you name', () => {
 
   it('never touches their board', () => {
     expect(fire('robot').marks.opponent).toEqual({});
+  });
+});
+
+/**
+ * JQ-236's secret half of the name-a-move pair. The marks are deliberately
+ * identical to Quarantine's — `reveal` decides who is told, never what a firing
+ * does — so what these assert is that the two really are the same effect, and that
+ * the difference between the cards lives entirely in disclosure and cadence.
+ */
+describe('Tripwire', () => {
+  const attacker = rulesFor(load('tripwire'));
+  const victim = rulesFor(load('copycat'));
+  const name = (target: Move) => [{ id: 'tripwire', target }];
+
+  it('adds 2 marks to the named move when they play it, exactly as Quarantine does', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: name('lizard') }],
+      attacker,
+      victim,
+    );
+    // Their lizard takes its own 2 choice marks, and Tripwire's 2 on top.
+    expect(b.lizard).toBe(4);
+  });
+
+  it('does nothing at all when they play something else', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: name('scissors') }],
+      attacker,
+      victim,
+    );
+    expect(b.scissors).toBe(0);
+    expect(b.lizard).toBe(2);
+  });
+
+  it('spends the charge on a miss just as on a hit', () => {
+    const missed = abilityMarks(['tripwire', 'old-habits'], [name('scissors')]);
+    expect(missed).toEqual({ tripwire: { marks: 3, available: false } });
+  });
+});
+
+/**
+ * The pair, drafted together. Legal since JQ-238 gave each ability its own slot,
+ * and worth a test because the two compose: Quarantine is announced, so a competent
+ * opponent steps off the move it names and picks from two rather than three — which
+ * is what lifts Tripwire's secret guess from a 1/3 hit to a 1/2.
+ */
+describe('Quarantine beside Tripwire', () => {
+  const attacker = rulesFor(['quarantine', 'tripwire']);
+  const victim = rulesFor(load('copycat'));
+  const both = (q: Move, t: Move) => [
+    { id: 'quarantine', target: q },
+    { id: 'tripwire', target: t },
+  ];
+
+  it('lands the secret name when they step off the announced one', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: both('scissors', 'lizard') }],
+      attacker,
+      victim,
+    );
+    // Quarantine named scissors aloud and they avoided it; the move they stepped
+    // onto was the one Tripwire had quietly named. 2 choice marks plus 2.
+    expect(b.lizard).toBe(4);
+    expect(b.scissors).toBe(0);
+  });
+
+  it('lands both weights on one move when both name it', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: both('lizard', 'lizard') }],
+      attacker,
+      victim,
+    );
+    // Allowed rather than rejected, per JQ-238, and strictly worse for the firer:
+    // the announced name is the one they dodge, so a Tripwire pointed at the same
+    // move is spent on a square they have already been warned off. It must still
+    // add up — 2 choice marks plus 2 plus 2.
+    expect(b.lizard).toBe(6);
   });
 });
 

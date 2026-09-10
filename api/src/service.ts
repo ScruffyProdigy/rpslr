@@ -1226,7 +1226,8 @@ function namedMovesFor(
   switch (helperId) {
     // Fired blind, at a move the opponent has not chosen yet, so every move is a
     // legal guess. That it may miss is the card's price, not a validation failure.
-    case 'quarantine': {
+    case 'quarantine':
+    case 'tripwire': {
       if (!isMove(target)) throw new ValidationError(`'${helperId}' must name a move`);
       noSource();
       return { target, source: null };

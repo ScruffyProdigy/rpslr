@@ -98,6 +98,27 @@ describe('targetSteps (JQ-221)', () => {
     }
   });
 
+  /*
+   * Tripwire names a move exactly as Quarantine does, so it walks the same single
+   * step. This is what keeps the rail from treating a new guessing card as
+   * targetless — which is how it would fail: silently, with the charge spent on
+   * nothing.
+   */
+  it('gives Tripwire one target step, as Quarantine has', () => {
+    expect(targetSteps('tripwire').map((s) => s.field)).toEqual(['target']);
+  });
+
+  it('tells the firer which of the twin guesses they are holding', () => {
+    // The cards land identical marks, so the prompt is the only thing distinguishing
+    // them at the moment of use. A prompt that dropped the disclosure would leave the
+    // player unable to tell the pair apart when it matters.
+    expect(targetSteps('quarantine')[0].prompt).not.toContain('Secretly');
+    expect(targetSteps('tripwire')[0].prompt).toContain('Secretly');
+    for (const id of ['quarantine', 'tripwire']) {
+      expect(targetSteps(id)[0].prompt, id).toContain('2 extra marks');
+    }
+  });
+
   it('gives Thief a source step before its target step', () => {
     expect(targetSteps('thief').map((s) => s.field)).toEqual(['source', 'target']);
   });
@@ -113,6 +134,17 @@ describe('legalTargets (JQ-221)', () => {
   it('lets Quarantine name any move', () => {
     const [step] = targetSteps('quarantine');
     expect(legalTargets('quarantine', step, marks)).toEqual([
+      'rock',
+      'paper',
+      'scissors',
+      'lizard',
+      'robot',
+    ]);
+  });
+
+  it('lets Tripwire name any move too', () => {
+    const [step] = targetSteps('tripwire');
+    expect(legalTargets('tripwire', step, marks)).toEqual([
       'rock',
       'paper',
       'scissors',

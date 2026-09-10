@@ -218,25 +218,28 @@ const MAJORS = [
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
     load: { kind: 'ability', opening: 0, recharge: null }, reveal: 'public',
     blurb: 'Stop their marks decrementing this round.' },
-  // Cancelling their first win is ~+15.6pp — first-to-3 against first-to-4 is a
-  // six-round race you take with three wins, 42/64 — against a 9-10pp Major target.
-  // JQ-209 took the weaker-effect option rather than keeping a knowingly hot Major:
-  // the save costs an extra mark on the move that lost, ~7.3pp of tempo back, which
-  // lands the card at ~8.3pp.
+
+  // JQ-236's secret half of the name-a-move pair, and the reason both exist. The
+  // design doc asked for one of each — "once visibility is a field the roster can
+  // carry one of each" — and JQ-235 made it a field.
   //
-  // It was two marks, priced at 0.156 each, until the rate was checked. A mark you
-  // put on your *own* board mid-match is not worth what a mark you take off it is:
-  // shedding one takes you from 3 live toward 4 (+0.156), adding one pushes you from
-  // 3 toward 2 (-0.383). Two marks was 14.6pp of cost against a 15.6pp save — a card
-  // worth 1pp. One mark is the price the save can actually carry.
+  // Visibility changes the price, which changes the cadence, which is what stops the
+  // two being one card at two settings:
   //
-  // It also answers the doc's open question about defensive stacking. Good Old Rock
-  // and Second Wind are both Rock-bound and both turn losses into draws, so they are
-  // draftable together; now the second save is paid for in the currency the game is
-  // actually about.
-  { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
-    load: PASSIVE,
-    blurb: 'The first round you lose is a draw instead, but your move takes an extra mark.' },
+  //   Quarantine  public   0/4   denies an option outright, 0.383   ~9.6pp
+  //   Tripwire    secret   0/3   lands 1 in 3, 0.255                ~8.5pp
+  //
+  // Announced and slower, or hidden and faster, and neither is strictly better. That
+  // is the draft argument the pair exists to create. ~8.5pp is pre-flip Quarantine's
+  // own figure, so it is a price the doc has already been checked against.
+  //
+  // Paper-bound to keep it off Quarantine's Scissors: a same-move twin would trigger
+  // the collision roll on precisely the pairing the two cards are meant to be
+  // compared in. Paper also had a single Major, so this is what makes every move
+  // carry exactly two of each bound tier.
+  { id: 'tripwire', name: 'Tripwire', tier: 'Major', boundMove: 'paper',
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly arm a trap on a move. If they play it, it takes 2 extra marks.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
