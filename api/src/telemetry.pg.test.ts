@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { HELPERS } from './helpers/roster.js';
 import { PgGameRepository } from './pgRepository.js';
 import { GameService } from './service.js';
 
@@ -167,7 +168,12 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
 
   it('mirrors the whole roster into the catalog', async () => {
     const row = await one('SELECT COUNT(*) AS n FROM helper_catalog');
-    expect(num(row!.n)).toBe(25);
+    // Read off the roster rather than written out. The claim here is "the catalog
+    // mirrors the whole roster", not "the roster has 25 cards" — a literal states
+    // something the test does not mean, and since this file is `skipIf` a database
+    // it passes locally and fails only in CI. That has cost four round-trips. The
+    // deliberate pin lives in `roster.test.ts`, where changing it is the point.
+    expect(num(row!.n)).toBe(HELPERS.length);
     const quarantine = await one("SELECT * FROM helper_catalog WHERE id = 'quarantine'");
     expect(quarantine).toMatchObject({ tier: 'Major', mark_cost: 2, bound_move: 'scissors' });
   });
@@ -218,7 +224,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     expect(num(byId.thief.times_picked)).toBe(1);
     // A card nobody brings is a balance finding, so it has to be in the view.
     expect(num(byId.chimera.times_picked)).toBe(0);
-    expect(picks).toHaveLength(25);
+    expect(picks).toHaveLength(HELPERS.length);
   });
 
   it('drops mirrors and forfeits from win rate, and keeps everything else', async () => {

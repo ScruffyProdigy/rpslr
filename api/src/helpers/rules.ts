@@ -143,6 +143,13 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       const quarantine = fired('quarantine');
       if (quarantine && quarantine.target === opponent) markTheirs(opponent, 2);
 
+      // The same guess kept quiet. Identical marks by design: `reveal` decides who is
+      // told, never what a firing does, and the pair is meant to differ only there.
+      // Being unannounced is why this one still lands at ~1/3 where Quarantine, which
+      // says so, is dodged instead.
+      const tripwire = fired('tripwire');
+      if (tripwire && tripwire.target === opponent) markTheirs(opponent, 2);
+
       // Rust deepens a move already on cooldown, so a target they have clear is
       // not a legal firing. The caller rejects one; ignoring it here means a bad
       // firing cannot quietly become a free mark.
@@ -215,10 +222,7 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       ) {
         return 'win';
       }
-      if (raw === 'loss') {
-        if (has('good-old-rock') && ctx.own === 'rock') return 'draw';
-        if (has('second-wind') && ctx.lossesSoFar === 0) return 'draw';
-      }
+      if (raw === 'loss' && has('good-old-rock') && ctx.own === 'rock') return 'draw';
       return raw;
     },
 
@@ -229,11 +233,11 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      */
     adjustAfterRound(ctx) {
       const adjustment: MarkAdjustment = { own: {}, opponent: {} };
+      // Only `markTheirs` now. Second Wind was the one card here that put a mark on
+      // its *own* owner, and JQ-236 retired it — so every remaining end-of-round
+      // adjustment reaches across, and `adjustment.own` is left empty by every path.
       const markTheirs = (move: Move) => {
         adjustment.opponent[move] = (adjustment.opponent[move] ?? 0) + 1;
-      };
-      const markOwn = (move: Move, n: number) => {
-        adjustment.own[move] = (adjustment.own[move] ?? 0) + n;
       };
       if (has('ferrus') && ctx.own === 'robot') markTheirs(ctx.opponent);
       // Their move only. Marking both was exactly zero: a mark taken on costs the
@@ -247,22 +251,6 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       }
       if (has('small-mercy') && ctx.outcome === 'loss' && ctx.lossesSoFar === 0) {
         markTheirs(ctx.opponent);
-      }
-      // What Second Wind's save costs — one mark, not two: at 0.383 a mark taken on,
-      // two was 14.6pp against a 15.6pp save and left the card worth nothing. `transformOutcome` has already run, so a save
-      // reads here as a draw the two seats did not both pick — a genuine draw in
-      // RPSLR is a mirror, since every move beats two others and loses to two. The
-      // Good Old Rock guard mirrors the precedence in `transformOutcome`: when Rock
-      // did the saving, Second Wind has not spent itself and must not charge for it.
-      const rockSaved = has('good-old-rock') && ctx.own === 'rock';
-      if (
-        has('second-wind') &&
-        ctx.outcome === 'draw' &&
-        ctx.own !== ctx.opponent &&
-        ctx.lossesSoFar === 0 &&
-        !rockSaved
-      ) {
-        markOwn(ctx.own, 1);
       }
       return adjustment;
     },

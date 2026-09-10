@@ -138,6 +138,20 @@ export function targetSteps(helperId: string): TargetStep[] {
           rejection: () => '',
         },
       ];
+    // Tripwire asks for exactly what Quarantine asks for, because it *is* the same
+    // guess — the pair differs in who hears about it, not in what the firer decides.
+    // Which is precisely why the prompts have to differ: this is the only place the
+    // player is told which of the two they are holding.
+    case 'tripwire':
+      return [
+        {
+          field: 'target',
+          prompt: 'Secretly name a move. If they play it, it takes 2 extra marks.',
+          side: 'opponent',
+          allows: anyMove,
+          rejection: () => '',
+        },
+      ];
     case 'rust':
       return [
         {
@@ -209,6 +223,7 @@ export function describeFiring(firing: AbilityFiring, mySeatKey: string): string
 
   switch (firing.helperId) {
     case 'quarantine':
+    case 'tripwire':
       return `${name} — ${actor} named ${target}`;
     case 'rust':
       return `${name} — ${actor} added 2 marks to ${theirs} ${target}`;
