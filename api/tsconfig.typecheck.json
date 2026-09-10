@@ -1,12 +1,14 @@
 {
-  // Type-checks the tests as well as the sources. `tsconfig.json` excludes tests
-  // because they are not compiled into `dist`; that also meant nothing ever checked
-  // them, and `npm run build` is not in CI either — so before JQ-237 a miswritten
-  // helper card failed `tsc` only if somebody happened to run a build locally.
+  // Type-checks the tests as well as the sources.
   //
-  // JQ-237 leans on the type checker as the enforcement point for which tiers may
-  // carry a charge (see `src/helpers/rosterTyping.test.ts`), so the check has to be
-  // something CI runs.
+  // CI's "Type-check build" step already runs `npm run build`, so a miswritten card
+  // in `roster.ts` has always failed `tsc`. What it does not cover is the tests:
+  // `tsconfig.json` excludes them because they are not compiled into `dist`, and
+  // excluding them from the build excluded them from the only check there was.
+  //
+  // JQ-237 asserts which tiers may carry a charge as type-level facts in
+  // `src/helpers/rosterTyping.test.ts`. Those live in a test file, so without this
+  // config they would compile in no one's build and assert nothing.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true
