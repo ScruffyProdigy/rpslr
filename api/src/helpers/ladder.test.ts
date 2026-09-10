@@ -24,10 +24,10 @@ const shapeOf = (a: string, b: string) =>
   [a, b].sort((x, y) => TIER_ORDER.indexOf(x) - TIER_ORDER.indexOf(y)).join('+');
 
 describe('the tier ladder holds for every legal loadout', () => {
-  it('has 231 loadouts', () => {
+  it('has 300 loadouts', () => {
     // C(21, 2). Was 231 at 22 helpers, before Blind Spot was cut.
-    // 22 helpers taken two at a time. Was 210 at 21, before JQ-209 added Well Oiled.
-    expect(PAIRS).toHaveLength(231);
+    // 25 helpers taken two at a time. Was 210 at 21, before JQ-209 added four cards.
+    expect(PAIRS).toHaveLength(300);
   });
 
   it('blocks exactly one move per bound helper, whatever they are bound to', () => {

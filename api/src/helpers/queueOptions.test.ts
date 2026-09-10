@@ -13,8 +13,8 @@ describe('helper roster for queue-options', () => {
     );
   });
 
-  it('serves all 22 helpers', () => {
-    expect(helperChoices()).toHaveLength(22);
+  it('serves all 25 helpers', () => {
+    expect(helperChoices()).toHaveLength(25);
     expect(helperChoices()).toHaveLength(HELPERS.length);
   });
 

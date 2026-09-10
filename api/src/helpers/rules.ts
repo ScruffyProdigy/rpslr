@@ -115,16 +115,22 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      *     JQ-209 moved it to `adjustAfterRound` as a surcharge on both seats, so
      *     the two cards no longer compete for the same slot and stack additively
      *     instead: Copycat sets the base to 1, Echo Chamber adds its mark back.
-     *  3. A per-move discount beats an outcome surcharge: Featherweight says Lizard
-     *     takes 1, full stop, rather than bending to how the round went. Well Oiled
-     *     says the same about Robot.
+     *  3. A per-move discount beats an outcome one: Featherweight says Lizard takes
+     *     1, full stop, rather than bending to how the round went. Well Oiled says
+     *     the same about Robot.
+     *
+     * Every branch on this path is now a discount. Tempered carried the only
+     * surcharge — 3 marks for a winning move — and JQ-209 removed it, because
+     * self-harm costs 0.383 a mark against self-relief's 0.156 and no amount of
+     * loss-relief could pay for it. So precedence decides *which* discount applies,
+     * never whether the cost goes up.
      */
     /**
      * What this seat's fired abilities do to the round. Firing is validated by the
      * caller; a firing naming an ability this loadout does not hold is ignored
      * here rather than trusted.
      */
-    fireEffects({ firings, opponent, opponentDelays, ownDelays }) {
+    fireEffects({ firings, own, opponent, opponentDelays, ownDelays }) {
       const fired = (id: HelperId) => (has(id) ? firings.find((f) => f.id === id) : undefined);
       const marks: MarkAdjustment = { own: {}, opponent: {} };
       const markTheirs = (move: Move, n: number) => {
@@ -154,6 +160,26 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
         markTheirs(thief.target, 1);
       }
 
+      const markOwn = (move: Move, n: number) => {
+        marks.own[move] = (marks.own[move] ?? 0) + n;
+      };
+
+      // Flywheel takes a mark off everything already down. Marks floor at zero, so a
+      // move on one mark simply clears; nothing here can go negative.
+      if (fired('flywheel')) {
+        for (const move of MOVES) if (ownDelays[move] > 0) markOwn(move, -1);
+      }
+
+      // Feint moves this round's cost rather than cancelling it: the played move is
+      // credited back the standard 2 and the named move is charged 2 instead. A
+      // discount that made the pick cost less than 2 is absorbed by the floor, so
+      // Feint can never come out ahead on marks — only on which move is left live.
+      const feint = fired('feint');
+      if (feint?.target && feint.target !== own) {
+        markOwn(own, -2);
+        markOwn(feint.target, 2);
+      }
+
       return {
         freezesOpponentDecay: Boolean(fired('freeze')),
         marks,
@@ -167,10 +193,10 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
 
     delayOnChoice({ move, outcome, roundIndex }) {
       if (has('bookend') && roundIndex === 0) return 1;
+      if (has('prologue') && roundIndex <= 1) return 1;
       if (outcome === 'draw' && has('copycat')) return 1;
       if (has('featherweight') && move === 'lizard') return 1;
       if (has('well-oiled') && move === 'robot') return 1;
-      if (has('tempered') && outcome === 'win') return 3;
       if (has('tempered') && outcome === 'loss') return 1;
       return 2;
     },
@@ -210,12 +236,10 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
         adjustment.own[move] = (adjustment.own[move] ?? 0) + n;
       };
       if (has('ferrus') && ctx.own === 'robot') markTheirs(ctx.opponent);
-      // Both seats, since JQ-209 — symmetric in marks, not in value, because the
-      // fall to 2 live is steeper than the rise to 4.
-      if (has('echo-chamber') && ctx.outcome === 'draw') {
-        markTheirs(ctx.opponent);
-        markOwn(ctx.own, 1);
-      }
+      // Their move only. Marking both was exactly zero: a mark taken on costs the
+      // same 0.383 a mark handed out earns, and the cheap 0.156 rate is for shedding
+      // one rather than taking one.
+      if (has('echo-chamber') && ctx.outcome === 'draw') markTheirs(ctx.opponent);
       // Grudge skips the first loss and Small Mercy takes only the first, so the two
       // partition the losses rather than overlapping on them.
       if (has('grudge') && ctx.outcome === 'loss' && ctx.lossesSoFar >= 1) {
@@ -224,7 +248,8 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       if (has('small-mercy') && ctx.outcome === 'loss' && ctx.lossesSoFar === 0) {
         markTheirs(ctx.opponent);
       }
-      // What Second Wind's save costs. `transformOutcome` has already run, so a save
+      // What Second Wind's save costs — one mark, not two: at 0.383 a mark taken on,
+      // two was 14.6pp against a 15.6pp save and left the card worth nothing. `transformOutcome` has already run, so a save
       // reads here as a draw the two seats did not both pick — a genuine draw in
       // RPSLR is a mirror, since every move beats two others and loses to two. The
       // Good Old Rock guard mirrors the precedence in `transformOutcome`: when Rock
@@ -237,7 +262,7 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
         ctx.lossesSoFar === 0 &&
         !rockSaved
       ) {
-        markOwn(ctx.own, 2);
+        markOwn(ctx.own, 1);
       }
       return adjustment;
     },

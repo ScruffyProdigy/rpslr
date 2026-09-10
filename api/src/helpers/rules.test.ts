@@ -145,11 +145,36 @@ describe('Featherweight — Lizard takes 1', () => {
   });
 });
 
-describe('Tempered — 3 for a win, 1 for a loss', () => {
-  it('charges by outcome', () => {
-    expect(cost(load('tempered'), 'rock', 'win')).toBe(3);
+describe('Tempered — a losing move costs 1', () => {
+  /**
+   * It used to charge a winning move 3 to pay for this, and that trade cannot be
+   * made: self-harm costs 0.383 a mark where self-relief earns 0.156, so one mark of
+   * penalty needs ~2.45 of relief to break even and a losing move can be given back
+   * at most 2. The card priced at about -7.6pp — actively bad to hold.
+   *
+   * The rule that falls out is worth more than the card: in this game anti-snowball
+   * has to come from helping the loser, never from taxing the winner.
+   */
+  it('discounts a loss and leaves every other outcome alone', () => {
     expect(cost(load('tempered'), 'rock', 'loss')).toBe(1);
+    expect(cost(load('tempered'), 'rock', 'win')).toBe(2);
     expect(cost(load('tempered'), 'rock', 'draw')).toBe(2);
+  });
+});
+
+describe('Prologue — the first two moves of the match cost 1', () => {
+  it('discounts rounds 0 and 1, and nothing after', () => {
+    expect(cost(load('prologue'), 'rock', 'win', 0)).toBe(1);
+    expect(cost(load('prologue'), 'rock', 'win', 1)).toBe(1);
+    expect(cost(load('prologue'), 'rock', 'win', 2)).toBe(2);
+  });
+
+  it('covers Bookend\'s round and one more, so the pair does not double-discount', () => {
+    // Both claim round 0 and both say 1, so there is nothing to arbitrate — the
+    // second card buys round 1, which is the tier step it is paying for.
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 0)).toBe(1);
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 1)).toBe(1);
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 2)).toBe(2);
   });
 });
 
@@ -161,7 +186,7 @@ describe('Copycat — a drawn round costs 1', () => {
   });
 });
 
-describe('Echo Chamber — a draw costs you both an extra mark', () => {
+describe('Echo Chamber — a draw costs them an extra mark', () => {
   /**
    * JQ-209 repriced this. It used to charge the holder's drawn move 0 — saving 2
    * marks — on top of a mark on theirs, which came to ~23pp on a 6-7pp tier and made
@@ -172,9 +197,9 @@ describe('Echo Chamber — a draw costs you both an extra mark', () => {
     expect(cost(load('echo-chamber'), 'rock', 'win')).toBe(2);
   });
 
-  it('puts an extra mark on both moves on a draw', () => {
+  it('puts an extra mark on their move alone', () => {
     expect(marks(load('echo-chamber'), { own: 'rock', opponent: 'rock', outcome: 'draw' })).toEqual(
-      { own: { rock: 1 }, opponent: { rock: 1 } },
+      { own: {}, opponent: { rock: 1 } },
     );
     expect(marks(load('echo-chamber'), { own: 'rock', opponent: 'paper', outcome: 'loss' })).toEqual(
       { own: {}, opponent: {} },
@@ -182,15 +207,15 @@ describe('Echo Chamber — a draw costs you both an extra mark', () => {
   });
 
   /**
-   * The point of the reprice: symmetric in marks, not in value. A mark taken off
-   * them is worth more than a mark taken off you, because 3 live is the baseline and
-   * the fall to 2 (-0.383) is steeper than the rise to 4 (+0.156).
+   * Marking both seats was tried and reverted: it came to exactly zero. A mark you
+   * take on costs 0.383, the same as a mark handed out earns — the cheap 0.156 rate
+   * is for *shedding* one, which is a different move on the curve.
    */
   it('leaves Copycat its own slot rather than outranking it', () => {
     expect(cost(['echo-chamber', 'copycat'], 'rock', 'draw')).toBe(1);
     expect(
       marks(['echo-chamber', 'copycat'], { own: 'rock', opponent: 'rock', outcome: 'draw' }),
-    ).toEqual({ own: { rock: 1 }, opponent: { rock: 1 } });
+    ).toEqual({ own: {}, opponent: { rock: 1 } });
   });
 });
 
@@ -200,9 +225,13 @@ describe('Bookend — your first move of the match costs 1', () => {
     expect(cost(load('bookend'), 'rock', 'win', 1)).toBe(2);
   });
 
-  it('wins over a surcharge rather than stacking with it', () => {
+  it('is absolute, so a discount beside it changes nothing', () => {
+    // There is no surcharge left on this path — Tempered carried the only one, and
+    // JQ-209 removed it. Every branch now discounts, so precedence only decides
+    // *which* 1 wins rather than whether the cost goes up.
     expect(cost(['bookend', 'tempered'], 'rock', 'win', 0)).toBe(1);
-    expect(cost(['bookend', 'tempered'], 'rock', 'win', 1)).toBe(3);
+    expect(cost(['bookend', 'tempered'], 'rock', 'win', 1)).toBe(2);
+    expect(cost(['bookend', 'tempered'], 'rock', 'loss', 1)).toBe(1);
   });
 });
 
@@ -257,16 +286,18 @@ describe('Second Wind — the first loss is a draw', () => {
   /**
    * What the save costs, added by JQ-209. Cancelling their first win is ~15.6pp on
    * its own — a six-round race you take with three wins rather than four, 42/64 —
-   * against a 9-10pp Major target. Two marks on the move that lost is ~5.9pp back.
+   * against a 9-10pp Major target. One mark on the move that lost is ~7.3pp back.
    *
    * `adjustAfterRound` sees the outcome `transformOutcome` already produced, so the
    * save reads here as a draw the two seats did not both pick. A genuine draw in
    * RPSLR is a mirror, since every move beats two others and loses to two.
    */
-  it('charges the move that lost two extra marks for the save', () => {
+  it('charges the move that lost an extra mark for the save', () => {
+    // One, not two. At 0.383 a mark taken on, two marks was 14.6pp of cost against a
+    // 15.6pp save, which left the card worth about a point.
     expect(
       marks(load('second-wind'), { own: 'paper', opponent: 'scissors', outcome: 'draw' }),
-    ).toEqual({ own: { paper: 2 }, opponent: {} });
+    ).toEqual({ own: { paper: 1 }, opponent: {} });
   });
 
   it('leaves a genuine draw alone, since it saved nothing there', () => {
@@ -565,6 +596,57 @@ describe('Quarantine', () => {
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['quarantine', 'old-habits'], [name('lizard')]);
     expect(missed).toEqual({ quarantine: { marks: 4, available: false } });
+  });
+});
+
+describe('Flywheel — every move on cooldown loses a mark', () => {
+  const firer = rulesFor(load('flywheel'));
+  const fire = () =>
+    firer.fireEffects({
+      firings: [{ id: 'flywheel' }],
+      own: 'rock',
+      opponent: 'rock',
+      ownDelays: { rock: 0, paper: 2, scissors: 1, lizard: 0, robot: 3 },
+      opponentDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+    });
+
+  it('takes one off each blocked move and skips the clear ones', () => {
+    expect(fire().marks).toEqual({ own: { paper: -1, scissors: -1, robot: -1 }, opponent: {} });
+  });
+
+  it('reaches across to nothing of theirs — it is relief, not denial', () => {
+    expect(fire().marks.opponent).toEqual({});
+    expect(fire().freezesOpponentDecay).toBe(false);
+  });
+});
+
+describe('Feint — this round\'s marks land on a move you name', () => {
+  const firer = rulesFor(load('feint'));
+  const fire = (target: Move, own: Move = 'rock') =>
+    firer.fireEffects({
+      firings: [{ id: 'feint', target }],
+      own,
+      opponent: 'paper',
+      ownDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+      opponentDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+    });
+
+  /**
+   * The only card that moves marks rather than counting them, and so the only way to
+   * play the same move twice running — the design doc treats that as a fact about
+   * the game rather than a rule, and nothing else on the roster leans on it.
+   */
+  it('credits the played move back and charges the named one instead', () => {
+    expect(fire('robot').marks).toEqual({ own: { rock: -2, robot: 2 }, opponent: {} });
+  });
+
+  it('does nothing when it names the move being played', () => {
+    // Otherwise it would cancel its own credit and read as a free round.
+    expect(fire('rock').marks).toEqual({ own: {}, opponent: {} });
+  });
+
+  it('never touches their board', () => {
+    expect(fire('robot').marks.opponent).toEqual({});
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * The twenty-two helper cards, as pure data.
+ * The twenty-five helper cards, as pure data.
  *
  * This is the single source of truth for the roster: the queue-options endpoint
  * (`helpers/queueOptions.ts`) and the pick/win-rate telemetry (JQ-152) both read it
@@ -209,8 +209,14 @@ const MAJORS = [
   // Cancelling their first win is ~+15.6pp — first-to-3 against first-to-4 is a
   // six-round race you take with three wins, 42/64 — against a 9-10pp Major target.
   // JQ-209 took the weaker-effect option rather than keeping a knowingly hot Major:
-  // the save costs 2 extra marks on the move that lost, which is ~5.9pp of tempo
-  // back (2 marks x 0.156 x 19), landing the card at ~9.7pp.
+  // the save costs an extra mark on the move that lost, ~7.3pp of tempo back, which
+  // lands the card at ~8.3pp.
+  //
+  // It was two marks, priced at 0.156 each, until the rate was checked. A mark you
+  // put on your *own* board mid-match is not worth what a mark you take off it is:
+  // shedding one takes you from 3 live toward 4 (+0.156), adding one pushes you from
+  // 3 toward 2 (-0.383). Two marks was 14.6pp of cost against a 15.6pp save — a card
+  // worth 1pp. One mark is the price the save can actually carry.
   //
   // It also answers the doc's open question about defensive stacking. Good Old Rock
   // and Second Wind are both Rock-bound and both turn losses into draws, so they are
@@ -218,23 +224,26 @@ const MAJORS = [
   // actually about.
   { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
     load: PASSIVE,
-    blurb: 'The first round you lose is a draw instead, but your move takes 2 extra marks.' },
+    blurb: 'The first round you lose is a draw instead, but your move takes an extra mark.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
-  // Was the most mispriced card on the roster at ~23pp, on a 6-7pp tier. "Yours
-  // doesn't" was implemented as `delayOnChoice` returning 0 — your drawn move took
-  // no marks at all, saving 2 — on top of a mark on theirs: 0.67 x 0.156 of relief
-  // plus 0.33 x 0.383 of denial. It also strictly contained Copycat, which the
-  // precedence rule in `rules.ts` had to arbitrate.
+  // Was the roster's worst mispricing at ~14pp on a 6-7pp tier: "yours doesn't" was
+  // built as `delayOnChoice` returning 0, so your drawn move took no marks at all,
+  // saving 2 — on top of a mark on theirs. It also strictly contained Copycat, which
+  // the precedence rule in `rules.ts` had to arbitrate.
   //
-  // Now both moves take the extra mark. Symmetric in marks, +7.6pp in value, because
-  // denial and relief are not worth the same: 3 live is the baseline, so the fall to
-  // 2 (-0.383) is steeper than the rise to 4 (+0.156). It stops touching Copycat's
-  // space entirely — Copycat discounts your drawn move, this surcharges both — and it
-  // taxes the draw-seeking stall the doc worries about rather than subsidising it.
+  // The first fix put the extra mark on both moves and was wrong in the other
+  // direction. A mark on your own board costs 0.383 mid-match, the same as a mark on
+  // theirs earns — the +0.156 rate is for *shedding* one, not for taking one on. So
+  // "both take a mark" is exactly zero, and the card did nothing at all.
+  //
+  // Denial alone is 0.2 x 0.383 = ~7.7pp, in band. A draw is a mirror, so it needs
+  // both seats on the same move: with 3 live each and ~1.8 moves of overlap that is
+  // about one round in five, not one in three. Copycat is untouched either way —
+  // that discounts your drawn move, this surcharges theirs.
   { id: 'echo-chamber', name: 'Echo Chamber', tier: 'Minor', boundMove: 'paper',
-    load: PASSIVE, blurb: 'On a drawn round, both your move and theirs take an extra mark.' },
+    load: PASSIVE, blurb: "On a drawn round, their move takes an extra mark." },
   { id: 'sharp-practice', name: 'Sharp Practice', tier: 'Minor', boundMove: 'scissors',
     load: PASSIVE, blurb: 'A Scissors mirror is a win for you, not a draw.' },
   // Fired on every loss, which is ~0.375 of rounds: 0.375 x 0.383 = ~13pp, Major
@@ -245,8 +254,17 @@ const MINORS = [
   { id: 'grudge', name: 'Grudge', tier: 'Minor', boundMove: 'scissors',
     load: PASSIVE,
     blurb: 'From your second loss onward, the move that beat you takes an extra mark for them.' },
+  // It used to charge your winning move 3 marks to pay for the discount on your
+  // losing one, and that trade cannot be made. Self-harm costs 0.383 a mark and
+  // self-relief earns 0.156, so a single mark of penalty needs ~2.45 marks of relief
+  // to break even and the most a losing move can be given back is 2. The card priced
+  // at about -7.6pp: not merely cold, actively bad to hold.
+  //
+  // So the penalty is gone and the catch-up stays. ~5.2pp, a point under the band,
+  // and the general rule is worth keeping: in this game anti-snowball has to come
+  // from helping the loser, never from taxing the winner.
   { id: 'tempered', name: 'Tempered', tier: 'Minor', boundMove: 'lizard',
-    load: PASSIVE, blurb: 'Your winning move takes 3 marks; your losing move takes 1.' },
+    load: PASSIVE, blurb: 'Your losing move takes 1 mark instead of 2.' },
   { id: 'featherweight', name: 'Featherweight', tier: 'Minor', boundMove: 'lizard',
     load: PASSIVE, blurb: 'Your Lizard takes 1 mark instead of 2.' },
   // Promoted out of the Trinkets by JQ-209. One mark of denial, once, is ~7.3pp
@@ -262,6 +280,45 @@ const MINORS = [
   // deepest on the board, so the discount reads differently there.
   { id: 'well-oiled', name: 'Well Oiled', tier: 'Minor', boundMove: 'robot',
     load: PASSIVE, blurb: 'Your Robot takes 1 mark instead of 2.' },
+  // The first three charged Minors. JQ-237 opened the tier to a charge and no card
+  // had used it, so "a Minor may fire" was a type fact rather than a roster one.
+  //
+  // All three relieve rather than deny, and that is the tier's identity rather than
+  // a coincidence. A mark of denial is worth 0.383 and a mark of relief 0.156, so a
+  // denial card priced for a Minor has to fire about once every six rounds — which
+  // is a Major's rhythm at a Minor's price, and reads as a worse Major rather than a
+  // different card. Relief is cheap enough to fire often, so **Majors deny, Minors
+  // relieve**, and the two tiers play at different speeds instead of different sizes.
+
+  // The board-wide burst, and the self-side mirror of Freeze: where that holds every
+  // mark on their board for a round, this takes one off every mark on yours. About
+  // 2 marks a firing at steady state, 2 x 0.156 = 0.312, so ~6.2pp on a five-mark
+  // recharge. Rare and large, which is what makes it a different decision from the
+  // small frequent one below rather than a bigger version of it.
+  { id: 'flywheel', name: 'Flywheel', tier: 'Minor', boundMove: 'robot',
+    load: { kind: 'ability', opening: 0, recharge: 5 }, reveal: 'secret',
+    blurb: 'Secretly clear a mark from every move you have on cooldown.' },
+  // The only card on the roster that touches *where* marks land rather than how many
+  // there are, and so the only way to play the same move twice running — which the
+  // design doc lists as a fact about the game rather than a rule ("a played move
+  // carries 2 marks, so every punish-them-for-repeating ability is dead on arrival").
+  // Nothing else on the roster assumes that invariant holds for its own owner, so
+  // breaking it here costs no other card.
+  //
+  // Its total marks are unchanged, so it is not priced on the mark economy at all:
+  // what it buys is an option nobody else has, and the marks still have to go
+  // somewhere you can afford. ~6.2pp at 0 / 4 is an estimate rather than a
+  // derivation, and the widest error bar in this pass.
+  { id: 'feint', name: 'Feint', tier: 'Minor', boundMove: 'paper',
+    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'secret',
+    blurb: "Secretly name one of your moves. This round's marks land on it instead." },
+  // Opening tempo, which no card addresses and the shape table is entirely about:
+  // a Major blocks rounds 1 and 2, a Minor round 1, a Trinket neither. Two marks of
+  // relief while you are still above three live, where the shallow rate applies:
+  // 2 x 0.156 x 19 = ~5.9pp. Bookend is the same idea one tier down and one round
+  // shorter, which is what a tier step should look like.
+  { id: 'prologue', name: 'Prologue', tier: 'Minor', boundMove: 'rock',
+    load: PASSIVE, blurb: 'Your first two moves of the match take 1 mark instead of 2.' },
   // Blind Spot was cut here. It hid a cooldown that is fully derivable from the
   // public move history, so it did nothing to an opponent doing the arithmetic and
   // only obstructed one who wasn't — the inverse of the design doc's own case
@@ -294,7 +351,7 @@ const TRINKETS = [
 export const HELPERS: readonly HelperDef[] = [...MAJORS, ...MINORS, ...TRINKETS];
 
 /**
- * The 22 ids as a union rather than `string`. `rules.ts` decides a card's effect
+ * The 25 ids as a union rather than `string`. `rules.ts` decides a card's effect
  * by matching its id, so a typo there would silently switch a helper off with
  * nothing failing — this makes it a build error instead.
  */

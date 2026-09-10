@@ -167,7 +167,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
 
   it('mirrors the whole roster into the catalog', async () => {
     const row = await one('SELECT COUNT(*) AS n FROM helper_catalog');
-    expect(num(row!.n)).toBe(22);
+    expect(num(row!.n)).toBe(25);
     const quarantine = await one("SELECT * FROM helper_catalog WHERE id = 'quarantine'");
     expect(quarantine).toMatchObject({ tier: 'Major', mark_cost: 2, bound_move: 'scissors' });
   });
@@ -218,7 +218,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     expect(num(byId.thief.times_picked)).toBe(1);
     // A card nobody brings is a balance finding, so it has to be in the view.
     expect(num(byId.chimera.times_picked)).toBe(0);
-    expect(picks).toHaveLength(22);
+    expect(picks).toHaveLength(25);
   });
 
   it('drops mirrors and forfeits from win rate, and keeps everything else', async () => {

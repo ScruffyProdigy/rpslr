@@ -3,15 +3,30 @@ import { MOVES } from '../game.js';
 import { HELPERS, MARK_COST, firesInPublic, getHelper, isAbility } from './roster.js';
 
 describe('helper roster', () => {
-  it('holds 22 helpers at the current tier counts', () => {
-    // 21 at 10/5/6 before JQ-209's pricing pass. Small Mercy moved up to Minor (one
-    // mark of denial is ~7.3pp, Minor money) and Well Oiled was added, which is what
-    // gave Rock and Robot the Minors they had none of.
-    expect(HELPERS).toHaveLength(22);
+  it('holds 25 helpers at the current tier counts', () => {
+    // 21 at 10/5/6 before JQ-209. Small Mercy moved up to Minor, and Well Oiled,
+    // Flywheel, Feint and Prologue were added — which is what gave every move two
+    // Minors and gave the charged-Minor tier its first shipping cards.
+    expect(HELPERS).toHaveLength(25);
     const byTier = (t: string) => HELPERS.filter((h) => h.tier === t).length;
     expect(byTier('Major')).toBe(10);
-    expect(byTier('Minor')).toBe(7);
+    expect(byTier('Minor')).toBe(10);
     expect(byTier('Trinket')).toBe(5);
+  });
+
+  /**
+   * Ten and ten is a deliberate shape, not an accident of counting: the tiers now
+   * play at different speeds rather than different sizes. Majors deny and Minors
+   * relieve, because a mark of denial is worth 0.383 and a mark of relief 0.156 — so
+   * a denial card priced for a Minor would have to fire about once every six rounds,
+   * which is a Major's rhythm at a Minor's price.
+   */
+  it('gives every move the same two Minors' + ' and at least one Major', () => {
+    for (const move of MOVES) {
+      const on = (t: string) => HELPERS.filter((h) => h.tier === t && h.boundMove === move);
+      expect(on('Minor').length, `${move} Minors`).toBe(2);
+      expect(on('Major').length, `${move} Majors`).toBeGreaterThan(0);
+    }
   });
 
   /**
@@ -20,14 +35,6 @@ describe('helper roster', () => {
    * there was no way to place a single opening mark there, and Robot had the same
    * hole. This is the assertion that keeps it closed as cards move.
    */
-  it('offers both a Major and a Minor on every move', () => {
-    for (const move of MOVES) {
-      const on = (t: string) => HELPERS.filter((h) => h.tier === t && h.boundMove === move);
-      expect(on('Major').length, `${move} Majors`).toBeGreaterThan(0);
-      expect(on('Minor').length, `${move} Minors`).toBeGreaterThan(0);
-    }
-  });
-
   it('prices tiers as the ladder requires', () => {
     expect(MARK_COST).toEqual({ Major: 2, Minor: 1, Trinket: 0 });
   });
@@ -80,6 +87,9 @@ describe('helper roster', () => {
       'featherweight:Minor:passive',
       'small-mercy:Minor:passive',
       'well-oiled:Minor:passive',
+      'flywheel:Minor:ability',
+      'feint:Minor:ability',
+      'prologue:Minor:passive',
       'poker-face:Trinket:passive',
       'copycat:Trinket:passive',
       'bookend:Trinket:passive',
@@ -91,6 +101,8 @@ describe('helper roster', () => {
   it('gives every ability an opening and a recharge in delay marks', () => {
     const abilities = HELPERS.filter((h) => isAbility(h.load));
     expect(abilities.map((h) => h.id).sort()).toEqual([
+      'feint',
+      'flywheel',
       'freeze',
       'oracle',
       'quarantine',
@@ -135,6 +147,10 @@ describe('helper roster', () => {
       // nothing used until Freeze needed it.
       freeze: '0/null',
       sacrifice: '3/3',
+      // The first two charged Minors. Both relieve rather than deny, which is what
+      // lets them sit on a Minor's price without a Major's rhythm.
+      flywheel: '0/5',
+      feint: '0/4',
     });
   });
 
@@ -169,7 +185,14 @@ describe('helper roster', () => {
     const publicIds = HELPERS.filter((h) => firesInPublic(h.id)).map((h) => h.id);
     expect(publicIds).toEqual(['quarantine', 'freeze']);
     const secret = HELPERS.filter((h) => isAbility(h.load) && !firesInPublic(h.id));
-    expect(secret.map((h) => h.id)).toEqual(['oracle', 'sacrifice', 'rust', 'thief']);
+    expect(secret.map((h) => h.id)).toEqual([
+      'oracle',
+      'sacrifice',
+      'rust',
+      'thief',
+      'flywheel',
+      'feint',
+    ]);
     for (const h of secret) expect(h.reveal, h.id).toBe('secret');
   });
 

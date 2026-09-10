@@ -117,7 +117,7 @@
       "label": "Second Wind",
       "section": "Major",
       "badge": "2 marks",
-      "description": "The first round you lose is a draw instead, but your move takes 2 extra marks.",
+      "description": "The first round you lose is a draw instead, but your move takes an extra mark.",
       "load": {
         "kind": "passive"
       },
@@ -128,7 +128,7 @@
       "label": "Echo Chamber",
       "section": "Minor",
       "badge": "1 mark",
-      "description": "On a drawn round, both your move and theirs take an extra mark.",
+      "description": "On a drawn round, their move takes an extra mark.",
       "load": {
         "kind": "passive"
       },
@@ -161,7 +161,7 @@
       "label": "Tempered",
       "section": "Minor",
       "badge": "1 mark",
-      "description": "Your winning move takes 3 marks; your losing move takes 1.",
+      "description": "Your losing move takes 1 mark instead of 2.",
       "load": {
         "kind": "passive"
       },
@@ -195,6 +195,43 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "Your Robot takes 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
+      "locked": false
+    },
+    {
+      "id": "flywheel",
+      "label": "Flywheel",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Secretly clear a mark from every move you have on cooldown.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 5
+      },
+      "locked": false
+    },
+    {
+      "id": "feint",
+      "label": "Feint",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Secretly name one of your moves. This round's marks land on it instead.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 4
+      },
+      "locked": false
+    },
+    {
+      "id": "prologue",
+      "label": "Prologue",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Your first two moves of the match take 1 mark instead of 2.",
       "load": {
         "kind": "passive"
       },

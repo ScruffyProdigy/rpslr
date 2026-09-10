@@ -671,7 +671,7 @@ describe('commentary at a helpers match', () => {
     expect(cooldown?.text).toBe("Ana's Rock is back in round 3, Ben's in round 4.");
   });
 
-  it('counts a winning move back from what that player actually paid for it', () => {
+  it('counts a move back from what that player actually paid for it', () => {
     const replay = replayOf(
       [
         round(1, 'rock', 'scissors', 'a'),
@@ -685,9 +685,13 @@ describe('commentary at a helpers match', () => {
     );
     const cooldown = calloutsFor(replay.frames[0], replay).find((c) => c.kind === 'cooldown');
 
-    // Tempered prices a win at 3 marks, so Rock is out a round longer than the
-    // duel arithmetic would have said.
-    expect(cooldown?.text).toBe("Ana's Rock is back in round 5.");
+    // Round 1 is Ana's win, and Tempered no longer touches a win: it used to charge
+    // one 3 marks, which put Rock back in round 5, and JQ-209 removed the surcharge
+    // because self-harm costs 0.383 a mark and no amount of loss-relief pays for it.
+    // Round 4 is now the honest answer, and the test still guards the thing it was
+    // written for — that the sentence counts back from what was actually paid rather
+    // than from duel's flat 2.
+    expect(cooldown?.text).toBe("Ana's Rock is back in round 4.");
   });
 
   it('withholds the rule cards whose copy states a duel’s own numbers', () => {
@@ -744,8 +748,8 @@ describe('commentary at a helpers match', () => {
  * arrive at, and every move in it is one `availableMoves` would have allowed.
  */
 const FLOOR_SEATS = (): Seat[] => [
-  seat(0, 'a', 'pa', 'Ana', ['echo-chamber', 'bookend']),
-  seat(1, 'b', 'pb', 'Ben', ['quarantine', 'freeze']),
+  seat(0, 'a', 'pa', 'Ana', ['bookend', 'watchful']),
+  seat(1, 'b', 'pb', 'Ben', ['echo-chamber', 'quarantine']),
 ];
 
 const FLOOR_ROUNDS = [
@@ -764,27 +768,22 @@ const FLOOR_ROUNDS = [
  */
 const FLOOR_FIRINGS: AbilityFiring[] = [
   { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
-  { round: 4, seatKey: 'b', helperId: 'quarantine', target: 'lizard', source: null },
-  { round: 5, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+  { round: 5, seatKey: 'b', helperId: 'quarantine', target: 'robot', source: null },
 ];
 
 const floorReplay = (): Replay =>
   replayOf(FLOOR_ROUNDS, { bestOf: 3, winnerSeatKey: 'a' }, FLOOR_SEATS(), FLOOR_FIRINGS);
 
 describe('commentary under the floor (JQ-234)', () => {
-  it('reaches a round with one playable move and a round with none clear', () => {
+  it('reaches a round pinned to a single playable move', () => {
     // The fixture's whole point, asserted rather than assumed: if a rules change
     // stops this match reaching the floor, the tests below stop testing anything
-    // and should say so here rather than quietly passing.
+    // and should say so here rather than quietly passing. It has now done that
+    // twice — see the note above the fixture on what JQ-209 took away.
     const frames = floorReplay().frames;
+    const blocked = ALL_MOVES.filter((m) => frames[4].a.delaysBefore[m] > 0);
+    expect(blocked).toHaveLength(4);
     expect(ALL_MOVES.filter((m) => isPlayable(m, frames[4].a.delaysBefore))).toEqual(['robot']);
-    expect(ALL_MOVES.every((m) => frames[5].a.delaysBefore[m] > 0)).toBe(true);
-    // Rock and Paper sit on one mark each and everything else is deeper, so the
-    // floor hands her the two shallowest rather than nothing.
-    expect(ALL_MOVES.filter((m) => isPlayable(m, frames[5].a.delaysBefore))).toEqual([
-      'rock',
-      'paper',
-    ]);
   });
 
   it('values a round pinned to one move instead of reading it as an empty hand', () => {
@@ -795,13 +794,18 @@ describe('commentary under the floor (JQ-234)', () => {
     expect(narrate(replay, 5)).toBe('Both play Robot — no winner. No score yet.');
   });
 
-  it('projects a fully-marked hand as the moves the floor leaves, not as nothing', () => {
-    // Round 5 hands Ana a board with a mark on all five. The old reading made
-    // that an empty hand, and `roundValue` answered `Infinity` for it — a
-    // number that passes every gate below without meaning anything.
-    const ahead = lookahead(floorReplay().frames[4]);
-    expect(ALL_MOVES.every((m) => ahead.a[m] > 0)).toBe(true);
-    expect(ahead.value).toBeCloseTo(0);
+  it('projects a hand pinned to one move as that move, not as nothing', () => {
+    // The old reading called a hand with no clear move empty, and handed the empty
+    // list to a solver that answered `Infinity` — a number that passes every gate
+    // below without meaning anything.
+    //
+    // The board that triggered it had a mark on all five. JQ-209 put that state out
+    // of reach (see the fixture note above), so the tightest a legal match now gets
+    // is four of five, which exercises the same reading: the hand is Robot alone.
+    const frame = floorReplay().frames[4];
+    expect(ALL_MOVES.filter((m) => isPlayable(m, frame.a.delaysBefore))).toEqual(['robot']);
+    const ahead = lookahead(frame);
+    expect(Number.isFinite(ahead.value)).toBe(true);
   });
 
   it('says something checkable about every round of it, and nothing infinite', () => {

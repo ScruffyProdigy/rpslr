@@ -1,8 +1,8 @@
 {
   "state": {
     "match": {
-      "id": "1fbae226-cad2-4493-9c41-87f7fa1258b2",
-      "code": "RPS-ZWFE",
+      "id": "0d10b057-33a4-4f9b-a441-d00e64b908f7",
+      "code": "RPS-FK9W",
       "externalMatchId": null,
       "lobbyId": null,
       "lobbyReturnUrl": null,
@@ -19,12 +19,12 @@
       "phaseDeadline": null,
       "endReason": "played",
       "winnerSeatKey": "2",
-      "createdAt": "2026-09-10T04:14:27.933Z"
+      "createdAt": "2026-09-10T13:03:01.623Z"
     },
     "seats": [
       {
-        "id": "e0931dcd-e3a8-4814-88f6-c45c2b777ecf",
-        "matchId": "1fbae226-cad2-4493-9c41-87f7fa1258b2",
+        "id": "8772b10f-978c-457f-bbb3-9d2235d7e36a",
+        "matchId": "0d10b057-33a4-4f9b-a441-d00e64b908f7",
         "seatKey": "1",
         "teamKey": null,
         "role": null,
@@ -32,7 +32,7 @@
         "reservedForLobbyUser": null,
         "lobbyProfile": null,
         "player": {
-          "id": "c9c5a515-b344-44ae-84dd-684496e7a4ba",
+          "id": "05f9b5f6-3a0f-47b9-8d77-3a92234177f2",
           "name": "Alice",
           "lobbyUserId": null,
           "score": 1,
@@ -53,8 +53,8 @@
         "loadoutRoll": null
       },
       {
-        "id": "cdc79799-bed4-41c7-903d-862acdfd714f",
-        "matchId": "1fbae226-cad2-4493-9c41-87f7fa1258b2",
+        "id": "8eb05725-e8de-4b43-b554-9cc6a21457d2",
+        "matchId": "0d10b057-33a4-4f9b-a441-d00e64b908f7",
         "seatKey": "2",
         "teamKey": null,
         "role": null,
@@ -62,7 +62,7 @@
         "reservedForLobbyUser": null,
         "lobbyProfile": null,
         "player": {
-          "id": "58b18f90-7267-48a4-8213-8b37e194c705",
+          "id": "26439b08-9a1e-4b21-85bc-5c8dc3b31d24",
           "name": "Bob",
           "lobbyUserId": null,
           "score": 2,
@@ -74,7 +74,7 @@
           "paper": 0,
           "scissors": 3,
           "lizard": 0,
-          "robot": 2
+          "robot": 1
         },
         "loadout": [
           "echo-chamber",
@@ -88,8 +88,8 @@
         "round": 1,
         "outcome": "2",
         "moves": {
-          "c9c5a515-b344-44ae-84dd-684496e7a4ba": "paper",
-          "58b18f90-7267-48a4-8213-8b37e194c705": "scissors"
+          "05f9b5f6-3a0f-47b9-8d77-3a92234177f2": "paper",
+          "26439b08-9a1e-4b21-85bc-5c8dc3b31d24": "scissors"
         },
         "autoPicked": []
       },
@@ -97,8 +97,8 @@
         "round": 2,
         "outcome": "1",
         "moves": {
-          "c9c5a515-b344-44ae-84dd-684496e7a4ba": "rock",
-          "58b18f90-7267-48a4-8213-8b37e194c705": "lizard"
+          "05f9b5f6-3a0f-47b9-8d77-3a92234177f2": "rock",
+          "26439b08-9a1e-4b21-85bc-5c8dc3b31d24": "lizard"
         },
         "autoPicked": []
       },
@@ -106,8 +106,8 @@
         "round": 3,
         "outcome": "draw",
         "moves": {
-          "c9c5a515-b344-44ae-84dd-684496e7a4ba": "robot",
-          "58b18f90-7267-48a4-8213-8b37e194c705": "robot"
+          "05f9b5f6-3a0f-47b9-8d77-3a92234177f2": "robot",
+          "26439b08-9a1e-4b21-85bc-5c8dc3b31d24": "robot"
         },
         "autoPicked": []
       },
@@ -115,8 +115,8 @@
         "round": 4,
         "outcome": "2",
         "moves": {
-          "c9c5a515-b344-44ae-84dd-684496e7a4ba": "lizard",
-          "58b18f90-7267-48a4-8213-8b37e194c705": "scissors"
+          "05f9b5f6-3a0f-47b9-8d77-3a92234177f2": "lizard",
+          "26439b08-9a1e-4b21-85bc-5c8dc3b31d24": "scissors"
         },
         "autoPicked": []
       }
@@ -202,7 +202,7 @@
           "paper": 0,
           "scissors": 0,
           "lizard": 1,
-          "robot": 3
+          "robot": 2
         }
       }
     }
