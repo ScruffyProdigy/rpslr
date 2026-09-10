@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { winsNeeded } from '../moves';
+import { roundCap, winsNeeded } from '../moves';
 import { HowToPlayGraph } from './HowToPlayGraph';
 import UiIcon from './UiIcon';
 
@@ -11,6 +11,7 @@ import UiIcon from './UiIcon';
  */
 export function HowToPlay({ bestOf }: { bestOf: number }) {
   const needed = winsNeeded(bestOf);
+  const cap = roundCap(bestOf);
   return (
     <div className="htp">
       <section className="htp-panel">
@@ -46,7 +47,7 @@ export function HowToPlay({ bestOf }: { bestOf: number }) {
         </p>
         <p className="htp-panel__body">
           Win {needed} rounds and the match is yours. A drawn round scores for neither of you and
-          the match plays on.
+          the match plays on — up to {cap} rounds, after which whoever is ahead takes it.
         </p>
       </section>
     </div>

@@ -33,7 +33,10 @@ views are the only things that apply it:
 - **Mirrors are excluded.** Both seats bringing the same two helpers says nothing
   about the loadout. `v_match_telemetry.is_mirror` still flags them.
 - **Only `end_reason = 'played'` counts.** A win by disconnect is a fact about a
-  network.
+  network, and a match that reached the round cap level (`end_reason = 'draw'`)
+  has no winner to attribute. Both still carry `rounds` and `draws` in
+  `v_match_telemetry`, which is where a stalling combo shows up — a rise in
+  drawn matches is the signal, so it must not be filtered away at the source.
 
 `v_helper_pick_rate` deliberately applies neither: a helper picked into a mirror was
 still picked, and popularity is what that view measures. Pick rates are per

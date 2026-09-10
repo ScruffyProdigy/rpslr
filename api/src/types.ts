@@ -10,7 +10,17 @@ export type MatchStatus = 'waiting' | 'playing' | 'finished';
  * How a match ended. `played` is someone reaching the winning score; the rest
  * come from the idle policy, where `abandoned` means both players went silent.
  */
-export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
+/**
+ * `draw` is the only reason that ends a match with no winning seat *and* two
+ * players who were both there for it — the round cap reached level. `abandoned`
+ * is also winnerless, but for the opposite reason: nobody was there at all.
+ */
+export type MatchEndReason =
+  | 'played'
+  | 'forfeit-strikes'
+  | 'forfeit-disconnect'
+  | 'abandoned'
+  | 'draw';
 
 export interface Match {
   id: string;

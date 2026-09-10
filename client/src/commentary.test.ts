@@ -104,6 +104,34 @@ describe('narrateRound', () => {
     );
   });
 
+  it('names the leader as the winner when the round cap decides it', () => {
+    // 2-1 in a best-of-5: nobody reached 3, but round 10 is the cap and the
+    // match really is over. Calling that a lead would be the last word of the
+    // replay of a match somebody won.
+    const results = [
+      round(1, 'rock', 'scissors', 'a'),
+      round(2, 'paper', 'scissors', 'b'),
+      round(3, 'rock', 'lizard', 'a'),
+      ...Array.from({ length: 7 }, (_, i) => round(i + 4, 'rock', 'rock', 'draw')),
+    ];
+    const replay = replayOf(results, { winnerSeatKey: 'a', endReason: 'played' });
+    expect(narrate(replay, 10)).toContain('Ana wins the match 2–1.');
+  });
+
+  it('says a capped match ended level rather than leaving the score hanging', () => {
+    const results = Array.from({ length: 10 }, (_, i) => round(i + 1, 'rock', 'rock', 'draw'));
+    const replay = replayOf(results, { winnerSeatKey: null, endReason: 'draw' });
+    expect(narrate(replay, 10)).toContain('The match ends level at 0–0.');
+  });
+
+  it('still calls a forfeit winner a leader, not a match winner', () => {
+    const replay = replayOf([round(1, 'rock', 'scissors', 'a')], {
+      winnerSeatKey: 'a',
+      endReason: 'forfeit-disconnect',
+    });
+    expect(narrate(replay, 1)).toContain('Ana leads 1–0.');
+  });
+
   it('reads a mirror round as a draw with no winner', () => {
     const replay = replayOf([round(1, 'rock', 'rock', 'draw')]);
     expect(narrate(replay, 1)).toBe('Both play Rock — no winner. No score yet.');

@@ -11,7 +11,9 @@ import {
   type Move,
   type PlayerRules,
   isMove,
+  matchOutcome,
   matchWinner,
+  roundCap,
   winsNeeded,
 } from './game.js';
 
@@ -99,6 +101,32 @@ describe('winsNeeded / matchWinner', () => {
     expect(matchWinner(2, 1, 3)).toBeNull();
     expect(matchWinner(3, 1, 3)).toBe('a');
     expect(matchWinner(0, 3, 3)).toBe('b');
+  });
+});
+
+describe('roundCap / matchOutcome', () => {
+  it('gives a best-of-5 twice its length before the cap bites', () => {
+    expect(roundCap(5)).toBe(10);
+    expect(roundCap(3)).toBe(6);
+  });
+
+  it('leaves a match open while it is under the cap', () => {
+    expect(matchOutcome(1, 1, 5, 9)).toBeNull();
+  });
+
+  it('still ends on the win threshold, well before the cap', () => {
+    expect(matchOutcome(3, 0, 5, 3)).toBe('a');
+    expect(matchOutcome(0, 3, 5, 4)).toBe('b');
+  });
+
+  it('awards a capped match to the higher score', () => {
+    expect(matchOutcome(2, 1, 5, 10)).toBe('a');
+    expect(matchOutcome(1, 2, 5, 10)).toBe('b');
+  });
+
+  it('declares a draw when the cap is reached level', () => {
+    expect(matchOutcome(2, 2, 5, 10)).toBe('draw');
+    expect(matchOutcome(0, 0, 5, 10)).toBe('draw');
   });
 });
 
