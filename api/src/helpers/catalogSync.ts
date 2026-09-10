@@ -15,6 +15,7 @@
 
 import type { Pool } from 'pg';
 import { HELPERS, MARK_COST, isAbility } from './roster.js';
+import { informsItsHolder } from './reveals.js';
 
 export interface HelperCatalogRow {
   id: string;
@@ -28,6 +29,18 @@ export interface HelperCatalogRow {
   abilityOpening: number | null;
   /** Null for a passive, and for a charge that never comes back. */
   abilityRecharge: number | null;
+  /**
+   * Whether the firing is announced as it happens. Null for a passive, which has
+   * no firing to disclose — not 'secret', which would claim a passive is keeping
+   * something back.
+   */
+  reveal: 'public' | 'secret' | null;
+  /**
+   * Whether firing it tells its own holder something. A separate axis from
+   * `reveal`: Oracle is secret and still opens a sub-phase, because it reveals to
+   * the seat that fired it. JQ-262 needs both to count a pause's cause.
+   */
+  informsItsHolder: boolean;
 }
 
 export function helperCatalogRows(): HelperCatalogRow[] {
@@ -40,6 +53,8 @@ export function helperCatalogRows(): HelperCatalogRow[] {
     loadKind: helper.load.kind,
     abilityOpening: isAbility(helper.load) ? helper.load.opening : null,
     abilityRecharge: isAbility(helper.load) ? helper.load.recharge : null,
+    reveal: helper.reveal ?? null,
+    informsItsHolder: informsItsHolder(helper.id),
   }));
 }
 
@@ -61,10 +76,13 @@ export async function syncHelperCatalog(pool: Pool): Promise<CatalogSyncResult> 
 
   const upsert = await pool.query(
     `INSERT INTO helper_catalog
-       (id, name, tier, mark_cost, bound_move, load_kind, ability_opening, ability_recharge, synced_at)
+       (id, name, tier, mark_cost, bound_move, load_kind, ability_opening, ability_recharge,
+        reveal, informs_its_holder, synced_at)
      SELECT * FROM UNNEST(
-       $1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::int[], $8::int[]
-     ) AS t(id, name, tier, mark_cost, bound_move, load_kind, ability_opening, ability_recharge),
+       $1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::int[], $8::int[],
+       $9::text[], $10::boolean[]
+     ) AS t(id, name, tier, mark_cost, bound_move, load_kind, ability_opening, ability_recharge,
+            reveal, informs_its_holder),
      LATERAL (SELECT now()) AS n(synced_at)
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name,
@@ -74,6 +92,8 @@ export async function syncHelperCatalog(pool: Pool): Promise<CatalogSyncResult> 
        load_kind = EXCLUDED.load_kind,
        ability_opening = EXCLUDED.ability_opening,
        ability_recharge = EXCLUDED.ability_recharge,
+       reveal = EXCLUDED.reveal,
+       informs_its_holder = EXCLUDED.informs_its_holder,
        synced_at = now()`,
     [
       ids,
@@ -84,6 +104,8 @@ export async function syncHelperCatalog(pool: Pool): Promise<CatalogSyncResult> 
       rows.map((r) => r.loadKind),
       rows.map((r) => r.abilityOpening),
       rows.map((r) => r.abilityRecharge),
+      rows.map((r) => r.reveal),
+      rows.map((r) => r.informsItsHolder),
     ],
   );
 
