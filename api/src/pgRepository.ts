@@ -428,11 +428,12 @@ export class PgGameRepository implements GameRepository {
         [input.matchId, input.seatId, input.round, input.helperId, input.target, input.source],
       );
     } catch (err) {
-      // The unique index is the authority on one firing per seat per round; a
+      // The unique index is the authority on one firing per *slot* per round; a
       // double-tap racing through two connections lands here rather than spending
-      // a charge twice.
+      // a charge twice. The in-process check cannot do this job — both connections
+      // pass it, and only one insert survives.
       if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('this seat already fired an ability this round');
+        throw new ConflictError(`this seat already fired '${input.helperId}' this round`);
       }
       throw err;
     }
@@ -442,15 +443,19 @@ export class PgGameRepository implements GameRepository {
     matchId: string;
     seatId: string;
     round: number;
+    helperId: string;
     target: Move | null;
   }): Promise<boolean> {
     // `AND target IS NULL` is the whole point: it makes the draw a
     // write-once, so two readers racing into the sub-phase cannot name two
     // different moves and hand the holder the opponent's move by elimination.
+    // `helper_id` joined it in JQ-238: a seat may fire two abilities in one round,
+    // and without it this would name whichever of them the planner reached first.
     const res = await this.pool.query(
-      `UPDATE ability_firings SET target = $4
-        WHERE match_id = $1 AND round = $2 AND seat_id = $3 AND target IS NULL`,
-      [input.matchId, input.round, input.seatId, input.target],
+      `UPDATE ability_firings SET target = $5
+        WHERE match_id = $1 AND round = $2 AND seat_id = $3 AND helper_id = $4
+          AND target IS NULL`,
+      [input.matchId, input.round, input.seatId, input.helperId, input.target],
     );
     return (res.rowCount ?? 0) > 0;
   }

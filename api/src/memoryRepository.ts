@@ -316,10 +316,16 @@ export class MemoryGameRepository implements GameRepository {
     target: Move | null;
     source: Move | null;
   }): Promise<void> {
+    // Mirrors the Postgres unique index, helper id included: a seat holding two
+    // charged abilities may fire both in one round, but neither of them twice.
     const clash = this.abilityFirings.find(
-      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+      (f) =>
+        f.matchId === input.matchId &&
+        f.round === input.round &&
+        f.seatId === input.seatId &&
+        f.helperId === input.helperId,
     );
-    if (clash) throw new ConflictError('this seat already fired an ability this round');
+    if (clash) throw new ConflictError(`this seat already fired '${input.helperId}' this round`);
     this.abilityFirings.push({ ...input });
   }
 
@@ -327,10 +333,15 @@ export class MemoryGameRepository implements GameRepository {
     matchId: string;
     seatId: string;
     round: number;
+    helperId: string;
     target: Move | null;
   }): Promise<boolean> {
     const firing = this.abilityFirings.find(
-      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+      (f) =>
+        f.matchId === input.matchId &&
+        f.round === input.round &&
+        f.seatId === input.seatId &&
+        f.helperId === input.helperId,
     );
     // No firing, or one already named: either way this call did not write the
     // target, and a caller that lost the race must read the stored move back

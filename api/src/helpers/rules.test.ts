@@ -516,6 +516,104 @@ describe('Thief', () => {
   });
 });
 
+/**
+ * JQ-238: two charged abilities, both fired in one round.
+ *
+ * Nothing here is new engine behaviour — `PlayedRound.firedA` has always been an
+ * array and `fireEffects` has always looked each ability up independently. The
+ * rule that forbade it lived in the service and in a unique index, and this suite
+ * is the evidence that removing it needed no engine change: `rules.ts` and
+ * `game.ts` are untouched by that ticket.
+ */
+describe('two abilities fired by one seat in one round', () => {
+  // Rust binds scissors and Thief binds lizard, so the firer opens with 2 marks on
+  // each — the mark Thief needs to move, and no collision roll to store.
+  const firer = rulesFor(['rust', 'thief']);
+  // Quarantine binds scissors, so the victim has the cooldown Rust needs to deepen.
+  const victim = rulesFor(['quarantine', 'poker-face']);
+
+  it('composes both mark adjustments rather than honouring whichever came first', () => {
+    const { a, b } = replayMatch(
+      [
+        {
+          a: 'rock',
+          b: 'rock',
+          firedA: [
+            { id: 'rust', target: 'scissors' },
+            { id: 'thief', source: 'lizard', target: 'scissors' },
+          ],
+        },
+      ],
+      firer,
+      victim,
+    );
+    // Their scissors: 2 entering, 1 after the decrement, +2 from Rust and +1 from
+    // Thief. Either firing alone would leave 3 or 2; both leave 4.
+    expect(b.scissors).toBe(4);
+    // And Thief's own half still lands: the firer's lizard goes 2 → 1 → 0.
+    expect(a.lizard).toBe(0);
+  });
+
+  it('reads Thief\u2019s source from the marks entering the round, not from what Rust did', () => {
+    // Both firings read `ownDelays`/`opponentDelays` as they stood entering the
+    // round, so Rust deepening a cooldown cannot retroactively make Thief's source
+    // legal, and Thief lifting a mark cannot make Rust's target clear.
+    const effect = firer.fireEffects({
+      firings: [
+        { id: 'rust', target: 'scissors' },
+        { id: 'thief', source: 'lizard', target: 'scissors' },
+      ],
+      own: 'rock',
+      opponent: 'rock',
+      ownDelays: { rock: 0, paper: 0, scissors: 2, lizard: 2, robot: 0 },
+      opponentDelays: { rock: 0, paper: 0, scissors: 2, lizard: 0, robot: 0 },
+    });
+    expect(effect.marks).toEqual({ own: { lizard: -1 }, opponent: { scissors: 3 } });
+  });
+
+  it('floors the combined adjustment at zero when the source decremented away', () => {
+    // Entering round 2 the firer's lizard is on 1, which the decrement alone
+    // clears. Thief's -1 lands on a move already at zero and must not go negative.
+    const { a, b } = replayMatch(
+      [
+        { a: 'rock', b: 'rock' },
+        {
+          a: 'paper',
+          b: 'rock',
+          firedA: [
+            { id: 'rust', target: 'scissors' },
+            { id: 'thief', source: 'lizard', target: 'scissors' },
+          ],
+        },
+      ],
+      firer,
+      victim,
+    );
+    expect(a.lizard).toBe(0);
+    // Thief still lands its half on the opponent: it moved a mark that existed
+    // when the firing was validated, so the round pays out even though the floor
+    // swallowed the subtraction.
+    expect(b.scissors).toBe(3);
+  });
+
+  it('lets one of the two settle the round while the other still adjusts marks', () => {
+    // Sacrifice makes the round a draw; Freeze stops the opponent's decrement. Two
+    // abilities on different hooks, fired together, both taken.
+    const both = rulesFor(['sacrifice', 'freeze']);
+    const firings = [{ id: 'sacrifice' }, { id: 'freeze' }];
+    expect(both.declaresDraw(firings)).toBe(true);
+    expect(
+      both.fireEffects({
+        firings,
+        own: 'rock',
+        opponent: 'rock',
+        ownDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+        opponentDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+      }).freezesOpponentDecay,
+    ).toBe(true);
+  });
+});
+
 describe('Sacrifice', () => {
   // Sacrifice binds rock, so its owner has marks worth clearing.
   const firer = rulesFor(load('sacrifice'));

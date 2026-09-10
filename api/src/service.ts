@@ -607,6 +607,7 @@ export class GameService {
           matchId: match.id,
           seatId: holder.id,
           round: match.currentRound,
+          helperId: ORACLE,
           target: named,
         })
       ) {
@@ -679,8 +680,12 @@ export class GameService {
 
     const results = await this.repo.listResults(match.id);
     const allFirings = await this.repo.listAbilityFirings(match.id);
-    if (firedIn(allFirings, match.currentRound, mySeat.seatKey).length > 0) {
-      throw new ConflictError('this seat already fired an ability this round');
+    // Per slot, not per seat. Choosing two charge helpers is a statement that you
+    // want to play an ability-heavy game, and one-per-seat silently made the second
+    // card worth a fraction of its standalone value — a trap that teaches nothing.
+    // The tier ladder already taxes Major + Major on tempo; this was charging twice.
+    if (firedIn(allFirings, match.currentRound, mySeat.seatKey).some((f) => f.id === helperId)) {
+      throw new ConflictError(`this seat already fired '${helperId}' this round`);
     }
     const charge = chargesNow(
       mySeat.loadout,
@@ -700,7 +705,7 @@ export class GameService {
       opponent: delays[theirSeat.seatKey],
     });
 
-    // The repository's one-per-seat-per-round constraint is the authority on a
+    // The repository's one-per-slot-per-round constraint is the authority on a
     // double-spend, not the check above: two taps racing through two connections
     // both pass it, and only one insert survives.
     await this.repo.recordAbilityFiring({
