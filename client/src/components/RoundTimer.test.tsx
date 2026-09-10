@@ -42,9 +42,9 @@ describe('RoundTimer', () => {
   });
 
   it('turns urgent in the last five seconds even of a long round', () => {
-    // Round 1 is 45s, so a quarter of it is 12s — still too late to be useful
+    // Round 1 is 60s, so a quarter of it is 15s — still too late to be useful
     // as the only signal. Five seconds is urgent regardless of allowance.
-    const { container } = render(<RoundTimer deadline={deadline(4, 45)} />);
+    const { container } = render(<RoundTimer deadline={deadline(4, 60)} />);
     expect(container.querySelector('.round-timer--urgent')).not.toBeNull();
   });
 

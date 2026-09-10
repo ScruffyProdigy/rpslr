@@ -40,7 +40,7 @@ describe('GameService — round deadlines and the idle policy', () => {
       const { code } = await setupMatch();
       const state = await service.getState(code);
       expect(state.match.phase).toBe('pick');
-      expect(Date.parse(state.match.phaseDeadline!)).toBe(now + 45_000);
+      expect(Date.parse(state.match.phaseDeadline!)).toBe(now + 60_000);
     });
 
     it('gives later rounds the shorter allowance, measured from the resolve', async () => {
@@ -74,7 +74,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('picks a live move for the silent player and resolves the round', async () => {
       const { code, hostId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
 
       const state = await service.getState(code);
       expect(state.results).toHaveLength(1);
@@ -86,7 +86,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('announces who did not choose their own move', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
 
       const state = await service.getState(code);
       expect(state.results[0].autoPicked).toEqual([challengerId]);
@@ -95,7 +95,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('leaves the player who did pick out of the announcement', async () => {
       const { code, hostId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
       const state = await service.getState(code);
       expect(state.results[0].autoPicked).not.toContain(hostId);
     });
@@ -103,7 +103,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('spends a cooldown, so walking away still costs something', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
       const state = await service.getState(code);
 
       const bob = state.seats.find((s) => s.player?.id === challengerId)!;
@@ -114,7 +114,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('does nothing at all before the deadline', async () => {
       const { code, hostId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 44_999;
+      now += 59_999;
       const state = await service.getState(code);
       expect(state.results).toHaveLength(0);
     });
@@ -122,7 +122,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('is idempotent across concurrent readers', async () => {
       const { code, hostId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
       await Promise.all([
         service.getState(code),
         service.getState(code),
@@ -137,7 +137,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('ends the match in favour of the player who kept showing up', async () => {
       const { code, hostId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001; // round 1 expires -> auto-pick, strike 1
+      now += 60_001; // round 1 expires -> auto-pick, strike 1
       await service.getState(code);
 
       await service.submitMove(code, hostId, 'paper');
@@ -152,7 +152,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('forgives a miss once the player comes back', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001; // strike 1 for Bob
+      now += 60_001; // strike 1 for Bob
       await service.getState(code);
 
       // Bob plays round 2 on time — the run of silence is broken.
@@ -176,7 +176,7 @@ describe('GameService — round deadlines and the idle policy', () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.markConnected(code, challengerId);
       await service.submitMove(code, hostId, 'rock');
-      now += 44_000; // long gone past the grace period, but still connected
+      now += 50_000; // past the grace period, but still connected
       const state = await service.getState(code);
       expect(state.match.status).toBe('playing');
       expect(state.results).toHaveLength(0);
@@ -242,15 +242,15 @@ describe('GameService — round deadlines and the idle policy', () => {
       now += 10_000;
       const afterReturn = await service.getState(code);
 
-      // Same absolute deadline; the returning player has 35s left, not 45s.
+      // Same absolute deadline; the returning player has 50s left, not 60s.
       expect(afterReturn.match.phaseDeadline).toBe(atStart.match.phaseDeadline);
-      expect(Date.parse(afterReturn.match.phaseDeadline!) - now).toBe(35_000);
+      expect(Date.parse(afterReturn.match.phaseDeadline!) - now).toBe(50_000);
     });
 
     it('shows a returning player the expiry they missed', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
 
       // Bob comes back after the round already resolved without him.
       const state = await service.getState(code);
@@ -263,7 +263,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('refuses a move whose round already resolved, rather than playing it in the next one', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
       await service.getState(code); // expiry resolves round 1 without Bob
 
       // Bob's client fired its auto-commit for round 1 and lost the race. The
@@ -293,7 +293,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('rejects a move that arrives after the match was forfeited', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
       await service.getState(code); // strike 1
       await service.submitMove(code, hostId, 'paper');
       now += 23_201;
@@ -307,7 +307,7 @@ describe('GameService — round deadlines and the idle policy', () => {
     it('settles the expiry first when a late move and an expiry coincide', async () => {
       const { code, hostId, challengerId } = await setupMatch();
       await service.submitMove(code, hostId, 'rock');
-      now += 45_001;
+      now += 60_001;
 
       // Bob's move lands after the deadline: the policy has already picked for
       // him, so this counts against round 2, not round 1.
