@@ -445,7 +445,8 @@ describe('<ReplayPage> play along', () => {
  * mark on all five, playable only because `availableMoves` has a floor.
  *
  * The same script as the floor fixture in `commentary.test.ts`, deliberately: that
- * one asserts the board this one draws.
+ * one asserts the board this one draws. Six rounds, because JQ-214 caps a best-of-3
+ * at `bestOf * 2` — the match ends at the cap on Ana's 1-0, not on the threshold.
  *
  * The commentary used to reconstruct that hand as `delays[m] === 0` and get
  * nothing back, and hand the empty list to a solver that indexes three rows and
@@ -460,11 +461,10 @@ function floorState(): MatchState {
     ['lizard', 'lizard', 'draw'],
     ['robot', 'robot', 'draw'],
     ['paper', 'rock', 'a'],
-    ['rock', 'scissors', 'a'],
   ];
   const helped = seat(1, 'b', 'pb', 'Ben');
   return {
-    ...finishedState({ bestOf: 3, currentRound: 7, gameMode: 'duel-helpers' }),
+    ...finishedState({ bestOf: 3, currentRound: 6, gameMode: 'duel-helpers' }),
     seats: [
       { ...seat(0, 'a', 'pa', 'Ana'), loadout: ['echo-chamber', 'bookend'] },
       { ...helped, loadout: ['quarantine', 'freeze'] },
@@ -498,7 +498,7 @@ describe('<ReplayPage> under the cooldown floor', () => {
     // Round 6 is the one Ana enters with a mark on every move. Reaching its
     // sentence at all is the assertion: the commentary threw on the way here.
     expect(
-      screen.getByText('Ana plays Paper, Ben plays Rock — Paper covers Rock. Ana leads 1–0.'),
+      screen.getByText('Ana plays Paper, Ben plays Rock — Paper covers Rock. Ana wins the match 1–0.'),
     ).toBeInTheDocument();
   });
 

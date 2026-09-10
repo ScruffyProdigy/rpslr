@@ -732,6 +732,13 @@ describe('commentary at a helpers match', () => {
  * playable move, and by round 6 every one of the five carries a mark and the floor
  * is the only thing giving her a hand at all.
  *
+ * Six rounds, not seven, since JQ-214: `roundCap` is `bestOf * 2`, so a best-of-3
+ * cannot reach a seventh. The match therefore ends *at* the cap on Ana's 1-0 rather
+ * than on the win threshold — which is the point of putting five draws in front of
+ * it, and means this fixture now covers a capped finish as well as the floor. A
+ * seventh round here would describe a match the server can no longer produce, and
+ * this fixture's whole claim is that it describes one it can.
+ *
  * Scripted rather than mutated. The frames come from `buildReplay` over the
  * engine's own reconstruction, so this is a board the server can actually
  * arrive at, and every move in it is one `availableMoves` would have allowed.
@@ -748,7 +755,6 @@ const FLOOR_ROUNDS = [
   round(4, 'lizard', 'lizard', 'draw'),
   round(5, 'robot', 'robot', 'draw'),
   round(6, 'paper', 'rock', 'a'),
-  round(7, 'rock', 'scissors', 'a'),
 ];
 
 /**
