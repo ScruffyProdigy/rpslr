@@ -12,6 +12,20 @@ const PLAYER_QUERY = `
   }
 `;
 
+/**
+ * One player is done with the match *for themselves* — quit, forfeited, or ran
+ * out a grace period the game defined. Never a dropped socket: reporting a
+ * player finished releases their queue row and closes their way back in, and a
+ * player who lost wifi is still seated and still expected back.
+ *
+ * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+ */
+const REPORT_PLAYER_FINISHED = `
+  mutation ReportPlayerFinished($matchId: ID!, $lobbyUserId: ID!, $reason: PlayerFinishReason!, $placement: Int) {
+    reportPlayerFinished(matchId: $matchId, lobbyUserId: $lobbyUserId, reason: $reason, placement: $placement)
+  }
+`;
+
 const REPORT_MATCH_RESULT = `
   mutation ReportMatchResult($matchId: ID!, $status: MatchResultStatus!, $winnerLobbyUserIds: [ID!]) {
     reportMatchResult(matchId: $matchId, status: $status, winnerLobbyUserIds: $winnerLobbyUserIds)
@@ -77,6 +91,72 @@ export async function resolveClaimDisplayName(
   if (fromBody) return fromBody;
 
   return 'Player';
+}
+
+/**
+ * How a player's participation ended. Lobby treats `DISCONNECT` specially when a
+ * match is rated — it drops that player out of the rating inputs entirely — so
+ * the reason is not decoration.
+ */
+export type PlayerFinishReason = 'COMPLETED' | 'ELIMINATED' | 'FORFEIT' | 'DISCONNECT';
+
+/**
+ * Tell Lobby one player is finished. Best-effort, like every other callback:
+ * a match that cannot reach Lobby still plays.
+ *
+ * Call this when a player has genuinely **left** — not when their socket
+ * dropped. See `REPORT_PLAYER_FINISHED` above.
+ */
+export async function reportPlayerFinished(
+  graphqlUrl: string,
+  serviceToken: string,
+  matchId: string,
+  lobbyUserId: string,
+  reason: PlayerFinishReason,
+  placement?: number,
+): Promise<boolean> {
+  const base = graphqlUrl.replace(/\/$/, '');
+  let res: Response;
+  try {
+    res = await fetch(base, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...authHeader(serviceToken) },
+      body: JSON.stringify({
+        query: REPORT_PLAYER_FINISHED,
+        variables: { matchId, lobbyUserId, reason, placement: placement ?? null },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    console.warn('[lobby] reportPlayerFinished request failed:', { matchId, lobbyUserId, err });
+    return false;
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    console.warn('[lobby] reportPlayerFinished HTTP error:', {
+      matchId,
+      lobbyUserId,
+      status: res.status,
+      detail: detail.slice(0, 500),
+    });
+    return false;
+  }
+  let body: { data?: { reportPlayerFinished?: boolean }; errors?: unknown[] };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch (err) {
+    console.warn('[lobby] reportPlayerFinished invalid JSON:', { matchId, lobbyUserId, err });
+    return false;
+  }
+  if (body.errors?.length) {
+    console.warn('[lobby] reportPlayerFinished GraphQL errors:', {
+      matchId,
+      lobbyUserId,
+      errors: body.errors,
+    });
+    return false;
+  }
+  return body.data?.reportPlayerFinished === true;
 }
 
 /** Notify Lobby that the match is over (clears matched queue rows). Best-effort. */

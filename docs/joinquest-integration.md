@@ -309,6 +309,93 @@ Lobby connectivity is **per match**, not per deployment:
 
 ---
 
+## Step 4 — Getting a player back in (JQ-258)
+
+A player who closes the tab, drops their connection, or takes a phone call
+mid-match is **still seated**. There are two independent ways back, and they are
+independent on purpose — each one works when the other has failed.
+
+### The re-claim rule
+
+A claim on a seat that already has someone in it is not automatically a
+conflict. Compare the token's `sub` against the player already in the seat:
+
+| Who is claiming | Answer |
+|---|---|
+| The same `sub` already in the seat | **`200`** + a full snapshot — this is a reconnect |
+| Anyone else | **`409`** `seat already taken` |
+
+`201` stays the answer for a first claim, so the two are told apart on the wire.
+A re-claim moves nothing: no reset, no second player row, no re-deal, no round
+restarted, no committed throw cleared. It answers with **complete authoritative
+state**, not the deltas the player missed — they should never have to guess.
+
+A flat `409` on any second claim passes the seat-theft half of this and fails the
+return half, which is exactly the shape of the bug: it looks correct until a real
+player closes their tab. JoinQuest's `jwt.reclaim_same_player` and
+`jwt.reclaim_seat_theft` checks are the two halves.
+
+### Path 1 — the game's own origin (primary, no Lobby round trip)
+
+On a successful token claim the API sets a binding cookie on **its own origin**
+naming the seat this browser took:
+
+```
+Set-Cookie: rpslr_seat=<base64url>; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200
+```
+
+It records `externalMatchId`, `seatKey`, the verified `sub`, and the game's own
+`playerId`. On a later load with no `?token=`, the client asks for it back:
+
+```
+GET /api/v1/resume        (credentials: include, no Authorization header)
+→ 200 { state, you: { playerId, seatKey, name }, reclaimed: true }
+→ 404 { error }           nothing to resume — the ordinary first-visit answer
+```
+
+This is the path that covers a refresh, the back button and a tab crash. No
+Lobby request is involved, so it keeps working when Lobby is slow, unreachable,
+or the player's Lobby session is gone.
+
+The binding is **checked against the match, never trusted on its own**: it names
+a seat, and the match stays the source of truth for whether that seat is live. A
+binding naming a finished match, a seat someone else now holds, or a `sub` that
+does not match the seated player resumes nothing, and the cookie is cleared so a
+dead binding stops being presented.
+
+It needs no signature because it carries `playerId`, which is already this game's
+gameplay credential — every `/move` and `/fire` names it and nothing else. A
+forged binding would need a `playerId` its forger could only have by already
+being able to play that seat.
+
+### Path 2 — Lobby's Rejoin button (fallback)
+
+A player who comes back through JoinQuest instead gets a fresh seat token for
+the seat they already hold, and lands on the re-claim rule above. This is the
+path for a player whose game-origin binding is gone: a different browser
+profile, cleared site data, or a new device.
+
+### While they are away
+
+- **The seat is held.** A dropped socket forfeits nobody and fills nothing.
+- **The other player is told.** The published state carries `seat.player.connected`,
+  and the board says "Waiting for *name* to reconnect…". Only an explicit
+  `false` means away — absent has to read as present, or a REST-only player gets
+  drawn as gone on no evidence.
+- **The grace period has an end.** 45 seconds without a socket forfeits the
+  match (`endReason: "forfeit-disconnect"`), because an indefinite wait is worse
+  for the person still there than a decided outcome.
+- **`reportPlayerFinished` is called at *that* moment**, with
+  `reason: DISCONNECT` — never on the dropped socket itself. Reporting a player
+  finished releases their queue row and closes their way back in, so it must
+  mean they have genuinely left. A run of ignored deadlines reports `FORFEIT`
+  instead: that player was present and not playing.
+
+Filling the empty seat with a bot or a replacement player is deliberately **not**
+part of this.
+
+---
+
 ## v1 standalone mode (no Lobby running)
 
 With `REQUIRE_LOBBY_AUTH=false` (default), the game is fully playable on its own:

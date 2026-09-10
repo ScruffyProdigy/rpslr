@@ -22,6 +22,13 @@ export interface AppConfig {
    * does not hairpin out through the ingress and back.
    */
   clientOrigin: string;
+  /**
+   * Whether cookies this API sets carry `Secure`. Derived from the API's own
+   * origin rather than from the request, because behind an ingress the request
+   * arrives over plain http and a `Secure` cookie set on a local http dev
+   * server is one the browser silently drops.
+   */
+  cookieSecure: boolean;
 }
 
 function splitList(raw: string | undefined): string[] {
@@ -99,6 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     tokenAudiences,
     playUrl,
     clientOrigin: (env.GAME_CLIENT_ORIGIN ?? '').trim() || playUrl,
+    cookieSecure: (tokenAudiences[0] ?? playUrl).startsWith('https://'),
   };
 }
 
