@@ -226,8 +226,8 @@ const MAJORS = [
   // Visibility changes the price, which changes the cadence, which is what stops the
   // two being one card at two settings:
   //
-  //   Quarantine  public   0/4   denies an option outright, 0.383   ~9.6pp
-  //   Tripwire    secret   0/3   lands 1 in 3, 0.255                ~8.5pp
+  //   Quarantine  public   0/3   denies an option outright, 0.383   ~9.6pp
+  //   Tripwire    secret   1/2   lands 1 in 3, 0.255                ~8.5pp
   //
   // Announced and slower, or hidden and faster, and neither is strictly better. That
   // is the draft argument the pair exists to create. ~8.5pp is pre-flip Quarantine's
@@ -238,6 +238,11 @@ const MAJORS = [
   // compared in. Paper also had a single Major, so this is what makes every move
   // carry exactly two of each bound tier.
   //
+  // Recharge 2 rather than 3, per the convention on the `Load` type above: a
+  // recharge is rounds *unavailable*, so the gap between firings is one more than
+  // the number. This fires rounds 2, 5, 8 — a third of them — which is the cadence
+  // ~8.5pp is priced on.
+  //
   // `opening: 1` is the doc's rule that a pair meant to be drafted together should
   // not both open at 0 — and this pair is drafted together by definition, since
   // being compared is why both exist. It matters here rather than generally because
@@ -245,10 +250,10 @@ const MAJORS = [
   // move it names and picks from two rather than three, which lifts this card's
   // secret guess from a 1/3 hit to a 1/2.
   //
-  // At 0/3 the two coincide on round 1, putting the pair's strongest moment on the
-  // one round with no history to read. At 1/3 it moves to round 6, where there are
-  // five rounds of reads on the table. And it is free rather than cheap: over seven
-  // rounds both openings fire exactly twice, so ~8.5pp is untouched.
+  // Ungated at 0/2 the pair coincides on round 1, putting its strongest moment where
+  // neither player has anything to read. The mark moves that to round 5, with four
+  // rounds of history on the table. It is close to free: identical firing counts at
+  // five, six, eight and nine rounds, and one fewer only in a match ending on seven.
   { id: 'tripwire', name: 'Tripwire', tier: 'Major', boundMove: 'paper',
     load: { kind: 'ability', opening: 1, recharge: 2 }, reveal: 'secret',
     blurb: 'Secretly arm a trap on a move. If they play it, it takes 2 extra marks.' },
