@@ -225,8 +225,20 @@ const MAJORS = [
   // the collision roll on precisely the pairing the two cards are meant to be
   // compared in. Paper also had a single Major, so this is what makes every move
   // carry exactly two of each bound tier.
+  //
+  // `opening: 1` is the doc's rule that a pair meant to be drafted together should
+  // not both open at 0 — and this pair is drafted together by definition, since
+  // being compared is why both exist. It matters here rather than generally because
+  // these two *compound*: Quarantine is announced, so the opponent steps off the
+  // move it names and picks from two rather than three, which lifts this card's
+  // secret guess from a 1/3 hit to a 1/2.
+  //
+  // At 0/3 the two coincide on round 1, putting the pair's strongest moment on the
+  // one round with no history to read. At 1/3 it moves to round 6, where there are
+  // five rounds of reads on the table. And it is free rather than cheap: over seven
+  // rounds both openings fire exactly twice, so ~8.5pp is untouched.
   { id: 'tripwire', name: 'Tripwire', tier: 'Major', boundMove: 'paper',
-    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 1, recharge: 3 }, reveal: 'secret',
     blurb: 'Secretly arm a trap on a move. If they play it, it takes 2 extra marks.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 

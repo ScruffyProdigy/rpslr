@@ -120,7 +120,7 @@
       "description": "Secretly arm a trap on a move. If they play it, it takes 2 extra marks.",
       "load": {
         "kind": "ability",
-        "opening": 0,
+        "opening": 1,
         "recharge": 3
       },
       "locked": false
