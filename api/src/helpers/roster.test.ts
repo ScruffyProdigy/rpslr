@@ -23,10 +23,46 @@ describe('helper roster', () => {
     }
   });
 
-  it('gives only Majors an ability', () => {
+  /**
+   * JQ-237 replaced "only a Major may carry a charge" with this. The Minor half of
+   * the old rule is now a type fact rather than a roster fact — no shipping card is
+   * a charged Minor yet — and lives in `rosterTyping.test.ts`.
+   */
+  it('keeps every Trinket passive, whatever the other tiers carry', () => {
     for (const h of HELPERS) {
-      if (h.tier !== 'Major') expect(h.load, h.id).toEqual({ kind: 'passive' });
+      if (h.tier === 'Trinket') expect(h.load, h.id).toEqual({ kind: 'passive' });
     }
+  });
+
+  /**
+   * AC #6: this ticket retiers nothing and recharges nothing. The ladder shape
+   * table and the duel golden fixture both read these, so a card moved here without
+   * meaning to shows up as a diff in this list rather than as a balance surprise.
+   */
+  it('leaves every shipping card on the tier and load it already had', () => {
+    expect(HELPERS.map((h) => `${h.id}:${h.tier}:${h.load.kind}`)).toEqual([
+      'good-old-rock:Major:passive',
+      'chimera:Major:passive',
+      'ferrus:Major:passive',
+      'quarantine:Major:ability',
+      'oracle:Major:ability',
+      'sacrifice:Major:ability',
+      'rust:Major:ability',
+      'thief:Major:ability',
+      'freeze:Major:ability',
+      'second-wind:Major:passive',
+      'echo-chamber:Minor:passive',
+      'sharp-practice:Minor:passive',
+      'grudge:Minor:passive',
+      'tempered:Minor:passive',
+      'featherweight:Minor:passive',
+      'poker-face:Trinket:passive',
+      'small-mercy:Trinket:passive',
+      'copycat:Trinket:passive',
+      'bookend:Trinket:passive',
+      'old-habits:Trinket:passive',
+      'watchful:Trinket:passive',
+    ]);
   });
 
   it('gives every ability an opening and a recharge in delay marks', () => {

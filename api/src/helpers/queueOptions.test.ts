@@ -27,6 +27,26 @@ describe('helper roster for queue-options', () => {
     expect(helperChoices().every((c) => c.locked === false)).toBe(true);
   });
 
+  /**
+   * JQ-237. Zero-load stopped being a tier guarantee the moment a Minor could
+   * carry a charge: "no Major" used to mean "nothing to remember to use", and a new
+   * player picking Minor + Minor for simplicity can now land on two abilities by
+   * accident. The picker can only warn them if the payload says so, which is why
+   * this is a requirement of that change and not a nicety.
+   */
+  it('says of every card whether it carries a charge, and on what clock', () => {
+    const byId = new Map(helperChoices().map((c) => [c.id, c.load]));
+    expect(byId.get('ferrus')).toEqual({ kind: 'passive' });
+    expect(byId.get('quarantine')).toEqual({ kind: 'ability', opening: 0, recharge: 3 });
+    // Sacrifice is the card the numbers exist for: it does nothing until round 4,
+    // and a player drafting it blind has no way to know that from the blurb.
+    expect(byId.get('sacrifice')).toEqual({ kind: 'ability', opening: 3, recharge: 3 });
+  });
+
+  it('takes the load from roster.ts rather than restating it', () => {
+    expect(helperChoices().map((c) => c.load)).toEqual(HELPERS.map((h) => h.load));
+  });
+
   it('derives the badge from MARK_COST, and calls a free card free rather than "0 marks"', () => {
     expect(badgeForTier('Major')).toBe(`${MARK_COST.Major} marks`);
     expect(badgeForTier('Minor')).toBe('1 mark');

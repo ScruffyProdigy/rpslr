@@ -52,6 +52,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Covers the *tests*, which nothing else does: `tsconfig.json` excludes them,
+      # so "Type-check build" below checks `src` and stops there. JQ-237 asserts its
+      # tier rules as type-level facts in `rosterTyping.test.ts`, and an assertion no
+      # checker reads is decoration.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Run migrations
         run: npm run migrate
 

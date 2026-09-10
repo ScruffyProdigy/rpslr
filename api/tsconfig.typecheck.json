@@ -1,0 +1,32 @@
+{
+  // Type-checks the tests as well as the sources.
+  //
+  // CI's "Type-check build" step already runs `npm run build`, so a miswritten card
+  // in `roster.ts` has always failed `tsc`. What it does not cover is the tests:
+  // `tsconfig.json` excludes them because they are not compiled into `dist`, and
+  // excluding them from the build excluded them from the only check there was.
+  //
+  // JQ-237 asserts which tiers may carry a charge as type-level facts in
+  // `src/helpers/rosterTyping.test.ts`. Those live in a test file, so without this
+  // config they would compile in no one's build and assert nothing.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    // Pre-existing debt, not JQ-237's. These predate this config and fail on stale
+    // fixtures — object literals missing fields their types have since grown. They
+    // are excluded so the gate can go into CI today rather than waiting on a
+    // clean-up that touches five unrelated areas. Emptying this list is JQ-250.
+    "src/replayCard/avatars.test.ts",
+    "src/replayCard/cardImage.test.ts",
+    "src/replayCard/cardModel.test.ts",
+    "src/replayCard/cardSvg.test.ts",
+    "src/replayCard/metaHtml.test.ts",
+    "src/telemetry.pg.test.ts",
+    "src/ws.test.ts"
+  ]
+}
