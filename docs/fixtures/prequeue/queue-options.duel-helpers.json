@@ -121,7 +121,7 @@
       "load": {
         "kind": "ability",
         "opening": 1,
-        "recharge": 3
+        "recharge": 2
       },
       "locked": false
     },

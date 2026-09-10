@@ -250,7 +250,7 @@ const MAJORS = [
   // five rounds of reads on the table. And it is free rather than cheap: over seven
   // rounds both openings fire exactly twice, so ~8.5pp is untouched.
   { id: 'tripwire', name: 'Tripwire', tier: 'Major', boundMove: 'paper',
-    load: { kind: 'ability', opening: 1, recharge: 3 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 1, recharge: 2 }, reveal: 'secret',
     blurb: 'Secretly arm a trap on a move. If they play it, it takes 2 extra marks.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 

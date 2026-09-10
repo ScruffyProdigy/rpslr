@@ -607,7 +607,7 @@ describe('Tripwire', () => {
 
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['tripwire', 'old-habits'], [name('scissors')]);
-    expect(missed).toEqual({ tripwire: { marks: 3, available: false } });
+    expect(missed).toEqual({ tripwire: { marks: 2, available: false } });
   });
 });
 
