@@ -199,8 +199,11 @@ describe('<ReplayPage> commentary', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
+    // Auto-play starts from an effect that runs a commit *after* the match
+    // renders, so the transport still reads Play at the moment 'Ana' appears
+    // (JQ-213). Wait for the button to say Pause rather than for the names.
     // Paused, so the round is read rather than watched and shows all at once.
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     expect(
       screen.getByText(
@@ -236,9 +239,13 @@ describe('<ReplayPage> commentary', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     const { container } = render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
+    // The empty line is only true *while* the replay is playing, and playing
+    // begins one commit after the match renders — so the Pause button is what
+    // says the reveal is under way, not the players' names (JQ-213).
+    const pause = await screen.findByRole('button', { name: 'Pause' });
 
     expect(container.querySelector('.replay-commentary__line')).toHaveTextContent('');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await userEvent.click(pause);
     expect(container.querySelector('.replay-commentary__line')).toHaveTextContent(
       /Ana plays Rock/,
     );
@@ -279,7 +286,9 @@ describe('<ReplayPage> first-visit rules', () => {
     await screen.findByText('Ana');
     await waitFor(() => expect(container.querySelector('.htp-dialog')).toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    // Same one-commit gap as JQ-213: the rules dialog is up before auto-play
+    // has been switched on, so the transport is waited for rather than read.
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous round' })).toBeDisabled();
   });
 });
@@ -415,5 +424,79 @@ describe('<ReplayPage> play along', () => {
 
     expect(screen.getByText('What does Ben play?')).toBeInTheDocument();
     expect(screen.queryByText('You called it.')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A match that reaches the floor, so the page has to draw a board where no move
+ * is clear.
+ *
+ * Ben brought Rust and Freeze. Both open charged and recharge on 3, so they
+ * fire together in rounds 1 and 4: Freeze holds Ana's marks where they are at
+ * the end of the round, Rust adds two to a move she still had live, and her own
+ * picks add two a round on top. She comes into round 5 pinned to Lizard and
+ * round 6 with a mark on all five, playable only because `availableMoves` has a
+ * floor.
+ *
+ * The commentary used to reconstruct that hand as `delays[m] === 0` and get
+ * nothing back, and hand the empty list to a solver that indexes three rows and
+ * three columns unconditionally — which threw, and a throw here is a blank
+ * replay rather than a wrong sentence (JQ-234).
+ */
+function floorState(): MatchState {
+  const script: [Move, Move, string][] = [
+    ['rock', 'rock', 'draw'],
+    ['paper', 'paper', 'draw'],
+    ['scissors', 'scissors', 'draw'],
+    ['rock', 'rock', 'draw'],
+    ['lizard', 'paper', 'a'],
+    ['rock', 'scissors', 'a'],
+  ];
+  const helped = seat(1, 'b', 'pb', 'Ben');
+  return {
+    ...finishedState({ bestOf: 3, currentRound: 6, gameMode: 'duel-helpers' }),
+    seats: [seat(0, 'a', 'pa', 'Ana'), { ...helped, loadout: ['rust', 'freeze'] }],
+    results: script.map(([a, b, outcome], i) => round(i + 1, a, b, outcome)),
+    abilityFirings: [
+      { round: 1, seatKey: 'b', helperId: 'rust', target: 'robot', source: null },
+      { round: 1, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+      { round: 4, seatKey: 'b', helperId: 'rust', target: 'paper', source: null },
+      { round: 4, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+    ],
+  };
+}
+
+describe('<ReplayPage> under the cooldown floor', () => {
+  beforeEach(() => markSeen('howToPlay'));
+
+  it('plays a match all the way through a fully-marked board', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(floorState());
+    render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+    for (let n = 2; n <= 6; n++) {
+      await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    }
+
+    // Round 6 is the one Ana enters with a mark on every move. Reaching its
+    // sentence at all is the assertion: the commentary threw on the way here.
+    expect(
+      screen.getByText(
+        'Ana plays Rock, Ben plays Scissors — Rock crushes Scissors. Ana wins the match 2–0.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing infinite about a round played off the floor', async () => {
+    vi.spyOn(api, 'getState').mockResolvedValue(floorState());
+    const { container } = render(<ReplayPage matchRef="ext-1" />);
+    await screen.findByText('Ana');
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+
+    for (let n = 2; n <= 6; n++) {
+      await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
+    }
+    expect(matchCopy(container)).not.toMatch(/Infinity|NaN|undefined/);
   });
 });
