@@ -607,6 +607,9 @@ describe('Tripwire', () => {
 
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['tripwire', 'old-habits'], [name('scissors')]);
+    // 2, not 3: the card opens on 1, round one's decrement clears that, and firing
+    // then costs the recharge. Spelled out because the recharge convention is the
+    // thing this roster has most often got wrong.
     expect(missed).toEqual({ tripwire: { marks: 2, available: false } });
   });
 });
