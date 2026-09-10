@@ -12,16 +12,37 @@
  * each seat's private view, and the only way to get a `MatchState` back out is
  * `viewSnapshotAs`. A subscriber that forgets to project gets a snapshot rather
  * than a leak — the type is the guard, not a code review.
+ *
+ * Three things are seat-private now: charge state, the seat's own move in the
+ * round being played, and Oracle's reveal. They travel together because they
+ * leak together — Oracle names a move the opponent did *not* play precisely so
+ * that the projection has something safe to carry.
  */
 
+import type { Move } from './game.js';
 import type { AbilityMap } from './helpers/abilities.js';
-import type { MatchState } from './types.js';
+import type { MatchState, OracleReveal } from './types.js';
 
 export interface MatchSnapshot {
-  /** Everything both seats may see. Its `abilities` is empty by construction. */
+  /**
+   * Everything both seats may see. Its `abilities`, `oracle` and
+   * `currentRoundMoves` are empty by construction.
+   */
   readonly shared: MatchState;
   /** Per player id, that seat's own charge state — including this round's firing. */
   readonly abilitiesByPlayerId: Readonly<Record<string, AbilityMap>>;
+  /**
+   * Per player id, that seat's own move in the round being played.
+   *
+   * Seat-private, and the shared view holds none: an opponent who could read
+   * this would not need to guess. It is projected rather than merely withheld
+   * because Oracle's sub-phase asks the holder to keep or change a move, and a
+   * holder who reconnected into it with no idea what they had chosen would be
+   * deciding blind.
+   */
+  readonly movesByPlayerId: Readonly<Record<string, Move>>;
+  /** Per player id, Oracle's reveal — present only for a holder mid-sub-phase. */
+  readonly oracleByPlayerId: Readonly<Record<string, OracleReveal>>;
 }
 
 /**
@@ -31,7 +52,16 @@ export interface MatchSnapshot {
  * shared view: no charges rather than someone else's.
  */
 export function viewSnapshotAs(snapshot: MatchSnapshot, playerId: string | null): MatchState {
-  const abilities = playerId ? snapshot.abilitiesByPlayerId[playerId] : undefined;
+  if (!playerId) return snapshot.shared;
+  const abilities = snapshot.abilitiesByPlayerId[playerId];
+  // Not a seat in this match — a spectator naming someone, or a stale id. The
+  // shared view, rather than a guess at whose seat they meant.
   if (!abilities) return snapshot.shared;
-  return { ...snapshot.shared, abilities };
+  const own = snapshot.movesByPlayerId[playerId];
+  return {
+    ...snapshot.shared,
+    abilities,
+    currentRoundMoves: own ? { [playerId]: own } : {},
+    oracle: snapshot.oracleByPlayerId[playerId] ?? null,
+  };
 }

@@ -303,3 +303,109 @@ describe('WebSocket ability firings', () => {
     ws.close();
   });
 });
+
+/**
+ * Oracle's sub-phase over the wire (JQ-150).
+ *
+ * The design rests on one claim: the opponent's committed move never leaves the
+ * server before the round resolves. Asserting it against the socket payload
+ * rather than against the service is the point — a state the client chooses not
+ * to render is still bytes anyone can read off the connection.
+ */
+describe('Oracle reveals a move the opponent did not play, and nothing else', () => {
+  async function oracleMatch() {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['rust', 'poker-face'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    return { code, alice: created.you.playerId, bob: joined.you.playerId };
+  }
+
+  it("never puts the opponent's move on either socket before the round resolves", async () => {
+    const { code, alice, bob } = await oracleMatch();
+
+    const aliceWs = await open();
+    const bobWs = await open();
+    send(aliceWs, { type: 'subscribe', ref: code, playerId: alice });
+    send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
+    await waitFor(aliceWs, (m) => m.type === 'state');
+    await waitFor(bobWs, (m) => m.type === 'state');
+
+    // Alice declares Oracle, both lock in, and the round stops.
+    send(aliceWs, { type: 'fire', playerId: alice, helperId: 'oracle' });
+    send(aliceWs, { type: 'move', playerId: alice, move: 'rock', round: 1 });
+    send(bobWs, { type: 'move', playerId: bob, move: 'lizard', round: 1 });
+
+    const hers = await waitFor(
+      aliceWs,
+      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'oracle',
+    );
+    const state = hers.state as {
+      oracle: { round: number; namedMove: string } | null;
+      currentRoundMoves: Record<string, string>;
+      abilityFirings: unknown[];
+      results: unknown[];
+    };
+
+    // She is told a move he did *not* play, and it is a move he could have.
+    expect(state.oracle!.round).toBe(1);
+    expect(state.oracle!.namedMove).not.toBe('lizard');
+    expect(['rock', 'paper', 'robot']).toContain(state.oracle!.namedMove);
+    // Her own pick comes back so she can decide whether to keep it; his does not.
+    expect(state.currentRoundMoves).toEqual({ [alice]: 'rock' });
+    expect(state.abilityFirings).toEqual([]);
+    expect(state.results).toEqual([]);
+
+    // And the payload as bytes: 'lizard' appears only as a delay-map key, never
+    // as a value, so there is no reading of it that hands her his move.
+    const values = Object.values(state.currentRoundMoves);
+    expect(values).not.toContain('lizard');
+    expect(JSON.stringify(state.oracle)).not.toContain('lizard');
+
+    // Bob's own socket is told nothing about the reveal.
+    const his = await waitFor(
+      bobWs,
+      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'oracle',
+    );
+    expect((his.state as { oracle: unknown }).oracle).toBeNull();
+    expect((his.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([]);
+
+    aliceWs.close();
+    bobWs.close();
+  });
+
+  it('tells both sockets what Oracle named, once the round has resolved', async () => {
+    const { code, alice, bob } = await oracleMatch();
+
+    const bobWs = await open();
+    send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
+    await waitFor(bobWs, (m) => m.type === 'state');
+
+    await service.fireAbility(code, alice, { helperId: 'oracle' });
+    await service.submitMove(code, alice, 'rock');
+    await service.submitMove(code, bob, 'rock');
+    // Keeping the pick: the round resolves, and the reveal stops being a secret.
+    await service.submitMove(code, alice, 'rock');
+
+    const resolved = await waitFor(
+      bobWs,
+      (m) => (m.state as { results: unknown[] })?.results?.length === 1,
+    );
+    const firings = (resolved.state as { abilityFirings: { helperId: string; target: string }[] })
+      .abilityFirings;
+    expect(firings).toHaveLength(1);
+    expect(firings[0].helperId).toBe('oracle');
+    // The move it named — a move Bob did not play — is now public to both.
+    expect(firings[0].target).not.toBe('rock');
+    expect((resolved.state as { oracle: unknown }).oracle).toBeNull();
+
+    bobWs.close();
+  });
+});

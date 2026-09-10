@@ -270,6 +270,19 @@ export class MemoryGameRepository implements GameRepository {
     this.moves.push({ ...input });
   }
 
+  async replaceMove(input: MoveRow): Promise<void> {
+    const existing = this.moves.find(
+      (m) =>
+        m.matchId === input.matchId &&
+        m.round === input.round &&
+        m.playerId === input.playerId,
+    );
+    // Nothing to replace is a caller error, not an insert: only Oracle's
+    // sub-phase reaches this, and it runs strictly after both moves are in.
+    if (!existing) throw new NotFoundError('no move to replace for this round');
+    existing.move = input.move;
+  }
+
   async getMovesForRound(matchId: string, round: number): Promise<Record<string, Move>> {
     const out: Record<string, Move> = {};
     for (const m of this.moves) {
@@ -308,6 +321,23 @@ export class MemoryGameRepository implements GameRepository {
     );
     if (clash) throw new ConflictError('this seat already fired an ability this round');
     this.abilityFirings.push({ ...input });
+  }
+
+  async nameAbilityFiringTarget(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+    target: Move | null;
+  }): Promise<boolean> {
+    const firing = this.abilityFirings.find(
+      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+    );
+    // No firing, or one already named: either way this call did not write the
+    // target, and a caller that lost the race must read the stored move back
+    // rather than overwrite it with a second draw.
+    if (!firing || firing.target !== null) return false;
+    firing.target = input.target;
+    return true;
   }
 
   async listAbilityFirings(matchId: string): Promise<AbilityFiring[]> {

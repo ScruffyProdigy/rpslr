@@ -12,8 +12,15 @@ import type { Move } from '@game/game';
 export type { Move };
 
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
-/** A timed segment of a match. Only 'pick' exists today. */
-export type Phase = 'pick';
+/**
+ * A timed segment of a match. `oracle` is the mid-round sub-phase a charge-holder
+ * pays for: both players are locked in, and the holder is deciding whether to
+ * re-pick. Nothing here branches on it yet — the countdown reads the deadline
+ * rather than the phase, so a sub-phase renders as a shorter clock — but the
+ * server can send it, and a type that says otherwise is a lie waiting to be
+ * believed. The prompt itself belongs with the ability HUD (JQ-221).
+ */
+export type Phase = 'pick' | 'oracle';
 /** How a match ended; everything but 'played' comes from the idle policy. */
 export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
 

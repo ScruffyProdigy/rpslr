@@ -586,13 +586,11 @@ describe('GameService — firing an ability', () => {
     ).rejects.toThrow(/takes no target/);
   });
 
-  it("refuses Oracle, whose effect JQ-150 owns — a charge spent on nothing is worse than a no", async () => {
+  it('refuses a client-supplied target for Oracle — the server names that move, later', async () => {
     const { code, alice } = await helpersMatch(['oracle', 'poker-face'], ['rust', 'poker-face']);
-    await expect(service.fireAbility(code, alice, { helperId: 'oracle' })).rejects.toBeInstanceOf(
-      ValidationError,
-    );
-    const state = await service.getState(code, alice);
-    expect(state.abilities.oracle.available).toBe(true);
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'oracle', target: 'rock' }),
+    ).rejects.toThrow(/takes no target/);
   });
 
   it('carries the firing into resolution — Rust deepens the cooldown it named', async () => {
@@ -725,5 +723,327 @@ describe('GameService — a round nobody fired in', () => {
     expect(state.abilityFirings).toEqual([]);
     // A round played for you spends nothing: Freeze took its mark off and is now live.
     expect(state.abilities).toEqual({ freeze: { marks: 0, available: true } });
+  });
+});
+
+/**
+ * Oracle's mid-round sub-phase (JQ-150).
+ *
+ * The protocol: the holder declares Oracle during the pick phase, both players
+ * lock in, and the round then stops rather than resolving. The holder is told one
+ * live move the opponent did *not* play, re-picks or keeps, and the round
+ * resolves. Everything an opponent could exploit is either withheld until the
+ * round resolves or never sent at all.
+ */
+describe('GameService — Oracle', () => {
+  let repo: MemoryGameRepository;
+  let service: GameService;
+  let now: number;
+
+  /**
+   * Alice holds Oracle (binds paper, so her paper opens on 2 marks and is the one
+   * move she may not re-pick). Bob holds Rust (binds scissors), so his live moves
+   * entering round 1 are rock, paper, lizard and robot — four, of which Oracle
+   * names one that is not the move he played.
+   */
+  async function oracleMatch(bob: string[] = ['rust', 'poker-face']) {
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 5,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: bob }] },
+      ],
+    });
+    const joined = await service.claimSeat(created.state.match.code, {
+      seatKey: '2',
+      name: 'Bob',
+    });
+    return {
+      code: created.state.match.code,
+      alice: created.you.playerId,
+      bob: joined.you.playerId,
+    };
+  }
+
+  /** Fire Oracle and lock both players in, leaving the round in the sub-phase. */
+  async function intoSubPhase(aliceMove = 'rock', bobMove = 'rock') {
+    const m = await oracleMatch();
+    await service.fireAbility(m.code, m.alice, { helperId: 'oracle' });
+    await service.submitMove(m.code, m.alice, aliceMove);
+    await service.submitMove(m.code, m.bob, bobMove);
+    return m;
+  }
+
+  beforeEach(() => {
+    repo = new MemoryGameRepository();
+    now = Date.parse('2026-01-01T00:00:00.000Z');
+    // rng() === 0 takes the first candidate, so the named move is exact.
+    service = new GameService(repo, { now: () => now, rng: () => 0 });
+  });
+
+  it('holds the round between both-locked and resolve', async () => {
+    const { code, alice, bob } = await oracleMatch();
+    await service.fireAbility(code, alice, { helperId: 'oracle' });
+
+    // One lock-in is not both: the round is still an ordinary pick phase.
+    await service.submitMove(code, alice, 'rock');
+    let state = await service.getState(code, alice);
+    expect(state.match.phase).toBe('pick');
+
+    await service.submitMove(code, bob, 'rock');
+    state = await service.getState(code, alice);
+    expect(state.match.phase).toBe('oracle');
+    // Held, not resolved: the round has not scored and has not moved on.
+    expect(state.results).toEqual([]);
+    expect(state.match.currentRound).toBe(1);
+  });
+
+  it('puts the sub-phase on a clock of its own', async () => {
+    const { code, alice } = await intoSubPhase();
+    const state = await service.getState(code, alice);
+    expect(Date.parse(state.match.phaseStartedAt!)).toBe(now);
+    expect(Date.parse(state.match.phaseDeadline!)).toBe(now + 12_000);
+  });
+
+  it('names a live move the opponent did not play, to the holder alone', async () => {
+    const { code, alice, bob } = await intoSubPhase('rock', 'rock');
+
+    // Bob's live moves are rock, paper, lizard, robot; he played rock, so the
+    // first candidate is paper.
+    const hers = await service.getState(code, alice);
+    expect(hers.oracle).toEqual({ round: 1, namedMove: 'paper' });
+
+    // Bob is told nothing at all — not the reveal, and not that one is running.
+    const his = await service.getState(code, bob);
+    expect(his.oracle).toBeNull();
+  });
+
+  it('never names the move they actually played, whichever way the draw falls', async () => {
+    // Every rng value in turn, against every move Bob might have played: the
+    // named move must never be his. This is the property the card rests on.
+    for (const bobMove of ['rock', 'paper', 'lizard', 'robot']) {
+      for (const r of [0, 0.25, 0.5, 0.75, 0.99]) {
+        repo = new MemoryGameRepository();
+        service = new GameService(repo, { now: () => now, rng: () => r });
+        const { code, alice } = await intoSubPhase('rock', bobMove);
+        const state = await service.getState(code, alice);
+        expect(state.oracle!.namedMove, `${bobMove} @ ${r}`).not.toBe(bobMove);
+        // Scissors is on cooldown for Bob, so it was never a move he could play.
+        expect(state.oracle!.namedMove, `${bobMove} @ ${r}`).not.toBe('scissors');
+      }
+    }
+  });
+
+  it("never sends the opponent's actual move, to either seat, before the round resolves", async () => {
+    const { code, alice, bob } = await intoSubPhase('rock', 'lizard');
+
+    const hers = await service.getState(code, alice);
+    // She sees her own pick — she is being asked to keep or change it — and his
+    // is nowhere: not in the moves, not in the firings, and not in the reveal,
+    // which names something he did not play precisely so it can be sent.
+    expect(hers.currentRoundMoves).toEqual({ [alice]: 'rock' });
+    expect(hers.abilityFirings).toEqual([]);
+    expect(hers.results).toEqual([]);
+    expect(hers.oracle!.namedMove).not.toBe('lizard');
+
+    const his = await service.getState(code, bob);
+    expect(his.currentRoundMoves).toEqual({ [bob]: 'lizard' });
+    expect(his.abilityFirings).toEqual([]);
+    expect(his.results).toEqual([]);
+
+    // And a viewer the server cannot place gets neither seat's move.
+    const spectator = await service.getState(code);
+    expect(spectator.currentRoundMoves).toEqual({});
+    expect(spectator.oracle).toBeNull();
+  });
+
+  it('lets the holder re-pick, and resolves on the new move', async () => {
+    // Bob played rock, so Alice's rock was heading for a draw. Told he did not
+    // play paper, she switches to robot — which beats rock — and takes the round.
+    const { code, alice, bob } = await intoSubPhase('rock', 'rock');
+    const state = await service.submitMove(code, alice, 'robot');
+
+    expect(state.results).toHaveLength(1);
+    expect(state.results[0].moves).toEqual({ [alice]: 'robot', [bob]: 'rock' });
+    expect(state.results[0].outcome).toBe('1');
+    expect(state.match.currentRound).toBe(2);
+    expect(state.match.phase).toBe('pick');
+  });
+
+  it('lets the holder keep their original pick by re-sending it', async () => {
+    // Re-sending the move you already have is how "keep" is said, so a holder who
+    // has decided need not sit out the rest of the clock.
+    const { code, alice, bob } = await intoSubPhase('rock', 'rock');
+    const state = await service.submitMove(code, alice, 'rock');
+
+    expect(state.results[0].moves).toEqual({ [alice]: 'rock', [bob]: 'rock' });
+    expect(state.results[0].outcome).toBe('draw');
+  });
+
+  it('spends the charge even when the holder keeps their original pick', async () => {
+    const { code, alice } = await intoSubPhase('rock', 'rock');
+    const state = await service.submitMove(code, alice, 'rock');
+    // Opening 0, recharge 3: one round took a mark off nothing, then firing
+    // charged three. Paid in full for a re-pick she declined to make.
+    expect(state.abilities.oracle).toEqual({ marks: 3, available: false });
+  });
+
+  it('holds a re-pick to the moves currently live for the holder', async () => {
+    // Oracle binds paper, so Alice's own paper opens on 2 marks. The reveal does
+    // not buy her a move she could not otherwise play.
+    const { code, alice } = await intoSubPhase('rock', 'rock');
+    await expect(service.submitMove(code, alice, 'paper')).rejects.toThrow(/on cooldown/);
+  });
+
+  it('leaves the opponent locked in for the duration', async () => {
+    const { code, bob } = await intoSubPhase('rock', 'rock');
+    await expect(service.submitMove(code, bob, 'paper')).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('refuses a second firing once the sub-phase is running', async () => {
+    const { code, alice } = await intoSubPhase('rock', 'rock');
+    await expect(
+      service.fireAbility(code, alice, { helperId: 'oracle' }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('resolves on the original pick when the sub-phase expires, charge still spent', async () => {
+    const { code, alice, bob } = await intoSubPhase('rock', 'rock');
+    now += 12_000;
+
+    const state = await service.getState(code, alice);
+    expect(state.results).toHaveLength(1);
+    expect(state.results[0].moves).toEqual({ [alice]: 'rock', [bob]: 'rock' });
+    expect(state.abilities.oracle).toEqual({ marks: 3, available: false });
+    // Both picked on time, so nobody was idle and nobody is auto-picked.
+    expect(state.results[0].autoPicked).toEqual([]);
+    expect(state.seats.every((s) => s.player!.expiryStrikes === 0)).toBe(true);
+  });
+
+  it('resyncs a reconnecting holder to the whole sub-phase', async () => {
+    const { code, alice } = await intoSubPhase('rock', 'rock');
+
+    // A brand-new service over the same rows: nothing survives in process memory,
+    // so everything the holder needs to decide has to be on disk.
+    const restarted = new GameService(repo, { now: () => now, rng: () => 0 });
+    const state = await restarted.getState(code, alice);
+
+    expect(state.match.phase).toBe('oracle');
+    expect(state.oracle).toEqual({ round: 1, namedMove: 'paper' });
+    expect(state.currentRoundMoves).toEqual({ [alice]: 'rock' });
+    expect(state.abilities.oracle).toEqual({ marks: 0, available: false });
+  });
+
+  it('names the move once and stands by it, however often the holder reads', async () => {
+    // The reveal is written down rather than re-drawn. A holder who could provoke
+    // a second draw would collect every move the server is willing to name and
+    // identify the opponent's as the one it never names.
+    const { code, alice } = await intoSubPhase('rock', 'rock');
+    const first = (await service.getState(code, alice)).oracle!.namedMove;
+
+    let wandering = new GameService(repo, { now: () => now, rng: () => 0.99 });
+    expect((await wandering.getState(code, alice)).oracle!.namedMove).toBe(first);
+    wandering = new GameService(repo, { now: () => now, rng: () => 0.5 });
+    expect((await wandering.getState(code, alice)).oracle!.namedMove).toBe(first);
+  });
+
+  it('tells the opponent Oracle was used and which move it named, once resolved', async () => {
+    const { code, alice, bob } = await intoSubPhase('rock', 'rock');
+    await service.submitMove(code, alice, 'robot');
+
+    const his = await service.getState(code, bob);
+    expect(his.abilityFirings).toEqual([
+      { round: 1, seatKey: '1', helperId: 'oracle', target: 'paper', source: null },
+    ]);
+    // The reveal itself is over, so it stops being projected to anyone.
+    expect(his.oracle).toBeNull();
+    expect((await service.getState(code, alice)).oracle).toBeNull();
+  });
+
+  it('leaves every other loadout resolving through the unchanged path', async () => {
+    const { code, alice, bob } = await oracleMatch(['freeze', 'poker-face']);
+    // Bob fires Freeze, which is not Oracle: his round resolves the moment both
+    // are in, with no sub-phase between.
+    await service.fireAbility(code, bob, { helperId: 'freeze' });
+    await service.submitMove(code, alice, 'rock');
+    const state = await service.submitMove(code, bob, 'scissors');
+
+    expect(state.results).toHaveLength(1);
+    expect(state.match.currentRound).toBe(2);
+    expect(state.match.phase).toBe('pick');
+  });
+
+  describe('two Oracles facing each other — a legal pairing, since a loadout is per seat', () => {
+    async function mirrorMatch() {
+      const created = await service.createStandaloneMatch({
+        gameMode: 'duel-helpers',
+        hostName: 'Alice',
+        bestOf: 5,
+        seats: [
+          { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'poker-face'] }] },
+          { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
+        ],
+      });
+      const code = created.state.match.code;
+      const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+      const alice = created.you.playerId;
+      const bob = joined.you.playerId;
+      await service.fireAbility(code, alice, { helperId: 'oracle' });
+      await service.fireAbility(code, bob, { helperId: 'oracle' });
+      await service.submitMove(code, alice, 'rock');
+      await service.submitMove(code, bob, 'rock');
+      return { code, alice, bob };
+    }
+
+    it('names a move for both holders, not just whichever seat is found first', async () => {
+      const { code, alice, bob } = await mirrorMatch();
+
+      // Both paid, so both are told something. A holder handed a spent charge and
+      // a null reveal would have been robbed by an implementation detail.
+      const hers = await service.getState(code, alice);
+      const his = await service.getState(code, bob);
+      expect(hers.oracle!.namedMove).not.toBeNull();
+      expect(his.oracle!.namedMove).not.toBeNull();
+      // And each is told a move the *other* did not play.
+      expect(hers.oracle!.namedMove).not.toBe('rock');
+      expect(his.oracle!.namedMove).not.toBe('rock');
+    });
+
+    it('waits the clock out rather than letting the first re-pick end the round', async () => {
+      const { code, alice, bob } = await mirrorMatch();
+
+      // Alice re-picks. Bob is still deciding, and must not have his sub-phase cut
+      // short — nor be told, by the round simply ending, that she already moved.
+      let state = await service.submitMove(code, alice, 'robot');
+      expect(state.match.phase).toBe('oracle');
+      expect(state.results).toEqual([]);
+      expect((await service.getState(code, bob)).oracle).not.toBeNull();
+
+      // Bob re-picks too, and the deadline settles it on both new moves.
+      await service.submitMove(code, bob, 'lizard');
+      now += 12_000;
+      state = await service.getState(code, alice);
+      expect(state.results).toHaveLength(1);
+      expect(state.results[0].moves).toEqual({ [alice]: 'robot', [bob]: 'lizard' });
+    });
+  });
+
+  it('resolves a timed-out round rather than granting a sub-phase on top', async () => {
+    // Alice fired and locked in; Bob went quiet. The round has already overrun,
+    // so it resolves on his auto-pick — a further allowance would reward the
+    // overrun. Her charge stays spent: it was spent when she fired.
+    const { code, alice, bob } = await oracleMatch();
+    await service.fireAbility(code, alice, { helperId: 'oracle' });
+    await service.submitMove(code, alice, 'rock');
+    now += 45_000;
+
+    const state = await service.getState(code, alice);
+    expect(state.match.phase).toBe('pick');
+    expect(state.match.currentRound).toBe(2);
+    expect(state.results).toHaveLength(1);
+    expect(state.results[0].autoPicked).toEqual([bob]);
+    expect(state.abilities.oracle).toEqual({ marks: 3, available: false });
   });
 });

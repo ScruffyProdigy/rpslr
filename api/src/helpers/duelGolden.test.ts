@@ -11,15 +11,18 @@
  * diff names the exact move sequence, or `rulesFor(null, …)` stopped being the
  * rules this game already had — which is the whole back-compatibility strategy.
  *
- * The `duel` snapshot has been re-captured twice, both times for a `MatchState`
- * shape change and never for a rules change:
+ * The `duel` snapshot has been re-captured three times, every time for a
+ * `MatchState` shape change and never for a rules change:
  *
  *   - JQ-148: `MatchState` gained `abilityFirings`, and a seat gained `loadout` and
  *     `loadoutRoll`. Thirty insertions, no deletions.
  *   - JQ-220: `MatchState` gained `abilities`, the viewing seat's charge state.
  *     Six insertions — one empty object per captured snapshot — and no deletions.
+ *   - JQ-150: `MatchState` gained `oracle`, the mid-round reveal. Six insertions —
+ *     one null per captured snapshot, since `duel` holds no Oracle to reveal
+ *     anything — and no deletions.
  *
- * "No deletions" is the whole argument in both cases: not one recorded value moved,
+ * "No deletions" is the whole argument in all three cases: not one recorded value moved,
  * so the new field is additive by proof rather than by assertion. The test below
  * pins all four fields at their duel values so a shape change cannot be a rules
  * change wearing a new field's clothes. `opening`, `outcomes` and `engineTable` are
