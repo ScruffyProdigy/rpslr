@@ -25,11 +25,16 @@ describe('helper roster', () => {
    * and lands at Minor money on a fast recharge. The rule bounds certainty, not
    * prediction.
    */
-  it('gives every move the same two Minors' + ' and at least one Major', () => {
+  it('gives every move the same two Majors and two Minors', () => {
+    // Tightened from "at least one Major" by JQ-236. Retiring Second Wind took Rock
+    // from three Majors to two, and putting Tripwire on Paper took Paper from one to
+    // two, so the roster is now 2/2 on every move in both bound tiers. Worth pinning
+    // rather than noting: it is the variety property JQ-209's pass was for, and it
+    // held only by accident until both halves moved at once.
     for (const move of MOVES) {
       const on = (t: string) => HELPERS.filter((h) => h.tier === t && h.boundMove === move);
+      expect(on('Major').length, `${move} Majors`).toBe(2);
       expect(on('Minor').length, `${move} Minors`).toBe(2);
-      expect(on('Major').length, `${move} Majors`).toBeGreaterThan(0);
     }
   });
 
@@ -83,7 +88,7 @@ describe('helper roster', () => {
       'rust:Major:ability',
       'thief:Major:ability',
       'freeze:Major:ability',
-      'second-wind:Major:passive',
+      'tripwire:Major:ability',
       'echo-chamber:Minor:passive',
       'sharp-practice:Minor:passive',
       'grudge:Minor:passive',
@@ -113,6 +118,7 @@ describe('helper roster', () => {
       'rust',
       'sacrifice',
       'thief',
+      'tripwire',
     ]);
     for (const h of abilities) {
       const load = h.load;
@@ -155,6 +161,11 @@ describe('helper roster', () => {
       // lets them sit on a Minor's price without a Major's rhythm.
       flywheel: '0/5',
       feint: '0/4',
+      // Quarantine's secret twin (JQ-236). Same +2, one round faster, because being
+      // unannounced it is only collected on the ~1/3 who walk into it — where the
+      // public one is dodged and priced on the option it removes instead. Visibility
+      // sets the price and the price sets the cadence; that is the whole pair.
+      tripwire: '0/3',
     });
   });
 
@@ -194,6 +205,7 @@ describe('helper roster', () => {
       'sacrifice',
       'rust',
       'thief',
+      'tripwire',
       'flywheel',
       'feint',
     ]);

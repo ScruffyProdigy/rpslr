@@ -113,13 +113,15 @@
       "locked": false
     },
     {
-      "id": "second-wind",
-      "label": "Second Wind",
+      "id": "tripwire",
+      "label": "Tripwire",
       "section": "Major",
       "badge": "2 marks",
-      "description": "The first round you lose is a draw instead, but your move takes an extra mark.",
+      "description": "Secretly arm a trap on a move. If they play it, it takes 2 extra marks.",
       "load": {
-        "kind": "passive"
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
       },
       "locked": false
     },
