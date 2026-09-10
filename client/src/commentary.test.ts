@@ -77,7 +77,7 @@ function state(
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: overrides.winnerSeatKey ?? 'a',
-    abilityFirings: [],
+    abilityFirings,
     // No seat in these fixtures holds a charge, which is the duel case.
     abilities: {},
     oracle: null,
