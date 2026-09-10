@@ -406,6 +406,161 @@ describe('the board does not scroll on a phone (JQ-165)', () => {
 });
 
 
+
+/**
+ * The ability rail's text blocks, measured in Chromium at the board's real
+ * content-box width with the app's own fonts — the same method, and the same
+ * reason, as `TEXT` above: jsdom does no layout, so a line box cannot be derived
+ * from the stylesheet, while every box, gap, border and min-height around one
+ * can be, and those are what drift.
+ *
+ * Worst case throughout, as the duel ledger is: the roster's longest ability
+ * blurb (Sacrifice, 76 characters) on a card that is also carrying a blocked
+ * reason under its fire button — "You have already fired … this round.", which
+ * is the state a player is in for the rest of any round they fire in.
+ */
+const RAIL_TEXT = {
+  /** `.ability-card__head` — the name and the charge word share one baseline row. */
+  head: 16.5,
+  /** `.ability-card__blurb`, three lines on a 154px card or wider, four below it. */
+  blurb3: 44.9,
+  blurb4: 59.9,
+  /** `.ability-card__blocked`, two lines on a 147px card or wider, three below it. */
+  blocked2: 29,
+  blocked3: 43.5,
+} as const;
+
+/** The rule the fire button shares with the confirm and cancel buttons. */
+const RAIL_BUTTONS = '.ability-card__fire,\n.ability-confirm__go,\n.ability-card__cancel';
+
+/** The `flex` shorthand's basis, e.g. `1 1 126px` → 126. */
+function flexBasis(selector: string, viewport: number): number {
+  const value = declaration(selector, 'flex', viewport);
+  return resolvePx(value.trim().split(/\s+/).pop() ?? '', boardInnerWidth(viewport));
+}
+
+/**
+ * One card's width with both cards on one row, which is the only arrangement
+ * the height below models — `keeps both cards on one row` is what holds it.
+ */
+function cardWidth(viewport: number): number {
+  const gap = resolvePx(declaration('.ability-rail', 'gap', viewport), 0);
+  return (boardInnerWidth(viewport) - gap) / 2;
+}
+
+/** The tallest card the roster can put on the rail, from the stylesheet. */
+function railHeight(viewport: number): number {
+  const width = cardWidth(viewport);
+  const px = (selector: string, prop: string) =>
+    resolvePx(declaration(selector, prop, viewport), width);
+  const gap = px('.ability-card', 'gap');
+  return (
+    2 * borderPx('.ability-card', viewport) +
+    2 * px('.ability-card', 'padding') +
+    RAIL_TEXT.head +
+    gap +
+    (width >= 154 ? RAIL_TEXT.blurb3 : RAIL_TEXT.blurb4) +
+    gap +
+    px(RAIL_BUTTONS, 'min-height') +
+    gap +
+    (width >= 147 ? RAIL_TEXT.blocked2 : RAIL_TEXT.blocked3)
+  );
+}
+
+/**
+ * What the rail costs the page: its own height plus both spacings above it. The
+ * `.moves` row gap and the rail's own `margin-top` compose rather than collapse,
+ * this being a flex column, so the rail starts 20px below the one-time note.
+ */
+function railBlock(viewport: number): number {
+  const px = (selector: string, prop: string) =>
+    resolvePx(declaration(selector, prop, viewport), contentWidth(viewport));
+  return px('.moves', 'gap') + px('.ability-rail', 'margin-top') + railHeight(viewport);
+}
+
+/**
+ * The two phones JQ-165 promised a duel board would not scroll on, so the two
+ * modes are compared on the same screens.
+ */
+const PHONES = [
+  [390, 844],
+  [375, 812],
+] as const;
+
+/**
+ * Those two plus the narrowest screen the board claims at all (JQ-108). A duel
+ * board already scrolls on that one — 568px leaves less than the pentagon's own
+ * floor, so the floor wins and the page overflows, which the `.move-board`
+ * comment allows in as many words. Nothing about the fold can be asserted there;
+ * what can is that the rail stays a rail.
+ */
+const ALL_PHONES = [...PHONES, [320, 568]] as const;
+
+describe('the ability rail is inside the budget (JQ-254)', () => {
+  // The ledger above is the duel page: `duel` brings the null loadout, so it has
+  // no rail to measure and the budget had no term for one. These add it. What
+  // they hold is not that a helpers board fits — it cannot, and styles.css says
+  // why — but that the rail is the only thing that does not.
+  it.each(ALL_PHONES)('keeps both cards on one row at %ix%i', (viewport) => {
+    // `flex-wrap: wrap` makes the rail's height a cliff rather than a curve: the
+    // moment two bases plus the gap exceed the row, the cards stack and the rail
+    // very nearly doubles. Held against the board's real content box, not
+    // against the viewport, because that box is what the cards are laid in.
+    const gap = resolvePx(declaration('.ability-rail', 'gap', viewport), 0);
+    expect(2 * flexBasis('.ability-card', viewport) + gap).toBeLessThanOrEqual(
+      boardInnerWidth(viewport),
+    );
+  });
+
+  it.each(PHONES)('leaves the rail, and only the rail, below the fold on a %ix%i phone', (viewport, screen) => {
+    // Only JQ-165's two phones: on a 320x568 there is no fold to keep, because a
+    // duel board already scrolls there.
+    const usable = screen - SAFARI_CHROME;
+    const throughNote = furnitureHeight(viewport) + boardWidth(viewport, usable);
+    // Nothing a duel board promises moves. The pentagon is sized against the
+    // same furniture constant in both modes, so the scoreboard, the legend and
+    // the one-time note sit exactly where they sit in a duel — which is the
+    // whole of what a helpers board still guarantees above the fold.
+    expect(throughNote).toBeLessThanOrEqual(usable);
+    // And it does not fit with the rail, on any of these phones. This is the
+    // decision, not a lament: if it ever passes — a shorter rail, a taller
+    // phone — the allowance recorded in styles.css is stale and the promise
+    // should be tightened to match rather than left as a comment that lies.
+    expect(throughNote + railBlock(viewport)).toBeGreaterThan(usable);
+  });
+
+  it.each(ALL_PHONES)('keeps the rail shorter than the board it serves at %ix%i', (viewport, screen) => {
+    // The bound that makes "it scrolls" a decision rather than an open end: the
+    // rail is a secondary surface reached by scrolling, so it may not outgrow
+    // the pentagon it sits under. This is the one the stacking broke — 284px of
+    // rail below a 205px board on a 320px phone.
+    const usable = screen - SAFARI_CHROME;
+    expect(railHeight(viewport)).toBeLessThanOrEqual(boardWidth(viewport, usable));
+  });
+
+  it.each([
+    [390, 844, 56],
+    [375, 812, 56],
+    [360, 640, 56],
+    [320, 568, 48],
+  ])('keeps a move button past its floor at %ix%i (>= %ipx)', (viewport, screen, floor) => {
+    // JQ-108's floor is not what pays for the rail: the pentagon is sized as it
+    // is in a duel, so these hold for the same reason they hold there. Restated
+    // here because "shrink the pentagon to make room" is the fix this ticket
+    // considered and rejected, and this is what it would have spent.
+    expect(buttonSize(viewport, screen - SAFARI_CHROME)).toBeGreaterThanOrEqual(floor);
+  });
+
+  it('sizes the pentagon the same in both modes, on purpose', () => {
+    // A helpers-only `--board-furniture` is the obvious fix and the wrong one:
+    // the pentagon is already at its 205px floor on both of JQ-165's phones, so
+    // reserving room for the rail can only take the tap surface down to that
+    // floor and still overflow. One declaration, both modes; if a second ever
+    // appears, the decision needs revisiting rather than extending.
+    expect([...css.matchAll(/--board-furniture\s*:/g)]).toHaveLength(1);
+  });
+});
+
 describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
   it('draws the button with a dashed border', () => {
     // The same "this can't happen" language the faded opponent arrows use.

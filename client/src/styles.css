@@ -1225,7 +1225,24 @@ button.ghost {
     /* Everything on the page that is not the pentagon, measured. The safe-area
        inset is part of it — `svh` includes that strip, and `.app` pads for it.
        `boardFit.test.ts` recomputes this from the stylesheet and fails if the
-       two drift, so change it there and here together. */
+       two drift, so change it there and here together.
+
+       No term for the ability rail (JQ-221), and that is the decision JQ-254
+       asked for rather than an omission. Once the pentagon is at its 205px
+       floor, the 744px a 390x844 iPhone gives a page has 49.9px left, and a
+       375x812 has 17.9px. The rail's spacing alone — the `.moves` row gap plus
+       its own `margin-top`, which compose rather than collapse in a flex column
+       — is 20px before a single card, and its cards are 167px in the worst
+       resting state. No pentagon size fits that: reserving room for the rail
+       could only take the tap surface down to its floor and still overflow.
+
+       So a helpers board scrolls, deliberately, and by exactly the rail: every
+       part of the page a duel board promises above the fold stays above it, and
+       the rail is the only thing below. It follows that a card growing while a
+       firing is being named needs no budget either (naming a target adds 153px
+       at 390px) — nothing above it moves, and you are already scrolled to the
+       rail by the time it happens. `boardFit.test.ts` measures a helpers page
+       and holds both halves of that. */
     --board-furniture: calc(490px + env(safe-area-inset-bottom));
   }
   .board {
@@ -2572,7 +2589,11 @@ input:focus-visible {
    charge` is the signal, and the border and tint below only repeat it. JQ-195's
    rule is that no state on this board rides on colour alone, and three cards
    differing by tint would break it. The border weights are a second
-   non-colour channel: solid is ready, dashed is not. */
+   non-colour channel: solid is ready, dashed is not.
+
+   Its height sits outside the pentagon's budget on purpose: see
+   `--board-furniture` in the phone block for why it cannot be fitted and what a
+   helpers board promises instead. */
 .ability-rail {
   display: flex;
   flex-wrap: wrap;
@@ -2580,10 +2601,17 @@ input:focus-visible {
   margin-top: 10px;
 }
 .ability-card {
-  /* 128px, not 150: at 360px the board's content box is ~302px, and two cards
-     plus the gap have to fit inside it or they stack — which doubles the rail's
-     height on the narrowest screen the board promises to work on. */
-  flex: 1 1 128px;
+  /* 126px, not 150 and not 128: two cards plus the 8px gap have to fit the
+     board's content box or `flex-wrap` stacks them, which very nearly doubles
+     the rail's height. That box is 302px at a 360px viewport — which the old
+     128px was measured against — but 262px at 320px, the narrowest screen the
+     board claims (JQ-108), and 2x128 + 8 is 264. So the basis chosen to stop
+     the cards stacking stacked them anyway on the phone least able to spend the
+     height, at a cost of 87px. 2x126 + 8 is 260 and clears both, and
+     `boardFit.test.ts` holds that sum against the real content box rather than
+     against either number, so the next change to the card's type or padding
+     cannot quietly put the cards back into two rows. */
+  flex: 1 1 126px;
   min-width: 0;
   display: flex;
   flex-direction: column;
