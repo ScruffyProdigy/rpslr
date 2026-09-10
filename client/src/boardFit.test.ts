@@ -561,6 +561,34 @@ describe('the ability rail is inside the budget (JQ-254)', () => {
   });
 });
 
+/**
+ * The loadout sheet is a modal, so it is outside `--board-furniture` entirely —
+ * which is the reason it is a modal (JQ-149). What it still owes a phone is that
+ * two loadouts side by side do not become two unreadable columns.
+ */
+describe('the loadout sheet reads on a phone (JQ-149)', () => {
+  it('stacks the two sides into one column at 360px', () => {
+    expect(declaration('.loadout-sheet__sides', 'grid-template-columns', 360)).toBe(
+      'minmax(0, 1fr)',
+    );
+  });
+
+  it('keeps them side by side where there is room for both', () => {
+    expect(declaration('.loadout-sheet__sides', 'grid-template-columns', 680)).toBe(
+      'repeat(2, minmax(0, 1fr))',
+    );
+  });
+
+  it('costs the board no height, because it never sits in the board', () => {
+    // The seat card's loadout button is absolute against a card that already
+    // exists. If it ever stops being, the pentagon pays — it is at its 205px
+    // floor on both of JQ-165's phones — so the position is the load-bearing
+    // half of that decision, not the styling.
+    expect(declaration('.player__loadout', 'position', 390)).toBe('absolute');
+    expect(declaration('.player__loadout-mark', 'position', 390)).toBe('absolute');
+  });
+});
+
 describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
   it('draws the button with a dashed border', () => {
     // The same "this can't happen" language the faded opponent arrows use.

@@ -11,6 +11,7 @@ import {
 import { AbilityRail, type FiringChoice } from './components/AbilityRail';
 import { History } from './components/History';
 import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
+import { LoadoutSheet } from './components/LoadoutSheet';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
@@ -18,11 +19,14 @@ import { SubPhasePrompt } from './components/SubPhasePrompt';
 import { RoundTimer } from './components/RoundTimer';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
+import UiIcon from './components/UiIcon';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
 import { seatIdentity } from './lib/seatProfile';
+import { loadoutCards, seatLoadoutView } from './loadouts';
 import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
+import { useLoadoutReveal } from './lib/useLoadoutReveal';
 import { buildReplayUrl, buildStoryImageUrl, replayRef } from './lib/replayLink';
 import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
@@ -62,8 +66,8 @@ export default function App() {
   // The rules are reachable for the whole match, not just the wait before it,
   // and open themselves once on a player's very first match.
   const [bestOf, setBestOf] = useState(5);
-  const [allSeated, setAllSeated] = useState(false);
-  const rules = useFirstMatchRules(allSeated);
+  const [rulesReady, setRulesReady] = useState(false);
+  const rules = useFirstMatchRules(rulesReady);
   // The claim screen owns the whole viewport, so the app header steps aside.
   const [claiming, setClaiming] = useState(lobbyLinked);
   const lobbyReturnUrl =
@@ -169,7 +173,7 @@ export default function App() {
         lobbyReturnUrl={lobbyReturnUrl}
         onClaimingChange={setClaiming}
         onBestOf={setBestOf}
-        onAllSeated={setAllSeated}
+        onRulesReady={setRulesReady}
         onLobbyReturn={(base, matchId) => {
           if (base) setLobbyReturnBase(base);
           if (matchId) setExternalMatchId(matchId);
@@ -192,15 +196,25 @@ function Game({
   lobbyReturnUrl,
   onClaimingChange,
   onBestOf,
-  onAllSeated,
+  onRulesReady,
   onLobbyReturn,
 }: {
   lobbyReturnUrl: string | null;
   onClaimingChange: (claiming: boolean) => void;
   /** So the header's how-to-play panel can say "first to 3" and mean it. */
   onBestOf: (bestOf: number) => void;
-  /** Both seats filled — the cue for the first-match rules to open themselves. */
-  onAllSeated: (allSeated: boolean) => void;
+  /**
+   * Both seats filled and nothing else holding the board — the cue for the
+   * first-match rules to open themselves.
+   *
+   * It waits for the loadout reveal because two panels over the board at once is
+   * one too many, and this is the one that can wait: the rules are reachable all
+   * match from the header's `?`, while the reveal is on a clock. Read off the
+   * reveal's own render value rather than reported up from the board, so the
+   * commit where the last seat arrives already knows a reveal is coming — a
+   * handshake through an effect would fire the rules one commit too early.
+   */
+  onRulesReady: (ready: boolean) => void;
   onLobbyReturn?: (returnUrl: string | null, externalMatchId: string | null) => void;
 }) {
   const [phase, setPhase] = useState<Phase>('lobby');
@@ -288,10 +302,12 @@ function Game({
     if (matchBestOf) onBestOf(matchBestOf);
   }, [matchBestOf, onBestOf]);
 
+  const loadoutReveal = useLoadoutReveal(state, myPlayerId);
+
   const everySeatFilled = Boolean(state?.seats.every((s) => s.player));
   useEffect(() => {
-    onAllSeated(everySeatFilled);
-  }, [everySeatFilled, onAllSeated]);
+    onRulesReady(everySeatFilled && !loadoutReveal.open);
+  }, [everySeatFilled, loadoutReveal.open, onRulesReady]);
 
   const currentRound = state?.match.currentRound;
   useEffect(() => {
@@ -436,6 +452,8 @@ function Game({
         myChosenMove={myChosenMove}
         onPlay={play}
         onFire={fire}
+        revealLoadouts={loadoutReveal.open}
+        onDismissReveal={loadoutReveal.dismiss}
       />
     </>
   );
@@ -604,6 +622,8 @@ export function Board({
   myChosenMove,
   onPlay,
   onFire,
+  revealLoadouts = false,
+  onDismissReveal,
 }: {
   myPlayerId: string;
   mySeatKey: string;
@@ -613,9 +633,22 @@ export function Board({
   myChosenMove: Move | null;
   onPlay: (move: Move) => void;
   onFire?: (choice: FiringChoice) => void;
+  /**
+   * Whether the pre-round-1 loadout reveal is still inside its window.
+   *
+   * Owned by `Game` rather than here, because the first-match rules panel has to
+   * know about it during the same render the last seat arrives in — see
+   * `onRulesReady`. `duel` never sets it, because `duel` brings no loadout.
+   */
+  revealLoadouts?: boolean;
+  onDismissReveal?: () => void;
 }) {
   const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
   const roundDeadline = useRoundDeadline(state);
+  // The same sheet, asked for rather than shown: whose loadout the player tapped
+  // to check, or null when they have not. Separate from the reveal because it
+  // outlives it — the loadouts stay checkable for the whole match.
+  const [checking, setChecking] = useState(false);
 
   if (!state) return <p>Loading match…</p>;
 
@@ -651,6 +684,11 @@ export function Board({
   // The marks your loadout opened on, so a cooldown with no pick behind it is
   // only blamed on the opening where this match actually had one (JQ-207).
   const myOpeningDelays = rulesForSeats(mySeat ?? NO_LOADOUT, NO_LOADOUT)[0].initialDelays;
+  // Both loadouts, as the sheet says them. Null on both sides in `duel`, which
+  // is what keeps every one of these surfaces off a duel board.
+  const myLoadout = seatLoadoutView(mySeat);
+  const oppLoadout = seatLoadoutView(oppSeat);
+  const anyLoadout = Boolean(myLoadout || oppLoadout);
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -721,6 +759,7 @@ export function Board({
         bestOf={match.bestOf}
         pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
         deadline={allSeated && !revealingNow ? roundDeadline : null}
+        onInspectLoadouts={anyLoadout ? () => setChecking(true) : null}
       />
 
       {!allSeated && !revealingNow ? (
@@ -808,6 +847,25 @@ export function Board({
         </div>
       )}
 
+      <LoadoutSheet
+        open={revealLoadouts}
+        variant="reveal"
+        mine={myLoadout}
+        theirs={oppLoadout}
+        you={you}
+        opponent={opponent}
+        onClose={() => onDismissReveal?.()}
+      />
+      <LoadoutSheet
+        open={checking}
+        variant="check"
+        mine={myLoadout}
+        theirs={oppLoadout}
+        you={you}
+        opponent={opponent}
+        onClose={() => setChecking(false)}
+      />
+
       <History
         results={results}
         firings={state.abilityFirings}
@@ -827,6 +885,7 @@ function Scoreboard({
   bestOf,
   pulseSeatKey,
   deadline,
+  onInspectLoadouts,
 }: {
   seats: Seat[];
   mySeatKey: string;
@@ -836,6 +895,8 @@ function Scoreboard({
   pulseSeatKey: string | null;
   /** Round clock, or null when none is running. */
   deadline: RoundDeadline | null;
+  /** Opens the loadout sheet, or null in `duel`, where there is none to open. */
+  onInspectLoadouts: (() => void) | null;
 }) {
   const needed = winsNeeded(bestOf);
   return (
@@ -848,6 +909,7 @@ function Scoreboard({
             winsNeeded={needed}
             lockedIn={Boolean(seat.player && submittedPlayerIds.includes(seat.player.id))}
             justWon={seat.seatKey === pulseSeatKey}
+            onInspectLoadouts={onInspectLoadouts}
           />
           {/* Between the two seat cards, which are already 201px tall — so the
               clock costs no page height, and the board is 111px over on a
@@ -904,12 +966,14 @@ function SeatCard({
   winsNeeded: needed,
   lockedIn,
   justWon,
+  onInspectLoadouts,
 }: {
   seat: Seat;
   mine: boolean;
   winsNeeded: number;
   lockedIn: boolean;
   justWon: boolean;
+  onInspectLoadouts: (() => void) | null;
 }) {
   const seated = Boolean(seat.player);
   const reserved = Boolean(seat.reservedForLobbyUser);
@@ -917,6 +981,12 @@ function SeatCard({
   const open = !seated && !reserved;
   const wins = seat.player?.score ?? 0;
   const identity = seatIdentity(seat, open ? 'Open seat' : mine ? 'You' : 'Opponent');
+  // Named in the button's label rather than drawn on the card: a screen reader
+  // is told which two helpers this seat brought without the board spending a
+  // pixel of height on saying it.
+  const helperNames = loadoutCards(seat.loadout)
+    .map((card) => card.name)
+    .join(', ');
 
   return (
     <>
@@ -945,6 +1015,25 @@ function SeatCard({
         <span className="player-name">{identity.name}</span>
         {waiting && <span className="player-status">on their way</span>}
         <WinProgress wins={wins} needed={needed} justWon={justWon} />
+        {/* The whole card is the tap target, and it costs the layout nothing:
+            it is absolutely positioned over a card that already exists, so no
+            row is added and `--board-furniture` does not move. That constraint
+            is not cosmetic — the pentagon is already at its 205px floor on a
+            390x844 phone (JQ-165), so a persistent chip row beside each avatar
+            could only be paid for out of the tap surface. The corner glyph is
+            what makes it findable; the button behind it is what makes it hittable. */}
+        {onInspectLoadouts && helperNames && (
+          <button
+            type="button"
+            className="player__loadout"
+            onClick={onInspectLoadouts}
+            aria-label={`${mine ? 'Your' : `${identity.name}'s`} loadout: ${helperNames}. Show both loadouts.`}
+          >
+            <span className="player__loadout-mark" aria-hidden="true">
+              <UiIcon name="cards" />
+            </span>
+          </button>
+        )}
       </div>
     </>
   );

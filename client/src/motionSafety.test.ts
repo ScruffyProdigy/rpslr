@@ -92,6 +92,19 @@ describe('reduced motion removes motion, not meaning (JQ-157)', () => {
     expect(hidden).toEqual(['.reveal-card__impact']);
   });
 
+  it('leaves the loadout sheet with no motion to have to remove (JQ-149)', () => {
+    // The reveal is time-bounded rather than animated: it appears, it holds, it
+    // goes. Nothing in it moves, so there is nothing here for a reduced-motion
+    // block to strip — and this is what says so, rather than a comment, because
+    // the failure mode is a flourish added later with no counterpart. The
+    // sibling assertions above only audit blocks that already exist.
+    const sheet = [...css.matchAll(/(^|\n)(\.loadout-[^{,]*)\s*\{([^}]*)\}/g)];
+    // A renamed block would make the audit below pass by finding nothing.
+    expect(sheet.length).toBeGreaterThan(5);
+    const animated = sheet.filter((r) => /animation|transition/.test(r[3]));
+    expect(animated.map((r) => r[2].trim())).toEqual([]);
+  });
+
   it('keeps the round-winning edge lit without its strike animation', () => {
     // `arrow-strike` is the flare; the weight and the halo that separate this
     // edge from the other nine belong to the rule itself, so they survive.

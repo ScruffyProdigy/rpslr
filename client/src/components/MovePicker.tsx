@@ -392,8 +392,15 @@ export function MovePicker({
                   </span>
                 ))}
               {oppDelay > 0 && (
+                /* The depth, not just the fact. Presence alone answered "can
+                   they play this?" and nothing else, which is enough while
+                   every opening is the same one — but a loadout decides how
+                   deep each opponent move starts, so "down" and "down 2" are
+                   different boards to plan against, and round 1 is exactly
+                   when the difference is largest (JQ-149). Decorative here:
+                   the button's own `aria-label` already carries the number. */
                 <span className="opp-cooldown-mark" aria-hidden="true">
-                  <UiIcon name="hourglass" />
+                  <UiIcon name="hourglass" /> {oppDelay}
                 </span>
               )}
             </button>
@@ -449,7 +456,7 @@ export function MovePicker({
         </span>{' '}
         {voice.you ? `${voice.you}'s cooldown` : 'your cooldown'} ·{' '}
         <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
-          <UiIcon name="hourglass" />
+          <UiIcon name="hourglass" /> N
         </span>{' '}
         {voice.you ? `${oppName ? `${oppName}'s` : 'their'} cooldown` : 'opponent cooldown'} (faded
         arrows = attacks they can&rsquo;t make)

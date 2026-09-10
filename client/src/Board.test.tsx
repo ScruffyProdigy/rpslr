@@ -623,3 +623,109 @@ describe('<Board> mid-round sub-phase (JQ-221)', () => {
     expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
   });
 });
+
+/**
+ * The loadout reveal, and the check it turns into (JQ-149).
+ *
+ * The window itself is `useLoadoutReveal`'s and tested there; what the board owes
+ * is that the sheet reaches the screen, that it stays reachable once the reveal is
+ * over, and that a duel board renders none of it.
+ */
+describe('<Board> loadouts (JQ-149)', () => {
+  /** Both seats holding a helpers loadout, as a provisioned `duel-helpers` match. */
+  function withLoadouts(
+    s: MatchState,
+    mine: string[] = ['ferrus', 'echo-chamber'],
+    theirs: string[] = ['chimera', 'poker-face'],
+    myRoll: Move | null = null,
+  ): MatchState {
+    return {
+      ...s,
+      seats: s.seats.map((seat) =>
+        seat.seatKey === MY_SEAT
+          ? { ...seat, loadout: mine as unknown as Seat['loadout'], loadoutRoll: myRoll }
+          : { ...seat, loadout: theirs as unknown as Seat['loadout'] },
+      ),
+    };
+  }
+
+  function boardWith(s: MatchState, revealLoadouts = false) {
+    return render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+        revealLoadouts={revealLoadouts}
+        onDismissReveal={() => {}}
+      />,
+    );
+  }
+
+  it('shows both loadouts face up while the reveal is running', () => {
+    boardWith(withLoadouts(state()), true);
+    const sheet = screen.getByRole('dialog', { name: 'Loadouts revealed' });
+    expect(within(sheet).getByText('Ferrus')).toBeInTheDocument();
+    expect(within(sheet).getByText('Chimera')).toBeInTheDocument();
+  });
+
+  it('names the move a collision displaced marks onto — the first sight of it', () => {
+    boardWith(withLoadouts(state(), ['ferrus', 'well-oiled'], undefined, 'lizard'), true);
+    expect(screen.getByText(/Both helpers bind the same move/)).toHaveTextContent(/Lizard/);
+  });
+
+  it('keeps the loadouts reachable from either seat card once the reveal is over', () => {
+    boardWith(withLoadouts(state({ currentRound: 4 })));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Grace's loadout: Chimera, Poker Face/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Loadouts' });
+    expect(within(sheet).getByText('Chimera')).toBeInTheDocument();
+    expect(within(sheet).getByText('Ferrus')).toBeInTheDocument();
+  });
+
+  it('names both helpers in the button, so a screen reader gets them without a tap', () => {
+    boardWith(withLoadouts(state()));
+    expect(
+      screen.getByRole('button', { name: /Your loadout: Ferrus, Echo Chamber/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders none of it on a duel board', () => {
+    boardWith(state(), true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /loadout/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The opponent's opening, on the pentagon (JQ-149).
+ *
+ * The badge used to say only that a move was down. Every duel opens on the same
+ * two marks, so that was the whole story; a loadout decides how deep each of the
+ * opponent's moves starts, and "down" and "down 2" are different boards to plan
+ * against — most sharply in round 1, which is the round this ticket is about.
+ */
+describe('<Board> opponent cooldown depth (JQ-149)', () => {
+  it('draws the depth on the badge, not just the fact of a mark', () => {
+    const { container } = renderBoard(state({ oppDelays: { robot: 2, paper: 1 } }));
+    const badges = Array.from(
+      container.querySelectorAll('.opp-cooldown-mark:not(.opp-cooldown-mark--legend)'),
+    ).map((el) => el.textContent?.trim());
+    expect(badges).toEqual(['1', '2']);
+  });
+
+  it('teaches the badge in the legend as a number, the way the your-side pill is', () => {
+    const { container } = renderBoard(state({ oppDelays: { robot: 2 } }));
+    expect(container.querySelector('.opp-cooldown-mark--legend')).toHaveTextContent('N');
+  });
+
+  it('still says it in words on the move itself, which is what is announced', () => {
+    renderBoard(state({ oppDelays: { robot: 2 } }));
+    expect(
+      screen.getByRole('button', { name: /Robot, opponent cooldown, 2 turns/ }),
+    ).toBeInTheDocument();
+  });
+});
