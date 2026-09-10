@@ -120,13 +120,22 @@ function trapText(mover: string, blocked: string, move: Move): string {
 }
 
 /**
- * The cooldown rule keeps both sides at exactly three playable moves every
- * round of every match — the opening locks and the -1/+2 rule work out that
- * way with no exceptions. It is the fact the whole strategy layer rests on,
- * and none of the notes below would mean anything without it.
+ * What a side can actually play this round.
+ *
+ * Asked of `availableMoves`, through `isPlayable`, rather than read off the
+ * marks. A duel really does keep both sides at exactly three playable moves
+ * every round — the opening locks and the −1/+2 rule work out that way, with
+ * no exceptions — and this used to say so and test `delays[m] === 0`. Helpers
+ * falsify it: once Quarantine, Rust and Freeze have driven every move above
+ * zero, the floor keeps the least-marked ones playable, and a side holds 1, 2,
+ * 4 or 5 of them instead. `delays[m] === 0` reads that board as *nothing
+ * playable* and hands the strategy layer an empty hand.
+ *
+ * The last site on the client still reconstructing playability for itself
+ * (JQ-215, JQ-234).
  */
 function liveMoves(delays: DelayMap): Move[] {
-  return ALL_MOVES.filter((m) => delays[m] === 0);
+  return ALL_MOVES.filter((m) => isPlayable(m, delays));
 }
 
 /**
@@ -186,9 +195,9 @@ function whySafe(move: Move, oppDelays: DelayMap): string {
  *
  * None of this is a guess. A pick costs its owner that move for two rounds, so
  * the moment this round's picks land, both hands for the next round are fixed
- * — and each side holds exactly three playable moves there, same as every
- * other round. "What will I be holding next round" is small and exactly
- * computable, which is the whole reason a tempo note can be stated as fact.
+ * — however many moves the floor leaves each side holding there. "What will I
+ * be holding next round" is small and exactly computable, which is the whole
+ * reason a tempo note can be stated as fact.
  *
  * Read off the boards `buildReplay` already reconstructed rather than advanced
  * here: what a pick costs is the loadout's business, not this file's, and a
@@ -202,8 +211,12 @@ export interface Lookahead {
   round: number;
   a: DelayMap;
   b: DelayMap;
-  /** What that round is worth to A under best play — `roundValue`, projected. */
-  value: number;
+  /**
+   * What that round is worth to A under best play — `roundValue`, projected.
+   * Null only for a board the rules engine cannot produce, since a side that
+   * holds nothing has no round to value.
+   */
+  value: number | null;
 }
 
 export function lookahead(frame: ReplayFrame): Lookahead {
@@ -218,13 +231,16 @@ export function lookahead(frame: ReplayFrame): Lookahead {
 }
 
 /**
- * The one move the opponent can play next round that this player holds no
- * answer to, or null when they can answer everything.
+ * A move the opponent can play next round that this player holds no answer to,
+ * or null when they can answer everything.
  *
- * There is never more than one. A move is unanswerable exactly when both moves
- * that beat it are resting, every side rests exactly two, and no two moves
- * share an attacking pair — so at most one move in the whole set qualifies,
- * and it only counts if the opponent can actually play it.
+ * In a duel there is never more than one: a move is unanswerable exactly when
+ * both moves that beat it are resting, every side rests exactly two, and no two
+ * moves share an attacking pair, so at most one in the whole set qualifies.
+ * Under the floor a side can come into a round holding fewer than three, which
+ * leaves more of the graph unanswered and can qualify several — so this names
+ * the first rather than the only one, and the notes it feeds say "nothing that
+ * beats it" rather than claiming it was the only gap (JQ-234).
  */
 function unanswerable(mine: DelayMap, theirs: DelayMap): Move | null {
   return liveMoves(theirs).find((m) => threatsTo(m, mine).safe) ?? null;
@@ -295,7 +311,7 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
       oppDelays: frame.a.delaysBefore,
       mine: ahead.b,
       theirs: ahead.a,
-      value: -ahead.value,
+      value: ahead.value === null ? null : -ahead.value,
       mover: nameB,
       blocked: nameA,
     },
@@ -374,7 +390,7 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     // favours them is the honest way to tell those two apart. So the note
     // fires on the rounds where the gap costs something and stays quiet on the
     // rounds where it is scenery.
-    const gap = hasNextRound && value < 0 ? unanswerable(mine, theirs) : null;
+    const gap = hasNextRound && value !== null && value < 0 ? unanswerable(mine, theirs) : null;
     if (gap && opp.delaysBefore[gap] > 0 && theirs[gap] === 0) {
       // The opponent's clock is what changed: a move they could not play comes
       // back, and this player will be holding nothing that answers it.
@@ -399,7 +415,13 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
     // taking. A safe move is worth a third of a win only while its owner still
     // holds one of the two moves that beat it — the answer to the mirror — so
     // playing that move banks the edge and hands it back at the same time.
-    if (hasNextRound && read?.reachable && read.punish.includes(side.move) && value <= 0) {
+    if (
+      hasNextRound &&
+      read?.reachable &&
+      read.punish.includes(side.move) &&
+      value !== null &&
+      value <= 0
+    ) {
       tempo.push({
         kind: 'tempo-punish-spent',
         text:
@@ -431,22 +453,34 @@ export function calloutsFor(frame: ReplayFrame, replay: Replay): Callout[] {
   // Only when nothing more specific applied. These are the rounds that most
   // look like guesswork from outside, and the ones where saying whether the
   // position was even is worth more than saying nothing.
+  //
+  // Every phrase it has — "played perfectly", "under best play" — is about a
+  // decision, and under the floor a side can come into a round holding a single
+  // move, with no decision in it to play well or badly. It never has to be said
+  // out loud: a pinned side leaves the other holding safe moves, because the
+  // one move they can play beats two and the other three cannot lose, and a
+  // safe move always produces a note of its own — so a forced round never
+  // arrives here bare. `commentary.test.ts` holds that invariant, since it is
+  // this copy that depends on it (JQ-234).
+  //
+  // The null is the other half: a side holding nothing is not a board the rules
+  // engine can produce, and declining is deliberate rather than a number nobody
+  // can check.
   if (insights.length === 0) {
-    const value = roundValue(
-      liveMoves(frame.a.delaysBefore),
-      liveMoves(frame.b.delaysBefore),
-    );
-    const ahead = value > 0 ? nameA : nameB;
-    const edge = roundEdge(value);
-    insights.push({
-      kind: 'round-edge',
-      text:
-        edge === 'even'
-          ? 'Neither side had an edge going in — played perfectly, this round was a coin flip.'
-          : edge === 'slight'
-            ? `Going in, ${ahead} had a slight edge under best play.`
-            : `Going in, this round was ${ahead}'s under best play.`,
-    });
+    const value = roundValue(liveMoves(frame.a.delaysBefore), liveMoves(frame.b.delaysBefore));
+    if (value !== null) {
+      const ahead = value > 0 ? nameA : nameB;
+      const edge = roundEdge(value);
+      insights.push({
+        kind: 'round-edge',
+        text:
+          edge === 'even'
+            ? 'Neither side had an edge going in — played perfectly, this round was a coin flip.'
+            : edge === 'slight'
+              ? `Going in, ${ahead} had a slight edge under best play.`
+              : `Going in, this round was ${ahead}'s under best play.`,
+      });
+    }
   }
 
   const always: Callout[] = [];

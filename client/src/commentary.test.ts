@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AbilityFiring } from '@game/types';
 import type { Loadout } from '@game/helpers/loadout';
 import type { MatchState, Move, RoundResult, Seat } from './api';
 import {
@@ -9,8 +10,8 @@ import {
   ruleCardSchedule,
   type RuleCardId,
 } from './commentary';
-import { ALL_MOVES } from './moves';
-import { buildReplay, type Replay } from './replay';
+import { ALL_MOVES, isPlayable, threatsTo } from './moves';
+import { buildReplay, type DelayMap, type Replay } from './replay';
 
 /**
  * Frames come from `buildReplay` rather than being hand-built: the commentary
@@ -48,6 +49,7 @@ function state(
   results: RoundResult[],
   overrides: Partial<MatchState['match']> = {},
   seats: Seat[] = [seat(0, 'a', 'pa', 'Ana'), seat(1, 'b', 'pb', 'Ben')],
+  abilityFirings: AbilityFiring[] = [],
 ): MatchState {
   return {
     match: {
@@ -75,7 +77,7 @@ function state(
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: overrides.winnerSeatKey ?? 'a',
-    abilityFirings: [],
+    abilityFirings,
     serverNow: '2026-09-07T00:05:00.000Z',
   };
 }
@@ -84,8 +86,9 @@ function replayOf(
   results: RoundResult[],
   overrides: Partial<MatchState['match']> = {},
   seats?: Seat[],
+  abilityFirings?: AbilityFiring[],
 ): Replay {
-  return buildReplay(state(results, overrides, seats));
+  return buildReplay(state(results, overrides, seats, abilityFirings));
 }
 
 /** Narration for the nth round (1-based) of a replay. */
@@ -508,7 +511,7 @@ describe('lookahead', () => {
     expect(ahead.a.rock).toBe(Math.max(0, frame.a.delaysBefore.rock - 1));
   });
 
-  it('leaves both sides holding three moves, the way every round does', () => {
+  it('leaves both sides holding three moves, the way every duel round does', () => {
     const replay = replayOf(TEMPO);
     for (const frame of replay.frames) {
       const ahead = lookahead(frame);
@@ -676,5 +679,115 @@ describe('commentary at a helpers match', () => {
       .map((id) => RULE_CARDS[id].body);
 
     expect(shown).not.toContain('Every move you play goes on cooldown for 2 rounds');
+  });
+});
+
+/**
+ * A real match that reaches the floor.
+ *
+ * Ben brought Rust and Freeze, which is the pair that drives a board past the
+ * point `delays[m] === 0` can read. Both open charged and recharge on 3, so
+ * they fire together in rounds 1 and 4: Freeze stops Ana's marks coming off at
+ * the end of the round, Rust puts two more on a move she still had live, and
+ * her own picks add two a round on top. By round 5 she is down to a single
+ * playable move, and by round 6 every one of the five carries a mark and the
+ * floor is the only thing giving her a hand at all.
+ *
+ * Scripted rather than mutated. The frames come from `buildReplay` over the
+ * engine's own reconstruction, so this is a board the server can actually
+ * arrive at, and every move in it is one `availableMoves` would have allowed.
+ */
+const FLOOR_SEATS = (): Seat[] => [
+  seat(0, 'a', 'pa', 'Ana'),
+  seat(1, 'b', 'pb', 'Ben', ['rust', 'freeze']),
+];
+
+const FLOOR_ROUNDS = [
+  round(1, 'rock', 'rock', 'draw'),
+  round(2, 'paper', 'paper', 'draw'),
+  round(3, 'scissors', 'scissors', 'draw'),
+  round(4, 'rock', 'rock', 'draw'),
+  round(5, 'lizard', 'paper', 'a'),
+  round(6, 'rock', 'scissors', 'a'),
+];
+
+/** Rust names a move Ana still had live; Freeze needs no target. */
+const FLOOR_FIRINGS: AbilityFiring[] = [
+  { round: 1, seatKey: 'b', helperId: 'rust', target: 'robot', source: null },
+  { round: 1, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+  { round: 4, seatKey: 'b', helperId: 'rust', target: 'paper', source: null },
+  { round: 4, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+];
+
+const floorReplay = (): Replay =>
+  replayOf(FLOOR_ROUNDS, { bestOf: 3, winnerSeatKey: 'a' }, FLOOR_SEATS(), FLOOR_FIRINGS);
+
+describe('commentary under the floor (JQ-234)', () => {
+  it('reaches a round with one playable move and a round with none clear', () => {
+    // The fixture's whole point, asserted rather than assumed: if a rules change
+    // stops this match reaching the floor, the tests below stop testing anything
+    // and should say so here rather than quietly passing.
+    const frames = floorReplay().frames;
+    expect(ALL_MOVES.filter((m) => isPlayable(m, frames[4].a.delaysBefore))).toEqual(['lizard']);
+    expect(ALL_MOVES.every((m) => frames[5].a.delaysBefore[m] > 0)).toBe(true);
+    expect(ALL_MOVES.filter((m) => isPlayable(m, frames[5].a.delaysBefore))).toEqual([
+      'rock',
+      'scissors',
+      'robot',
+    ]);
+  });
+
+  it('values a round pinned to one move instead of reading it as an empty hand', () => {
+    // `delays[m] === 0` called Ana's round-5 hand empty, and the solver it fed
+    // threw on the way past. The hand is Lizard, and the round has a value.
+    const replay = floorReplay();
+    expect(() => calloutsFor(replay.frames[4], replay)).not.toThrow();
+    expect(narrate(replay, 5)).toBe(
+      'Ana plays Lizard, Ben plays Paper — Lizard eats Paper. Ana leads 1–0.',
+    );
+  });
+
+  it('projects a fully-marked hand as the moves the floor leaves, not as nothing', () => {
+    // Round 5 hands Ana a board with a mark on all five. The old reading made
+    // that an empty hand, and `roundValue` answered `Infinity` for it — a
+    // number that passes every gate below without meaning anything.
+    const ahead = lookahead(floorReplay().frames[4]);
+    expect(ALL_MOVES.every((m) => ahead.a[m] > 0)).toBe(true);
+    expect(ahead.value).toBeCloseTo(-1 / 3);
+  });
+
+  it('says something checkable about every round of it, and nothing infinite', () => {
+    const replay = floorReplay();
+    for (const frame of replay.frames) {
+      const notes = calloutsFor(frame, replay);
+      expect(notes.length).toBeGreaterThan(0);
+      for (const note of notes) {
+        expect(note.text).not.toMatch(/Infinity|NaN|undefined/);
+      }
+    }
+  });
+
+  it('never reaches the round-edge note on a round nobody had a choice in', () => {
+    // The invariant the round-edge copy leans on, held here because it is copy
+    // that would otherwise say "played perfectly" about a forced round. A side
+    // pinned to one move can only play that move, which beats two — so the
+    // other three cannot lose, the other side always has a safe move, and a
+    // safe move always produces a note of its own before the fallback runs.
+    for (const pinned of ALL_MOVES) {
+      const delays = Object.fromEntries(
+        ALL_MOVES.map((m) => [m, m === pinned ? 1 : 4]),
+      ) as DelayMap;
+      expect(ALL_MOVES.filter((m) => isPlayable(m, delays))).toEqual([pinned]);
+      expect(ALL_MOVES.filter((m) => threatsTo(m, delays).safe)).toHaveLength(3);
+    }
+
+    const replay = floorReplay();
+    const forced = replay.frames.filter((f) =>
+      [f.a, f.b].some((s) => ALL_MOVES.filter((m) => isPlayable(m, s.delaysBefore)).length === 1),
+    );
+    expect(forced.length).toBeGreaterThan(0);
+    for (const frame of forced) {
+      expect(calloutsFor(frame, replay).some((c) => c.kind === 'round-edge')).toBe(false);
+    }
   });
 });
