@@ -32,20 +32,40 @@ views are the only things that apply it:
 
 - **Mirrors are excluded.** Both seats bringing the same two helpers says nothing
   about the loadout. `v_match_telemetry.is_mirror` still flags them.
-- **Only `end_reason = 'played'` counts.** A win by disconnect is a fact about a
-  network, and a match that reached the round cap level (`end_reason = 'draw'`)
-  has no winner to attribute.
+- **Forfeits and abandonments are excluded.** A win by disconnect is a fact about
+  a network; an abandoned match is a fact about nobody turning up.
+- **Capped draws count** (`end_reason = 'draw'`). A match that reached the round
+  cap level has no winner, but it was played by two present players, and it is
+  the outcome a draw-seeking loadout is built to reach. Excluding it would hide
+  exactly the builds it describes — and absent reads as fine.
 
-  **This is a trap worth reading twice for draw-seeking loadouts.** A loadout
-  that plays for the cap does not appear in the win-rate views as *losing* — it
-  does not appear at all, and absent reads as fine. The win-rate views are the
-  first place anyone looks, and they are the wrong place to look for this.
-  `rounds` and `draws` on `v_match_telemetry` are what price draw-seeking, and
-  they cover every finished match regardless of `end_reason`, which is why the
-  exclusion is applied in `counts_for_balance` and not at the source.
+### A draw is not half a win, and not a loss
 
-`v_helper_pick_rate` deliberately applies neither: a helper picked into a mirror was
-still picked, and popularity is what that view measures. Pick rates are per
+`won` is a fact and stays one: in a capped draw it is `false` for both seats. So
+the rate columns do the work instead. Each win-rate view carries:
+
+| Column | Meaning |
+|---|---|
+| `matches` | every seat-match `counts_for_balance` admits |
+| `decisive` | the subset that had a winner |
+| `wins` / `drawn` | how those matches split |
+| `win_rate` | `wins / decisive` — draws are on **neither** side of it |
+| `draw_rate` | `drawn / matches` |
+| `avg_draws` | drawn *rounds* per match, which is a different number |
+
+A draw-lock build therefore reads as a normal win rate next to a high draw rate,
+rather than as a card that loses half its matches (scoring draws as losses) or one
+that trades evenly (averaging them in at 0.5). A helper with draws but no decisive
+match has a **NULL** `win_rate`: unmeasured, not bad.
+
+`decisive` is also the honest sample size for `win_rate`. `matches > 30` is the
+wrong filter for a draw-heavy card; use `decisive > 30`.
+
+For matches played before the round cap shipped (JQ-214) every match is decisive,
+so `win_rate` means what it always meant and `draw_rate` is 0.
+
+`v_helper_pick_rate` deliberately applies none of it: a helper picked into a mirror
+or a forfeit was still picked, and popularity is what that view measures. Pick rates are per
 seat-loadout and every seat brings two helpers, so they sum to 2.0.
 
 `duel` matches sit in `v_match_telemetry` with NULL loadouts — the null loadout
@@ -58,11 +78,15 @@ the two modes. They contribute nothing to the helper views.
 -- Which cards people bring. Every helper appears, including at zero.
 SELECT * FROM v_helper_pick_rate;
 
--- Which cards win. `matches` is the sample size; treat a small one as noise.
-SELECT * FROM v_helper_win_rate WHERE matches > 30 ORDER BY win_rate DESC;
+-- Which cards win. `decisive` is the sample size behind `win_rate`; treat a small
+-- one as noise, and read `draw_rate` beside it rather than instead of it.
+SELECT * FROM v_helper_win_rate WHERE decisive > 30 ORDER BY win_rate DESC;
+
+-- Which cards draw. A build that plays for the cap lives here, not above.
+SELECT * FROM v_helper_win_rate WHERE matches > 30 ORDER BY draw_rate DESC;
 
 -- Win rate per loadout — any two helpers, including two Majors or two Minors.
-SELECT * FROM v_pairing_win_rate WHERE matches > 20 ORDER BY win_rate DESC LIMIT 20;
+SELECT * FROM v_pairing_win_rate WHERE decisive > 20 ORDER BY win_rate DESC LIMIT 20;
 
 -- The tier ladder is only sound if these match the design doc's predicted table.
 SELECT * FROM v_shape_win_rate;
@@ -94,7 +118,7 @@ SELECT game_mode, COUNT(*) AS matches, ROUND(AVG(rounds), 2) AS avg_rounds,
        ROUND(AVG(draws), 2) AS avg_draws
 FROM v_match_telemetry GROUP BY game_mode;
 
--- How matches end. Everything but 'played' is excluded from the win-rate views.
+-- How matches end. 'played' and 'draw' reach the win-rate views; the rest do not.
 SELECT end_reason, COUNT(*) FROM v_match_telemetry GROUP BY end_reason;
 ```
 
@@ -118,6 +142,10 @@ psql "$(./scripts/db.sh url)" -c 'SELECT * FROM v_helper_pick_rate'
 | `v_shape_win_rate` | loadout shape |
 | `v_ability_firings` | one charge spent, with `target_hit` |
 | `v_charge_usage` | ability helper: brought vs fired |
+
+The three win-rate views each carry the same set of columns — `matches`,
+`decisive`, `wins`, `drawn`, `win_rate`, `draw_rate` — so a helper, a pairing and a
+shape are all read the same way.
 
 `v_match_telemetry` assumes two seats per match, which is what `resolveDuelRound`
 already assumes. A mode with more seats would need it widened.

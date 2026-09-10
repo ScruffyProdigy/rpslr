@@ -124,9 +124,16 @@ SELECT
   t.rounds,
   t.draws,
   t.is_mirror,
-  -- A win by disconnect is a fact about a network, not about a loadout; a mirror
-  -- is a fact about neither. Both are excluded here rather than in each view, so
-  -- there is one definition to disagree with.
+  -- SUPERSEDED by 0008_draw_counts_for_balance.up.sql (JQ-255). An applied
+  -- migration is not edited, so what follows is left as it ran — but it is no
+  -- longer the rule in force, and neither are the three win-rate views below it,
+  -- which 0008 rebuilds. Read 0008 for the current definition.
+  --
+  -- What it said, and why it was wrong: a win by disconnect is a fact about a
+  -- network, not about a loadout; a mirror is a fact about neither. True of both,
+  -- and the reason the rule exists. But JQ-214 then gave a capped match
+  -- `end_reason = 'draw'`, and `= 'played'` silently swept those out too — and a
+  -- capped draw is exactly what a draw-seeking build produces when it works.
   (s.loadout IS NOT NULL AND t.end_reason = 'played' AND NOT t.is_mirror) AS counts_for_balance
 FROM v_seat_loadouts s
 JOIN v_match_telemetry t ON t.match_id = s.match_id;

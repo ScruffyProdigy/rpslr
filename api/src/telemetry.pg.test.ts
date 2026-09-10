@@ -158,6 +158,30 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     });
     await service.claimSeat(e.state.match.code, { seatKey: '2', name: 'Jo' });
     await repo.endMatch(e.state.match.id, '1', 'forfeit-disconnect');
+
+    // F: a capped draw. `bestOf: 1` caps the match at two rounds, and two mirrored
+    // rounds reach it level — the one ending with no winning seat and both players
+    // present for it.
+    //
+    // All four helpers are passive Minors that fire on a loss, a Lizard or a Robot,
+    // so none of them touch a Rock or a Paper mirror. None is bound to Rock or Paper
+    // either, and no seat brings two helpers bound to the *same* move — a collision
+    // displaces the cheaper one's marks onto a clear move, and with this rng that
+    // move is Rock. Both seats are `Minor+Minor`, a shape no other match here brings,
+    // so this adds a row to `v_shape_win_rate` rather than moving the one already
+    // there.
+    const f = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Kit',
+      bestOf: 1,
+      seats: [loadout('1', 'tempered', 'well-oiled'), loadout('2', 'featherweight', 'grudge')],
+    });
+    const fJoin = await service.claimSeat(f.state.match.code, { seatKey: '2', name: 'Lou' });
+    await service.submitMove(f.state.match.code, f.you.playerId, 'rock');
+    await service.submitMove(f.state.match.code, fJoin.you.playerId, 'rock');
+    // Rock carries two delay marks now, so the second mirror has to be a fresh move.
+    await service.submitMove(f.state.match.code, f.you.playerId, 'paper');
+    await service.submitMove(f.state.match.code, fJoin.you.playerId, 'paper');
   }, 30_000);
 
   afterAll(async () => {
@@ -180,7 +204,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
 
   it('records both loadouts, the winner and the round count for every finished match', async () => {
     const all = await rows('SELECT * FROM v_match_telemetry ORDER BY created_at');
-    expect(all).toHaveLength(5);
+    expect(all).toHaveLength(6);
     expect(all.every((r) => r.seat_a_key === '1' && r.seat_b_key === '2')).toBe(true);
 
     const [a] = all;
@@ -215,12 +239,12 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
   it('counts a pick wherever it happened — popularity is not strength', async () => {
     const picks = await rows('SELECT * FROM v_helper_pick_rate');
     const byId = Object.fromEntries(picks.map((r) => [r.helper_id, r]));
-    // Eight seat-loadouts were played (the `duel` match brings none). Quarantine is
-    // in four of them, including both sides of the mirror and neither side of the
-    // forfeit — which is only in three of those matches, so 4/8 is the check that
+    // Ten seat-loadouts were played (the `duel` match brings none). Quarantine is in
+    // four of them, including both sides of the mirror and neither side of the
+    // forfeit — which is only in three of those matches, so 4/10 is the check that
     // the mirror was counted here and the duel was not.
     expect(num(byId.quarantine.times_picked)).toBe(4);
-    expect(num(byId.quarantine.pick_rate)).toBe(0.5);
+    expect(num(byId.quarantine.pick_rate)).toBe(0.4);
     expect(num(byId.thief.times_picked)).toBe(1);
     // A card nobody brings is a balance finding, so it has to be in the view.
     expect(num(byId.chimera.times_picked)).toBe(0);
@@ -255,10 +279,9 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
 
   it('sits a shape at 50% against itself, which is what the tier ladder predicts', async () => {
     const shapes = await rows('SELECT * FROM v_shape_win_rate');
-    expect(shapes).toHaveLength(1);
-    expect(shapes[0].shape).toBe('Major+Trinket');
-    expect(num(shapes[0].matches)).toBe(4);
-    expect(num(shapes[0].win_rate)).toBe(0.5);
+    const major = shapes.find((r) => r.shape === 'Major+Trinket');
+    expect(num(major!.matches)).toBe(4);
+    expect(num(major!.win_rate)).toBe(0.5);
   });
 
   it('separates a named move that landed from one that did not', async () => {
@@ -286,5 +309,39 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     expect(byId.rust.avg_first_round).toBeNull();
     // Passives are not charges and have no business in here.
     expect(byId.copycat).toBeUndefined();
+  });
+
+  // --- JQ-255: the capped draw -----------------------------------------------
+
+  it('keeps a capped draw in the balance data rather than filtering it out', async () => {
+    const seats = await rows(`
+      SELECT * FROM v_loadout_outcomes
+      WHERE match_id = (SELECT match_id FROM v_match_telemetry WHERE end_reason = 'draw')
+      ORDER BY seat_key
+    `);
+    expect(seats).toHaveLength(2);
+    expect(seats.every((s) => s.counts_for_balance === true)).toBe(true);
+    // Neither seat won it, and neither is pretended to have.
+    expect(seats.every((s) => s.won === false)).toBe(true);
+    expect(seats.every((s) => num(s.draws) === 2)).toBe(true);
+  });
+
+  it('rates a capped draw as neither a win nor a loss', async () => {
+    const wins = await rows('SELECT * FROM v_helper_win_rate');
+    const byId = Object.fromEntries(wins.map((r) => [r.helper_id, r]));
+    // Tempered was brought into one match, and that match was drawn.
+    expect(num(byId.tempered.matches)).toBe(1);
+    expect(num(byId.tempered.drawn)).toBe(1);
+    expect(num(byId.tempered.draw_rate)).toBe(1);
+    // Nothing decisive to rate, so the win rate is absent — not 0, which would read
+    // as a card that loses, and not 0.5, which would read as one that trades evenly.
+    expect(num(byId.tempered.decisive)).toBe(0);
+    expect(num(byId.tempered.wins)).toBe(0);
+    expect(byId.tempered.win_rate).toBeNull();
+    // And the decided matches are unmoved: a draw is on neither side of that ratio.
+    expect(num(byId.quarantine.matches)).toBe(2);
+    expect(num(byId.quarantine.decisive)).toBe(2);
+    expect(num(byId.quarantine.win_rate)).toBe(1);
+    expect(num(byId.quarantine.draw_rate)).toBe(0);
   });
 });
