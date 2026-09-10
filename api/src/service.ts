@@ -32,6 +32,7 @@ import { nameUnplayedMove } from './helpers/oracle.js';
 import { viewSnapshotAs, type MatchSnapshot } from './matchView.js';
 import { rollFor } from './helpers/rules.js';
 import { uniformPicker } from './helpers/loadout.js';
+import { disclosedFirings } from './helpers/disclosure.js';
 import {
   boardsThroughMatch,
   firedIn,
@@ -406,7 +407,7 @@ export class GameService {
         submittedPlayerIds,
         currentRoundMoves: rawRoundMoves,
         matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
-        abilityFirings: resolvedFirings(firings, results),
+        abilityFirings: disclosedFirings(firings, new Set(results.map((r) => r.round))),
         abilities: {},
         oracle: null,
         serverNow: new Date(this.now()).toISOString(),
@@ -1185,20 +1186,6 @@ function namedMovesFor(
   }
 }
 
-
-/**
- * Firings from rounds that have already resolved.
- *
- * An ability spent in the round being played is withheld from every viewer, because
- * Quarantine names the move it fears and an opponent who could read that would
- * simply play something else. The same commit-then-reveal property JQ-150 protects
- * for Oracle, and the reason the filter is here rather than in the client: a state
- * payload the client chooses not to render is still a payload anyone can read.
- */
-function resolvedFirings(firings: AbilityFiring[], results: RoundResult[]): AbilityFiring[] {
-  const resolved = new Set(results.map((r) => r.round));
-  return firings.filter((f) => resolved.has(f.round));
-}
 
 /** How many resolved rounds this seat has lost. */
 function lossesFor(results: RoundResult[], seat: Seat, opponent: Seat): number {

@@ -30,7 +30,7 @@
       "label": "Quarantine",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Name a move. If they play it, it takes 2 extra marks.",
+      "description": "Secretly name a move. If they play it, it takes 2 extra marks.",
       "locked": false
     },
     {
@@ -38,7 +38,7 @@
       "label": "Oracle",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Learn one live move they did not play, then re-pick.",
+      "description": "Secretly learn one live move they had not chosen, then re-pick.",
       "locked": false
     },
     {
@@ -46,7 +46,7 @@
       "label": "Sacrifice",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Declare the round a draw before picking, and clear all your marks.",
+      "description": "Secretly declare the round a draw before picking, and clear all your marks.",
       "locked": false
     },
     {
@@ -54,7 +54,7 @@
       "label": "Rust",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Add 2 marks to a move they currently have live.",
+      "description": "Secretly add 2 marks to a move they currently have live.",
       "locked": false
     },
     {
@@ -62,7 +62,7 @@
       "label": "Thief",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Move one mark from one of your moves onto one of theirs.",
+      "description": "Secretly move one mark from one of your moves onto one of theirs.",
       "locked": false
     },
     {
@@ -70,7 +70,7 @@
       "label": "Freeze",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Their marks don't decrement this round.",
+      "description": "Secretly stop their marks decrementing this round.",
       "locked": false
     },
     {
