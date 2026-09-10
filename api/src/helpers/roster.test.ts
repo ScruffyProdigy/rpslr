@@ -1,17 +1,49 @@
 import { describe, expect, it } from 'vitest';
+import { MOVES } from '../game.js';
 import { HELPERS, MARK_COST, firesInPublic, getHelper, isAbility } from './roster.js';
 
 describe('helper roster', () => {
-  it('holds 21 helpers at the current tier counts', () => {
-    // Was 22 at 9/8/5. Blind Spot is cut, Second Wind promoted to Major, Poker Face
-    // demoted to Trinket — see the review issue on the roster's pricing.
-    expect(HELPERS).toHaveLength(21);
+  it('holds 25 helpers at the current tier counts', () => {
+    // 21 at 10/5/6 before JQ-209. Small Mercy moved up to Minor, and Well Oiled,
+    // Flywheel, Feint and Prologue were added — which is what gave every move two
+    // Minors and gave the charged-Minor tier its first shipping cards.
+    expect(HELPERS).toHaveLength(25);
     const byTier = (t: string) => HELPERS.filter((h) => h.tier === t).length;
     expect(byTier('Major')).toBe(10);
-    expect(byTier('Minor')).toBe(5);
-    expect(byTier('Trinket')).toBe(6);
+    expect(byTier('Minor')).toBe(10);
+    expect(byTier('Trinket')).toBe(5);
   });
 
+  /**
+   * Ten and ten is a deliberate shape, not an accident of counting: the tiers now
+   * play at different speeds rather than different sizes. Majors deny and Minors
+   * relieve, because a mark of denial is worth 0.383 and a mark of relief 0.156 — so
+   * *reliable* denial priced for a Minor would have to fire about once every six
+   * rounds, which is a Major's rhythm at a Minor's price.
+   *
+   * Reliable, not all denial: a guess is denial already discounted by its hit rate,
+   * and lands at Minor money on a fast recharge. The rule bounds certainty, not
+   * prediction.
+   */
+  it('gives every move the same two Majors and two Minors', () => {
+    // Tightened from "at least one Major" by JQ-236. Retiring Second Wind took Rock
+    // from three Majors to two, and putting Tripwire on Paper took Paper from one to
+    // two, so the roster is now 2/2 on every move in both bound tiers. Worth pinning
+    // rather than noting: it is the variety property JQ-209's pass was for, and it
+    // held only by accident until both halves moved at once.
+    for (const move of MOVES) {
+      const on = (t: string) => HELPERS.filter((h) => h.tier === t && h.boundMove === move);
+      expect(on('Major').length, `${move} Majors`).toBe(2);
+      expect(on('Minor').length, `${move} Minors`).toBe(2);
+    }
+  });
+
+  /**
+   * JQ-209's variety half. A tier with no card on a move means a player who wants
+   * that move cannot buy in at that price — Rock had three Majors and no Minor, so
+   * there was no way to place a single opening mark there, and Robot had the same
+   * hole. This is the assertion that keeps it closed as cards move.
+   */
   it('prices tiers as the ladder requires', () => {
     expect(MARK_COST).toEqual({ Major: 2, Minor: 1, Trinket: 0 });
   });
@@ -35,11 +67,17 @@ describe('helper roster', () => {
   });
 
   /**
-   * AC #6: this ticket retiers nothing and recharges nothing. The ladder shape
-   * table and the duel golden fixture both read these, so a card moved here without
-   * meaning to shows up as a diff in this list rather than as a balance surprise.
+   * JQ-237 added this to prove its own ticket retiered and recharged nothing. It is
+   * kept, and moved, because it does the same job for JQ-209 in the other
+   * direction: this pass *does* retier, so the list below is the reviewable record
+   * of exactly which cards moved and which did not.
+   *
+   * The ladder shape table and the duel golden fixture both read these, so a card
+   * moved without meaning to still shows up as a diff here rather than as a balance
+   * surprise. Since JQ-209: Small Mercy is a Minor bound to Rock, Well Oiled is new
+   * on Robot, and nothing else changed tier.
    */
-  it('leaves every shipping card on the tier and load it already had', () => {
+  it('leaves every shipping card on the tier and load JQ-209 priced it at', () => {
     expect(HELPERS.map((h) => `${h.id}:${h.tier}:${h.load.kind}`)).toEqual([
       'good-old-rock:Major:passive',
       'chimera:Major:passive',
@@ -50,14 +88,18 @@ describe('helper roster', () => {
       'rust:Major:ability',
       'thief:Major:ability',
       'freeze:Major:ability',
-      'second-wind:Major:passive',
+      'tripwire:Major:ability',
       'echo-chamber:Minor:passive',
       'sharp-practice:Minor:passive',
       'grudge:Minor:passive',
       'tempered:Minor:passive',
       'featherweight:Minor:passive',
+      'small-mercy:Minor:passive',
+      'well-oiled:Minor:passive',
+      'flywheel:Minor:ability',
+      'feint:Minor:ability',
+      'prologue:Minor:passive',
       'poker-face:Trinket:passive',
-      'small-mercy:Trinket:passive',
       'copycat:Trinket:passive',
       'bookend:Trinket:passive',
       'old-habits:Trinket:passive',
@@ -68,12 +110,15 @@ describe('helper roster', () => {
   it('gives every ability an opening and a recharge in delay marks', () => {
     const abilities = HELPERS.filter((h) => isAbility(h.load));
     expect(abilities.map((h) => h.id).sort()).toEqual([
+      'feint',
+      'flywheel',
       'freeze',
       'oracle',
       'quarantine',
       'rust',
       'sacrifice',
       'thief',
+      'tripwire',
     ]);
     for (const h of abilities) {
       const load = h.load;
@@ -85,9 +130,15 @@ describe('helper roster', () => {
     }
   });
 
-  it('starts every ability uniform except the one deliberate exception', () => {
-    // Uniform on purpose: the first telemetry read should vary one thing at a time.
-    // Sacrifice is gated late because its early line is degenerate, not just weak.
+  it('prices each ability at the cadence its effect is worth', () => {
+    // These were uniform at 0/3 so the first telemetry read would vary one thing at
+    // a time. JQ-209 broke that deliberately: uniformity is only informative over a
+    // roster that is roughly correct, and Rust and Freeze were at ~26pp against a
+    // 9-10pp target — 2.5x, the same margin Quarantine was repriced away from. A
+    // known 3x error makes telemetry less readable than a mixed cadence does.
+    //
+    // Openings are still untouched, so pacing remains the one uniform axis. Sacrifice
+    // is the lone gate, because its early line is degenerate rather than merely weak.
     const marks = Object.fromEntries(
       HELPERS.filter((h) => isAbility(h.load)).map((h) => {
         const load = h.load;
@@ -98,10 +149,27 @@ describe('helper roster', () => {
     expect(marks).toEqual({
       quarantine: '0/3',
       oracle: '0/3',
+      // +1 mark on a 4-mark recharge is ~9.6pp; it was +2 on 3, which is ~26pp.
       rust: '0/3',
-      thief: '0/3',
-      freeze: '0/3',
+      // Denies and relieves in one action, so it carries the longest recurring gap.
+      thief: '0/5',
+      // `recharge: null` is once per match — the value the type always had and
+      // nothing used until Freeze needed it.
+      freeze: '0/null',
       sacrifice: '3/3',
+      // The first two charged Minors. Both relieve rather than deny, which is what
+      // lets them sit on a Minor's price without a Major's rhythm.
+      flywheel: '0/4',
+      feint: '0/3',
+      // Quarantine's secret twin (JQ-236). Same +2, one round faster, because being
+      // unannounced it is only collected on the ~1/3 who walk into it — where the
+      // public one is dodged and priced on the option it removes instead. Visibility
+      // sets the price and the price sets the cadence; that is the whole pair.
+      // Opening 1 is the pair's gate, not a price: at 0/3 it would coincide with
+      // Quarantine on round 1, and this pair compounds — the public card shrinks
+      // their live set, which lifts the secret one's hit rate. Over seven rounds both
+      // openings fire exactly twice, so the gate costs nothing.
+      tripwire: '1/2',
     });
   });
 
@@ -114,12 +182,38 @@ describe('helper roster', () => {
     }
   });
 
-  it('classifies all six abilities secret, so no card changes behaviour yet', () => {
-    // Making one public is a balance decision per card, deliberately not taken
-    // here — see JQ-235's non-goals. When one is, this test is the one to move.
-    const abilities = HELPERS.filter((h) => isAbility(h.load));
-    expect(abilities.map((h) => h.reveal)).toEqual(abilities.map(() => 'secret'));
-    expect(HELPERS.filter((h) => firesInPublic(h.id))).toEqual([]);
+  it('fires Quarantine and Freeze in public, and the rest in secret', () => {
+    // JQ-235 built the field and left every card secret, calling the first public
+    // card a per-card balance decision. JQ-209 took it for Freeze: the card is worth
+    // ~2 marks a firing whoever can see it, so cutting the effect would have made it
+    // Rust without a target. Being answerable is what prices it instead: the seat it
+    // acts against is handed the round's sub-phase and re-picks knowing its board is
+    // frozen. That is a reaction *after* commitment, not the pre-commit announcement
+    // an earlier draft of this comment claimed — so it costs a mid-round pause, and
+    // once per match is what keeps that affordable.
+    //
+    // Quarantine joined it, and the argument that used to keep it secret — a named
+    // move they can read is a move they dodge — had the card backwards. Dodging is
+    // the effect: a live option denied for a round is 0.383, where collecting 2
+    // marks one time in three is 0.255. It is priced on the deterrent, which is why
+    // its recharge moved to 4 above.
+    //
+    // Sacrifice is the one card that genuinely cannot follow them: its cost is that
+    // the opponent wastes a move on a round already decided, which they would not do
+    // if told. Rust and Thief could, and have not been.
+    const publicIds = HELPERS.filter((h) => firesInPublic(h.id)).map((h) => h.id);
+    expect(publicIds).toEqual(['quarantine', 'freeze']);
+    const secret = HELPERS.filter((h) => isAbility(h.load) && !firesInPublic(h.id));
+    expect(secret.map((h) => h.id)).toEqual([
+      'oracle',
+      'sacrifice',
+      'rust',
+      'thief',
+      'tripwire',
+      'flywheel',
+      'feint',
+    ]);
+    for (const h of secret) expect(h.reveal, h.id).toBe('secret');
   });
 
   it('makes the blurb agree with the field, so card text cannot lie about it', () => {

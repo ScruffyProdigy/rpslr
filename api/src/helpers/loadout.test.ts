@@ -7,7 +7,7 @@ describe('parseLoadout', () => {
     expect(parseLoadout(['ferrus', 'chimera'])).toEqual(['ferrus', 'chimera']);
     expect(parseLoadout(['copycat', 'watchful'])).toEqual(['copycat', 'watchful']);
     expect(parseLoadout(['oracle', 'good-old-rock'])).toEqual(['oracle', 'good-old-rock']);
-    expect(parseLoadout(['second-wind', 'grudge'])).toEqual(['second-wind', 'grudge']);
+    expect(parseLoadout(['tripwire', 'grudge'])).toEqual(['tripwire', 'grudge']);
   });
 
   it('keeps the order it was given, because the tie rule depends on it', () => {
@@ -99,9 +99,10 @@ describe('openingMarks', () => {
   });
 
   it('gives the roll to the second helper when two Majors share a move', () => {
-    // good-old-rock and second-wind are both Rock-bound Majors, so the tie keeps
-    // the first pick in place and the second one's full 2 marks are displaced.
-    const { delays, rolledMove } = openingMarks(['good-old-rock', 'second-wind'], first);
+    // good-old-rock and sacrifice are both Rock-bound Majors, so the tie keeps the
+    // first pick in place and the second one's full 2 marks are displaced. (This
+    // used to pair Good Old Rock with Second Wind, which JQ-236 retired.)
+    const { delays, rolledMove } = openingMarks(['good-old-rock', 'sacrifice'], first);
     expect(delays.rock).toBe(2);
     expect(rolledMove).not.toBe('rock');
     expect(delays[rolledMove as Move]).toBe(2);
@@ -118,7 +119,7 @@ describe('openingMarks', () => {
 
   it('never rolls onto an already-blocked move', () => {
     const candidatesSeen: Move[][] = [];
-    openingMarks(['good-old-rock', 'second-wind'], (c) => {
+    openingMarks(['good-old-rock', 'sacrifice'], (c) => {
       candidatesSeen.push(c);
       return c[0];
     });

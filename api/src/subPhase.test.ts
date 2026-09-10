@@ -16,6 +16,10 @@
  * generalisation is that the next public card needs no service change, and an
  * untested branch would not deliver that.
  *
+ * Freeze is genuinely public since JQ-209, so this path now has a shipping card on
+ * it. The mock stays because Rust is the card with a binding and a target that make
+ * the re-pick assertions below precise — Freeze names no move.
+ *
  * Only `firesInPublic` is replaced. Rust's marks, its binding and its validation
  * are the real ones, so nothing here depends on a card that does not exist.
  */
@@ -151,6 +155,7 @@ describe('the sub-phase, reached by a public firing rather than by a reveal', ()
     expect(state.seats.every((s) => s.player!.expiryStrikes === 0)).toBe(true);
     // The charge stays spent: it was spent when it was fired.
     expect((await service.getState(code, alice)).abilities.rust).toEqual({
+      // Rust recharges on 3 since JQ-209 repriced it.
       marks: 3,
       available: false,
     });

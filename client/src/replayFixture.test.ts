@@ -56,10 +56,16 @@ describe('replaying a recorded duel-helpers match', () => {
   });
 
   it('shows the marks one player helpers put on the other player board', () => {
-    // Round 3 is entered after seat 1 lost round 2 holding both Grudge and Small
-    // Mercy, so the Scissors that beat them carries their two extra marks on top
-    // of what the pick itself cost — a board a per-seat replay cannot reach.
-    const enteringRoundThree = replay.frames[2];
-    expect(enteringRoundThree.b.delaysBefore.scissors).toBe(4);
+    // Round 2 is entered after seat 1 lost round 1 holding Small Mercy, so the
+    // Scissors that beat them carries its extra mark on top of what the pick cost —
+    // and the pick cost only 1, because seat 2's Bookend discounts its opening move.
+    // One from Bookend plus one from across the table is a board no per-seat replay
+    // can reach: on its own each seat computes 1.
+    //
+    // JQ-209 moved this off round 3. Grudge and Small Mercy used to stack two marks
+    // on the first loss; Grudge now sits the first one out, so the pair marks once
+    // per loss and the cross-seat mark shows up a round earlier instead.
+    const enteringRoundTwo = replay.frames[1];
+    expect(enteringRoundTwo.b.delaysBefore.scissors).toBe(2);
   });
 });

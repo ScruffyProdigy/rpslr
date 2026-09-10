@@ -1,5 +1,5 @@
 /**
- * The twenty-one helper cards, as pure data.
+ * The twenty-five helper cards, as pure data.
  *
  * This is the single source of truth for the roster: the queue-options endpoint
  * (`helpers/queueOptions.ts`) and the pick/win-rate telemetry (JQ-152) both read it
@@ -19,6 +19,12 @@ export type Tier = 'Major' | 'Minor' | 'Trinket';
  * on the cooldown track, counted in the same delay marks a move uses: `opening` is
  * how many marks it starts with, and so how long before it is first available, and
  * `recharge` is what firing costs, and so how often it comes back.
+ *
+ * Read those as *rounds unavailable*, not as a cadence. A move played for 2 marks is
+ * gone for two rounds and back on the third, so an ability on `recharge: 3` is gone
+ * for three and fires again on the fourth — the gap is N + 1. Pricing a charged card
+ * as though `recharge: 3` meant "every third round" overstates it by a quarter, which
+ * is a mistake this file has made once and the design doc's own anchor made too.
  *
  * `recharge: null` means it never does — "once per match" is a value here rather than
  * a separate kind. There is no per-round kind either: Quarantine names its move when
@@ -53,10 +59,15 @@ export const MARK_COST: Record<Tier, number> = { Major: 2, Minor: 1, Trinket: 0 
  * withheld until the round resolves; a `public` one is announced as it is fired,
  * which hands the seat it acts against something to answer.
  *
- * Only two of the six are secret out of necessity — Quarantine ("*if they play
- * it*") and Sacrifice (the wasted move is the cost). Rust, Thief and Freeze apply
- * whatever the opponent plays, so they would work identically in public. That they
- * are all secret today is a fact about this file, not about the engine.
+ * Sacrifice is the only card secret out of necessity: the cost is that they waste a
+ * move on a round already decided, which they would not do if told. Rust and Thief
+ * apply whatever the opponent plays, so they would work identically in public and
+ * are secret by convention rather than by function.
+ *
+ * Quarantine used to be listed here as the second necessity, on the argument that a
+ * name they can read is a name they dodge. That argument was backwards — dodging is
+ * the effect, and denying a live option outright beats collecting marks one time in
+ * three. It fires in public, and so does Freeze.
  *
  * Not the same axis as whether a firing needs a mid-round sub-phase. Oracle is
  * `secret` — its named move is hidden from the opponent until the round resolves —
@@ -116,11 +127,34 @@ const MAJORS = [
     load: PASSIVE, blurb: 'Your Lizard also beats Scissors, all match.' },
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
     load: PASSIVE, blurb: 'When you play Robot, the move they played takes an extra mark.' },
-  // Secret out of necessity: "if they play it" is only a threat while they cannot
-  // read the guess. An opponent who could would simply play something else.
+  // Public, and that is the card. An earlier draft called it "secret out of
+  // necessity" on the grounds that a name they can read is a name they dodge — but
+  // dodging *is* the effect. A move they will not play is a move denied, and a live
+  // option denied for a round is worth 0.383 outright, where the secret version
+  // collects 2 marks one time in three, or 0.255. Naming out loud is the stronger
+  // half as well as the more interesting one, so the card is priced on it.
+  //
+  // What it buys is a decision about *when*. `disclosedFirings` publishes a public
+  // firing the moment it happens, so firing before they commit deters — they pick
+  // knowing — while firing after they lock only forces a re-pick in the rounds they
+  // had already chosen the named move, and `submitMove` locks the firer, so nothing
+  // is gained from watching them switch. Early is the strong line. That is a skill
+  // the card teaches by costing you when you get it wrong.
+  //
+  // Recharge 3 puts it on a four-round cadence, and 0.383 every fourth round is
+  // ~9.6pp. The magnitude cannot do this job — on a public card 2 marks is a
+  // credibility threshold rather than a value, so it is paid rarely and dropping it
+  // to 1 would stop the deterrence instead of shrinking it. Cadence is the only knob
+  // a public card has.
+  //
+  // Recharge N means unavailable for N rounds, so the gap between firings is N + 1 —
+  // the same convention a move uses, where 2 marks means gone for two rounds and back
+  // on the third. An earlier draft of this pass read "recharge 3" as "fires every
+  // third round" and priced every charged card about 20% high as a result. The doc's
+  // own anchor had it too: 26pp for firing every round, divided by 3 rather than by 4.
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
-    blurb: 'Secretly name a move. If they play it, it takes 2 extra marks.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'public',
+    blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   // `secret` on this axis and still sub-phased on the other: the move it names is
   // hidden from the opponent until the round resolves, and the window it opens is
   // for its own holder. The two questions are separate — see `Reveal`.
@@ -143,39 +177,192 @@ const MAJORS = [
   // identically in public. They are secret by convention rather than by function;
   // making one public is a balance decision per card, not a change to this field's
   // meaning.
+  // JQ-209 repriced this twice over. The blurb said "a move they currently have
+  // live" while `fireEffects` has always required `opponentDelays[target] > 0` — a
+  // move already down — so the card's own text described a different card. And at
+  // +2 marks every third round it was Quarantine's effect without Quarantine's ~1/3
+  // hit rate: +2 / 3 rounds = 0.67 marks a round, ~26pp, the number Quarantine was
+  // itself repriced away from. One mark on a four-mark recharge is ~9.6pp.
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
     load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
-    blurb: 'Secretly add 2 marks to a move they currently have live.' },
+    blurb: 'Secretly add a mark to a move already on their cooldown.' },
+  // The only card that denies and relieves in one action, which is why it prices
+  // at ~18pp on a 3-mark recharge: 0.33 x 0.383 of denial plus 0.33 x 0.156 of
+  // relief. Six marks halves it to ~9pp and gives it a shape — it returns only in
+  // a match that grinds, so it self-selects into the comeback slot beside Sacrifice.
   { id: 'thief', name: 'Thief', tier: 'Major', boundMove: 'lizard',
-    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 0, recharge: 5 }, reveal: 'secret',
     blurb: 'Secretly move one mark from one of your moves onto one of theirs.' },
+  // Freeze holds both their blocked moves down an extra round, so it is worth ~2
+  // marks a firing — the same ~26pp as Rust was, and for the same reason. Cutting
+  // the effect would have made it Rust with no target, so the cadence took the cut
+  // instead: `recharge: null` is the "once per match" the type already had and
+  // nothing used. Once per match is still ~14.6pp on its own; announcing it before
+  // anyone commits is what brings it to ~11pp, because a board they can see is a
+  // board they can plan around.
+  //
+  // This is the roster's first public firing, which the design doc asks for in as
+  // many words: Rust, Thief and Freeze "apply regardless of what the opponent
+  // plays, so they work identically in public" and are secret by convention rather
+  // than by function.
+  //
+  // It does cost a sub-phase, and an earlier draft of this comment claimed it did
+  // not. `entitlementsIn` hands the seat a public firing acts *against* the round's
+  // window, so the disclosure lands after both have committed rather than before —
+  // the design doc's third row, not its second. The ~11pp above is priced on that
+  // reading and stands: the discount comes from the opponent getting a reaction,
+  // and a mid-round re-pick is a reaction. What changes is the cost side. Every
+  // Freeze is a mid-round pause, and the doc is explicit that the budget for those
+  // is small. Once per match is what keeps it affordable, and a public card on a
+  // short recharge would not be. See `Reveal` above.
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
-    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
-    blurb: "Secretly stop their marks decrementing this round." },
-  // A Major because cancelling their first win is worth ~+15.6pp — first-to-3
-  // against first-to-4 is a six-round race you take with three wins, 42/64. A tier
-  // step is only worth ~3pp, so this is the defensible price rather than the right
-  // one; the effect itself is what wants revisiting. See JQ-209.
-  { id: 'second-wind', name: 'Second Wind', tier: 'Major', boundMove: 'rock',
-    load: PASSIVE, blurb: 'The first round you lose is a draw instead.' },
+    load: { kind: 'ability', opening: 0, recharge: null }, reveal: 'public',
+    blurb: 'Stop their marks decrementing this round.' },
+
+  // JQ-236's secret half of the name-a-move pair, and the reason both exist. The
+  // design doc asked for one of each — "once visibility is a field the roster can
+  // carry one of each" — and JQ-235 made it a field.
+  //
+  // Visibility changes the price, which changes the cadence, which is what stops the
+  // two being one card at two settings:
+  //
+  //   Quarantine  public   0/4   denies an option outright, 0.383   ~9.6pp
+  //   Tripwire    secret   0/3   lands 1 in 3, 0.255                ~8.5pp
+  //
+  // Announced and slower, or hidden and faster, and neither is strictly better. That
+  // is the draft argument the pair exists to create. ~8.5pp is pre-flip Quarantine's
+  // own figure, so it is a price the doc has already been checked against.
+  //
+  // Paper-bound to keep it off Quarantine's Scissors: a same-move twin would trigger
+  // the collision roll on precisely the pairing the two cards are meant to be
+  // compared in. Paper also had a single Major, so this is what makes every move
+  // carry exactly two of each bound tier.
+  //
+  // `opening: 1` is the doc's rule that a pair meant to be drafted together should
+  // not both open at 0 — and this pair is drafted together by definition, since
+  // being compared is why both exist. It matters here rather than generally because
+  // these two *compound*: Quarantine is announced, so the opponent steps off the
+  // move it names and picks from two rather than three, which lifts this card's
+  // secret guess from a 1/3 hit to a 1/2.
+  //
+  // At 0/3 the two coincide on round 1, putting the pair's strongest moment on the
+  // one round with no history to read. At 1/3 it moves to round 6, where there are
+  // five rounds of reads on the table. And it is free rather than cheap: over seven
+  // rounds both openings fire exactly twice, so ~8.5pp is untouched.
+  { id: 'tripwire', name: 'Tripwire', tier: 'Major', boundMove: 'paper',
+    load: { kind: 'ability', opening: 1, recharge: 2 }, reveal: 'secret',
+    blurb: 'Secretly arm a trap on a move. If they play it, it takes 2 extra marks.' },
 ] as const satisfies readonly HelperDef<'Major'>[];
 
 const MINORS = [
+  // Was the roster's worst mispricing at ~14pp on a 6-7pp tier: "yours doesn't" was
+  // built as `delayOnChoice` returning 0, so your drawn move took no marks at all,
+  // saving 2 — on top of a mark on theirs. It also strictly contained Copycat, which
+  // the precedence rule in `rules.ts` had to arbitrate.
+  //
+  // The first fix put the extra mark on both moves and was wrong in the other
+  // direction. A mark on your own board costs 0.383 mid-match, the same as a mark on
+  // theirs earns — the +0.156 rate is for *shedding* one, not for taking one on. So
+  // "both take a mark" is exactly zero, and the card did nothing at all.
+  //
+  // Denial alone is 0.2 x 0.383 = ~7.7pp, in band. A draw is a mirror, so it needs
+  // both seats on the same move: with 3 live each and ~1.8 moves of overlap that is
+  // about one round in five, not one in three. Copycat is untouched either way —
+  // that discounts your drawn move, this surcharges theirs.
   { id: 'echo-chamber', name: 'Echo Chamber', tier: 'Minor', boundMove: 'paper',
-    load: PASSIVE, blurb: "On a drawn round, their move takes an extra mark and yours doesn't." },
+    load: PASSIVE, blurb: "On a drawn round, their move takes an extra mark." },
   { id: 'sharp-practice', name: 'Sharp Practice', tier: 'Minor', boundMove: 'scissors',
     load: PASSIVE, blurb: 'A Scissors mirror is a win for you, not a draw.' },
+  // Fired on every loss, which is ~0.375 of rounds: 0.375 x 0.383 = ~13pp, Major
+  // strength at a Minor price — the exact failure the doc warns makes Minor + Minor
+  // the best build. Skipping the first loss halves it to ~7pp and makes it the
+  // complement of Small Mercy below rather than Small Mercy's superset: Small Mercy
+  // covers loss one, Grudge covers the rest.
   { id: 'grudge', name: 'Grudge', tier: 'Minor', boundMove: 'scissors',
-    load: PASSIVE, blurb: 'The move that beat you last round takes an extra mark for them.' },
+    load: PASSIVE,
+    blurb: 'From your second loss onward, the move that beat you takes an extra mark for them.' },
+  // It used to charge your winning move 3 marks to pay for the discount on your
+  // losing one, and that trade cannot be made. Self-harm costs 0.383 a mark and
+  // self-relief earns 0.156, so a single mark of penalty needs ~2.45 marks of relief
+  // to break even and the most a losing move can be given back is 2. The card priced
+  // at about -7.6pp: not merely cold, actively bad to hold.
+  //
+  // So the penalty is gone and the catch-up stays. ~5.2pp, a point under the band,
+  // and the general rule is worth keeping: in this game anti-snowball has to come
+  // from helping the loser, never from taxing the winner.
   { id: 'tempered', name: 'Tempered', tier: 'Minor', boundMove: 'lizard',
-    load: PASSIVE, blurb: 'Your winning move takes 3 marks; your losing move takes 1.' },
+    load: PASSIVE, blurb: 'Your losing move takes 1 mark instead of 2.' },
   { id: 'featherweight', name: 'Featherweight', tier: 'Minor', boundMove: 'lizard',
     load: PASSIVE, blurb: 'Your Lizard takes 1 mark instead of 2.' },
+  // Promoted out of the Trinkets by JQ-209. One mark of denial, once, is ~7.3pp
+  // (0.383 x 19) — Minor money, not Trinket money — and Rock had three Majors and no
+  // Minor, so a player wanting a cheap helper on Rock had nothing to pick and no way
+  // to place a single opening mark there.
+  { id: 'small-mercy', name: 'Small Mercy', tier: 'Minor', boundMove: 'rock',
+    load: PASSIVE, blurb: 'The first round you lose, the move that beat you takes an extra mark.' },
+  // Robot had the same hole as Rock, and the same fix. This is the effect Ferrus
+  // used to carry, which was cut for being Featherweight at twice the price — as a
+  // Minor it is Featherweight's sibling rather than its dominator, priced the same
+  // (~5pp) for the same effect on a different move. Robot opens at 2 marks, the
+  // deepest on the board, so the discount reads differently there.
+  { id: 'well-oiled', name: 'Well Oiled', tier: 'Minor', boundMove: 'robot',
+    load: PASSIVE, blurb: 'Your Robot takes 1 mark instead of 2.' },
+  // The first three charged Minors. JQ-237 opened the tier to a charge and no card
+  // had used it, so "a Minor may fire" was a type fact rather than a roster one.
+  //
+  // All three relieve rather than deny, and that is the tier's identity rather than
+  // a coincidence. A mark of denial is worth 0.383 against relief's 0.156, so
+  // *reliable* denial priced for a Minor has to fire about once every six rounds —
+  // a Major's rhythm at a Minor's price, which reads as a worse Major rather than a
+  // different card. Relief is cheap enough to fire often, so Majors deny and Minors
+  // relieve, and the tiers play at different speeds instead of different sizes.
+  //
+  // Reliable is the load-bearing word, and an earlier draft of this comment left it
+  // out. A *guess* is denial already discounted by its hit rate: one mark landing
+  // one time in three is 0.128 a firing, which pays for a two-mark recharge at Minor
+  // money without being slow. So the rule bounds what a Minor may deny *for certain*
+  // — it does not close the tier to prediction, and JQ-236's secret name-a-move card
+  // is the case that showed the difference.
+
+  // The board-wide burst, and the self-side mirror of Freeze: where that holds every
+  // mark on their board for a round, this takes one off every mark on yours. About
+  // 2 marks a firing at steady state, 2 x 0.156 = 0.312, so ~6.2pp on a five-mark
+  // recharge. Rare and large, which is what makes it a different decision from the
+  // small frequent one below rather than a bigger version of it.
+  { id: 'flywheel', name: 'Flywheel', tier: 'Minor', boundMove: 'robot',
+    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'secret',
+    blurb: 'Secretly clear a mark from every move you have on cooldown.' },
+  // The only card on the roster that touches *where* marks land rather than how many
+  // there are, and so the only way to play the same move twice running — which the
+  // design doc lists as a fact about the game rather than a rule ("a played move
+  // carries 2 marks, so every punish-them-for-repeating ability is dead on arrival").
+  // Nothing else on the roster assumes that invariant holds for its own owner, so
+  // breaking it here costs no other card.
+  //
+  // Its total marks are unchanged, so it is not priced on the mark economy at all:
+  // what it buys is an option nobody else has, and the marks still have to go
+  // somewhere you can afford. ~6.2pp at 0 / 4 is an estimate rather than a
+  // derivation, and the widest error bar in this pass.
+  { id: 'feint', name: 'Feint', tier: 'Minor', boundMove: 'paper',
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: "Secretly name one of your moves. This round's marks land on it instead." },
+  // Opening tempo, which no card addresses and the shape table is entirely about:
+  // a Major blocks rounds 1 and 2, a Minor round 1, a Trinket neither. Two marks of
+  // relief while you are still above three live, where the shallow rate applies:
+  // 2 x 0.156 x 19 = ~5.9pp. Bookend is the same idea one tier down and one round
+  // shorter, which is what a tier step should look like.
+  { id: 'prologue', name: 'Prologue', tier: 'Minor', boundMove: 'rock',
+    load: PASSIVE, blurb: 'Your first two moves of the match take 1 mark instead of 2.' },
   // Blind Spot was cut here. It hid a cooldown that is fully derivable from the
   // public move history, so it did nothing to an opponent doing the arithmetic and
   // only obstructed one who wasn't — the inverse of the design doc's own case
   // against Watchful and Old Habits. Poker Face survives the same test, because
   // lock-in is live state and not in the history.
+  //
+  // JQ-209 re-ran that test over every information card on the roster and found
+  // nothing else failing it. Old Habits and Watchful stay as the doc's declared
+  // convenience traps; Oracle passes because a move they did *not* choose is not
+  // computable from a history of what they did.
 ] as const satisfies readonly HelperDef<'Minor'>[];
 
 const TRINKETS = [
@@ -185,8 +372,6 @@ const TRINKETS = [
   // lock-in is live state, absent from the move history.
   { id: 'poker-face', name: 'Poker Face', tier: 'Trinket', boundMove: null,
     load: PASSIVE, blurb: 'The opponent is never told you have locked in.' },
-  { id: 'small-mercy', name: 'Small Mercy', tier: 'Trinket', boundMove: null,
-    load: PASSIVE, blurb: 'The first round you lose, the move that beat you takes an extra mark.' },
   { id: 'copycat', name: 'Copycat', tier: 'Trinket', boundMove: null,
     load: PASSIVE, blurb: 'On a drawn round, your move takes 1 mark instead of 2.' },
   { id: 'bookend', name: 'Bookend', tier: 'Trinket', boundMove: null,
@@ -200,7 +385,7 @@ const TRINKETS = [
 export const HELPERS: readonly HelperDef[] = [...MAJORS, ...MINORS, ...TRINKETS];
 
 /**
- * The 21 ids as a union rather than `string`. `rules.ts` decides a card's effect
+ * The 25 ids as a union rather than `string`. `rules.ts` decides a card's effect
  * by matching its id, so a typo there would silently switch a helper off with
  * nothing failing — this makes it a build error instead.
  */

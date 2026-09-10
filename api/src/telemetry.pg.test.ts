@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { HELPERS } from './helpers/roster.js';
 import { PgGameRepository } from './pgRepository.js';
 import { GameService } from './service.js';
 
@@ -81,6 +82,11 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     // Helpers are chosen for what they do NOT do: none of these change how a round
     // resolves, so the outcomes are the plain RPSLR ones and the arithmetic in the
     // assertions is about the views rather than about the cards.
+    //
+    // Quarantine is the one that changes the round's *shape* rather than its result.
+    // Since JQ-209 it fires in public, so the seat it names is handed the round's
+    // window and the round waits on them — hence the extra `submitMove` in A and B.
+    // Each stands on the move it already had, so both outcomes are what they were.
 
     // A: Quarantine + Copycat beats Oracle + Watchful, and the named move lands.
     const a = await service.createStandaloneMatch({
@@ -100,6 +106,8 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     });
     await service.submitMove(a.state.match.code, a.you.playerId, 'rock');
     await service.submitMove(a.state.match.code, aJoin.you.playerId, 'scissors');
+    // Bob answers the public firing by standing on Scissors, so the name still lands.
+    await service.submitMove(a.state.match.code, aJoin.you.playerId, 'scissors');
 
     // B: the same loadout wins again, and this time Quarantine names the wrong move.
     const b = await service.createStandaloneMatch({
@@ -118,6 +126,8 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       target: 'paper',
     });
     await service.submitMove(b.state.match.code, b.you.playerId, 'rock');
+    await service.submitMove(b.state.match.code, bJoin.you.playerId, 'lizard');
+    // Dan answers it too; Paper was never his move, so the name still misses.
     await service.submitMove(b.state.match.code, bJoin.you.playerId, 'lizard');
 
     // C: a mirror. Someone wins it, and it still tells us nothing about the loadout.
@@ -158,7 +168,12 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
 
   it('mirrors the whole roster into the catalog', async () => {
     const row = await one('SELECT COUNT(*) AS n FROM helper_catalog');
-    expect(num(row!.n)).toBe(21);
+    // Read off the roster rather than written out. The claim here is "the catalog
+    // mirrors the whole roster", not "the roster has 25 cards" — a literal states
+    // something the test does not mean, and since this file is `skipIf` a database
+    // it passes locally and fails only in CI. That has cost four round-trips. The
+    // deliberate pin lives in `roster.test.ts`, where changing it is the point.
+    expect(num(row!.n)).toBe(HELPERS.length);
     const quarantine = await one("SELECT * FROM helper_catalog WHERE id = 'quarantine'");
     expect(quarantine).toMatchObject({ tier: 'Major', mark_cost: 2, bound_move: 'scissors' });
   });
@@ -209,7 +224,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     expect(num(byId.thief.times_picked)).toBe(1);
     // A card nobody brings is a balance finding, so it has to be in the view.
     expect(num(byId.chimera.times_picked)).toBe(0);
-    expect(picks).toHaveLength(21);
+    expect(picks).toHaveLength(HELPERS.length);
   });
 
   it('drops mirrors and forfeits from win rate, and keeps everything else', async () => {

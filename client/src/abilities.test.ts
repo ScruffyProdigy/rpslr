@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AbilityFiring } from '@game/types';
 import type { Loadout } from '@game/helpers/loadout';
+import { getHelper } from '@game/helpers/roster';
 import {
   chargeReading,
   describeFiring,
@@ -9,7 +10,7 @@ import {
   targetSteps,
 } from './abilities';
 
-/** A loadout is any two distinct helpers; only a Major can carry a charge. */
+/** A loadout is any two distinct helpers; only a Trinket cannot carry a charge. */
 function loadoutWith(majorId: string): Loadout {
   return [majorId, 'echo-chamber'] as unknown as Loadout;
 }
@@ -68,7 +69,10 @@ describe('heldAbilities (JQ-221)', () => {
     expect(held).toHaveLength(1);
     expect(held[0].id).toBe('rust');
     expect(held[0].name).toBe('Rust');
-    expect(held[0].blurb).toBe('Secretly add 2 marks to a move they currently have live.');
+    // Read from the roster rather than repeated here, which is what this test is
+    // named for: a literal would be the second copy it exists to rule out, and it
+    // went stale the first time a blurb was repriced (JQ-209 rewrote Rust's).
+    expect(held[0].blurb).toBe(getHelper('rust')!.blurb);
     expect(held[0].charge).toEqual({ marks: 0, available: true });
   });
 
@@ -94,6 +98,27 @@ describe('targetSteps (JQ-221)', () => {
     }
   });
 
+  /*
+   * Tripwire names a move exactly as Quarantine does, so it walks the same single
+   * step. This is what keeps the rail from treating a new guessing card as
+   * targetless — which is how it would fail: silently, with the charge spent on
+   * nothing.
+   */
+  it('gives Tripwire one target step, as Quarantine has', () => {
+    expect(targetSteps('tripwire').map((s) => s.field)).toEqual(['target']);
+  });
+
+  it('tells the firer which of the twin guesses they are holding', () => {
+    // The cards land identical marks, so the prompt is the only thing distinguishing
+    // them at the moment of use. A prompt that dropped the disclosure would leave the
+    // player unable to tell the pair apart when it matters.
+    expect(targetSteps('quarantine')[0].prompt).not.toContain('Secretly');
+    expect(targetSteps('tripwire')[0].prompt).toContain('Secretly');
+    for (const id of ['quarantine', 'tripwire']) {
+      expect(targetSteps(id)[0].prompt, id).toContain('2 extra marks');
+    }
+  });
+
   it('gives Thief a source step before its target step', () => {
     expect(targetSteps('thief').map((s) => s.field)).toEqual(['source', 'target']);
   });
@@ -109,6 +134,17 @@ describe('legalTargets (JQ-221)', () => {
   it('lets Quarantine name any move', () => {
     const [step] = targetSteps('quarantine');
     expect(legalTargets('quarantine', step, marks)).toEqual([
+      'rock',
+      'paper',
+      'scissors',
+      'lizard',
+      'robot',
+    ]);
+  });
+
+  it('lets Tripwire name any move too', () => {
+    const [step] = targetSteps('tripwire');
+    expect(legalTargets('tripwire', step, marks)).toEqual([
       'rock',
       'paper',
       'scissors',

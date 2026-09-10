@@ -39,7 +39,7 @@
       "label": "Quarantine",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Secretly name a move. If they play it, it takes 2 extra marks.",
+      "description": "Name a move. If they play it, it takes 2 extra marks.",
       "load": {
         "kind": "ability",
         "opening": 0,
@@ -78,7 +78,7 @@
       "label": "Rust",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Secretly add 2 marks to a move they currently have live.",
+      "description": "Secretly add a mark to a move already on their cooldown.",
       "load": {
         "kind": "ability",
         "opening": 0,
@@ -95,7 +95,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 3
+        "recharge": 5
       },
       "locked": false
     },
@@ -104,22 +104,24 @@
       "label": "Freeze",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Secretly stop their marks decrementing this round.",
+      "description": "Stop their marks decrementing this round.",
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 3
+        "recharge": null
       },
       "locked": false
     },
     {
-      "id": "second-wind",
-      "label": "Second Wind",
+      "id": "tripwire",
+      "label": "Tripwire",
       "section": "Major",
       "badge": "2 marks",
-      "description": "The first round you lose is a draw instead.",
+      "description": "Secretly arm a trap on a move. If they play it, it takes 2 extra marks.",
       "load": {
-        "kind": "passive"
+        "kind": "ability",
+        "opening": 1,
+        "recharge": 2
       },
       "locked": false
     },
@@ -128,7 +130,7 @@
       "label": "Echo Chamber",
       "section": "Minor",
       "badge": "1 mark",
-      "description": "On a drawn round, their move takes an extra mark and yours doesn't.",
+      "description": "On a drawn round, their move takes an extra mark.",
       "load": {
         "kind": "passive"
       },
@@ -150,7 +152,7 @@
       "label": "Grudge",
       "section": "Minor",
       "badge": "1 mark",
-      "description": "The move that beat you last round takes an extra mark for them.",
+      "description": "From your second loss onward, the move that beat you takes an extra mark for them.",
       "load": {
         "kind": "passive"
       },
@@ -161,7 +163,7 @@
       "label": "Tempered",
       "section": "Minor",
       "badge": "1 mark",
-      "description": "Your winning move takes 3 marks; your losing move takes 1.",
+      "description": "Your losing move takes 1 mark instead of 2.",
       "load": {
         "kind": "passive"
       },
@@ -179,22 +181,70 @@
       "locked": false
     },
     {
-      "id": "poker-face",
-      "label": "Poker Face",
-      "section": "Trinket",
-      "badge": "Free",
-      "description": "The opponent is never told you have locked in.",
+      "id": "small-mercy",
+      "label": "Small Mercy",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "The first round you lose, the move that beat you takes an extra mark.",
       "load": {
         "kind": "passive"
       },
       "locked": false
     },
     {
-      "id": "small-mercy",
-      "label": "Small Mercy",
+      "id": "well-oiled",
+      "label": "Well Oiled",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Your Robot takes 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
+      "locked": false
+    },
+    {
+      "id": "flywheel",
+      "label": "Flywheel",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Secretly clear a mark from every move you have on cooldown.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 4
+      },
+      "locked": false
+    },
+    {
+      "id": "feint",
+      "label": "Feint",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Secretly name one of your moves. This round's marks land on it instead.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
+      "locked": false
+    },
+    {
+      "id": "prologue",
+      "label": "Prologue",
+      "section": "Minor",
+      "badge": "1 mark",
+      "description": "Your first two moves of the match take 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
+      "locked": false
+    },
+    {
+      "id": "poker-face",
+      "label": "Poker Face",
       "section": "Trinket",
       "badge": "Free",
-      "description": "The first round you lose, the move that beat you takes an extra mark.",
+      "description": "The opponent is never told you have locked in.",
       "load": {
         "kind": "passive"
       },

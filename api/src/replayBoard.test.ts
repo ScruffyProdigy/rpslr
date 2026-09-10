@@ -82,13 +82,21 @@ describe('boardsThroughMatch', () => {
   });
 
   it('shows a mark one seat helper put on the other seat board', () => {
-    // Grudge marks whatever beat its owner. A loses round 1 to Paper, so Paper
-    // rests a round longer than the pick alone would cost it.
+    // Grudge marks whatever beat its owner, from the second loss on — JQ-209 gave
+    // the first loss to Small Mercy. A loses round 1 to Paper and round 2 to
+    // Scissors, so Scissors rests a round longer than the pick alone would cost it.
     const grudge: ReconstructionSeat = { ...A, loadout: ['grudge', 'copycat'], loadoutRoll: null };
-    const rounds = playedRoundsFrom([round(1, 'rock', 'paper')], [], grudge, B);
-    const [, afterRoundOne] = boardsThroughMatch(rounds, ...rulesForSeats(grudge, B));
+    const rounds = playedRoundsFrom(
+      [round(1, 'rock', 'paper'), round(2, 'lizard', 'scissors')],
+      [],
+      grudge,
+      B,
+    );
+    const [, afterRoundOne, afterRoundTwo] = boardsThroughMatch(rounds, ...rulesForSeats(grudge, B));
 
-    expect(afterRoundOne.b.paper).toBe(3);
+    // Round 1 is the free one: Paper takes the pick's 2 marks and nothing more.
+    expect(afterRoundOne.b.paper).toBe(2);
+    expect(afterRoundTwo.b.scissors).toBe(3);
   });
 });
 

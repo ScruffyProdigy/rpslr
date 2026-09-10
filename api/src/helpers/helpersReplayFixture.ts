@@ -51,12 +51,20 @@ export interface HelpersReplayFixture {
  * Seat 1 reaches across the table twice (Grudge, Small Mercy); seat 2 reaches
  * across on a draw and pays a different price for its opening pick (Echo Chamber,
  * Bookend). Neither is a duel in any round.
+ *
+ * Rescripted by JQ-209. Small Mercy is a Minor bound to rock now, so seat 1 opens
+ * with rock and scissors both marked and the old round-1 `rock` was not a legal
+ * pick. The sequence below is chosen to fire all three cards exactly once: seat 1
+ * loses round 1 (Small Mercy), the seats draw round 3 (Echo Chamber), and seat 1
+ * loses again in round 4, which is Grudge's — it sits out the first loss since
+ * JQ-209, so the fixture now covers the partition between the two cards rather
+ * than the stack they used to make.
  */
 const SCRIPT: [Move, Move][] = [
-  ['rock', 'rock'],
   ['paper', 'scissors'],
-  ['scissors', 'paper'],
-  ['lizard', 'lizard'],
+  ['rock', 'lizard'],
+  ['robot', 'robot'],
+  ['lizard', 'scissors'],
   ['paper', 'rock'],
 ];
 

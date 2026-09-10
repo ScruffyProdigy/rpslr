@@ -126,9 +126,15 @@ describe('Ferrus — playing Robot marks what they played', () => {
   });
 
   it('stacks with a second card marking the same move', () => {
-    expect(marks(['ferrus', 'grudge'], { own: 'robot', opponent: 'paper', outcome: 'loss' })).toEqual(
-      { own: {}, opponent: { paper: 2 } },
-    );
+    // `lossesSoFar: 1` because Grudge sits out the first loss since JQ-209.
+    expect(
+      marks(['ferrus', 'grudge'], {
+        own: 'robot',
+        opponent: 'paper',
+        outcome: 'loss',
+        lossesSoFar: 1,
+      }),
+    ).toEqual({ own: {}, opponent: { paper: 2 } });
   });
 });
 
@@ -139,11 +145,36 @@ describe('Featherweight — Lizard takes 1', () => {
   });
 });
 
-describe('Tempered — 3 for a win, 1 for a loss', () => {
-  it('charges by outcome', () => {
-    expect(cost(load('tempered'), 'rock', 'win')).toBe(3);
+describe('Tempered — a losing move costs 1', () => {
+  /**
+   * It used to charge a winning move 3 to pay for this, and that trade cannot be
+   * made: self-harm costs 0.383 a mark where self-relief earns 0.156, so one mark of
+   * penalty needs ~2.45 of relief to break even and a losing move can be given back
+   * at most 2. The card priced at about -7.6pp — actively bad to hold.
+   *
+   * The rule that falls out is worth more than the card: in this game anti-snowball
+   * has to come from helping the loser, never from taxing the winner.
+   */
+  it('discounts a loss and leaves every other outcome alone', () => {
     expect(cost(load('tempered'), 'rock', 'loss')).toBe(1);
+    expect(cost(load('tempered'), 'rock', 'win')).toBe(2);
     expect(cost(load('tempered'), 'rock', 'draw')).toBe(2);
+  });
+});
+
+describe('Prologue — the first two moves of the match cost 1', () => {
+  it('discounts rounds 0 and 1, and nothing after', () => {
+    expect(cost(load('prologue'), 'rock', 'win', 0)).toBe(1);
+    expect(cost(load('prologue'), 'rock', 'win', 1)).toBe(1);
+    expect(cost(load('prologue'), 'rock', 'win', 2)).toBe(2);
+  });
+
+  it('covers Bookend\'s round and one more, so the pair does not double-discount', () => {
+    // Both claim round 0 and both say 1, so there is nothing to arbitrate — the
+    // second card buys round 1, which is the tier step it is paying for.
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 0)).toBe(1);
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 1)).toBe(1);
+    expect(cost(['prologue', 'bookend'], 'rock', 'win', 2)).toBe(2);
   });
 });
 
@@ -155,19 +186,36 @@ describe('Copycat — a drawn round costs 1', () => {
   });
 });
 
-describe('Echo Chamber — a draw costs you nothing and them extra', () => {
-  it('charges your move nothing on a draw', () => {
-    expect(cost(load('echo-chamber'), 'rock', 'draw')).toBe(0);
+describe('Echo Chamber — a draw costs them an extra mark', () => {
+  /**
+   * JQ-209 repriced this. It used to charge the holder's drawn move 0 — saving 2
+   * marks — on top of a mark on theirs, which came to ~23pp on a 6-7pp tier and made
+   * it the roster's worst mispricing. It also swallowed Copycat whole.
+   */
+  it('no longer touches the cost of your own move', () => {
+    expect(cost(load('echo-chamber'), 'rock', 'draw')).toBe(2);
     expect(cost(load('echo-chamber'), 'rock', 'win')).toBe(2);
   });
 
-  it('puts an extra mark on their move on a draw', () => {
+  it('puts an extra mark on their move alone', () => {
     expect(marks(load('echo-chamber'), { own: 'rock', opponent: 'rock', outcome: 'draw' })).toEqual(
       { own: {}, opponent: { rock: 1 } },
     );
     expect(marks(load('echo-chamber'), { own: 'rock', opponent: 'paper', outcome: 'loss' })).toEqual(
       { own: {}, opponent: {} },
     );
+  });
+
+  /**
+   * Marking both seats was tried and reverted: it came to exactly zero. A mark you
+   * take on costs 0.383, the same as a mark handed out earns — the cheap 0.156 rate
+   * is for *shedding* one, which is a different move on the curve.
+   */
+  it('leaves Copycat its own slot rather than outranking it', () => {
+    expect(cost(['echo-chamber', 'copycat'], 'rock', 'draw')).toBe(1);
+    expect(
+      marks(['echo-chamber', 'copycat'], { own: 'rock', opponent: 'rock', outcome: 'draw' }),
+    ).toEqual({ own: {}, opponent: { rock: 1 } });
   });
 });
 
@@ -177,9 +225,13 @@ describe('Bookend — your first move of the match costs 1', () => {
     expect(cost(load('bookend'), 'rock', 'win', 1)).toBe(2);
   });
 
-  it('wins over a surcharge rather than stacking with it', () => {
+  it('is absolute, so a discount beside it changes nothing', () => {
+    // There is no surcharge left on this path — Tempered carried the only one, and
+    // JQ-209 removed it. Every branch now discounts, so precedence only decides
+    // *which* 1 wins rather than whether the cost goes up.
     expect(cost(['bookend', 'tempered'], 'rock', 'win', 0)).toBe(1);
-    expect(cost(['bookend', 'tempered'], 'rock', 'win', 1)).toBe(3);
+    expect(cost(['bookend', 'tempered'], 'rock', 'win', 1)).toBe(2);
+    expect(cost(['bookend', 'tempered'], 'rock', 'loss', 1)).toBe(1);
   });
 });
 
@@ -211,33 +263,43 @@ describe('Sharp Practice — the Scissors mirror is a win', () => {
   });
 });
 
-describe('Second Wind — the first loss is a draw', () => {
-  it('saves the first loss and no later one', () => {
-    expect(
-      outcome(load('second-wind'), 'loss', {
-        own: 'paper',
-        opponent: 'scissors',
-        roundIndex: 1,
-        lossesSoFar: 0,
-      }),
-    ).toBe('draw');
-    expect(
-      outcome(load('second-wind'), 'loss', {
-        own: 'paper',
-        opponent: 'scissors',
-        roundIndex: 3,
-        lossesSoFar: 1,
-      }),
-    ).toBe('loss');
+describe('Well Oiled — the Minor that gave Robot a Minor', () => {
+  /**
+   * The effect Ferrus used to carry, which was cut for being Featherweight at twice
+   * the price. As a Minor it is Featherweight's sibling rather than its dominator:
+   * same effect, same ~5pp, a different move. Robot opens deepest on the board, so
+   * halving its cooldown reads differently there.
+   */
+  it('halves the cost of playing Robot, and touches nothing else', () => {
+    expect(cost(load('well-oiled'), 'robot', 'win')).toBe(1);
+    expect(cost(load('well-oiled'), 'robot', 'loss')).toBe(1);
+    expect(cost(load('well-oiled'), 'rock', 'win')).toBe(2);
+  });
+
+  it('leaves Featherweight its own move', () => {
+    expect(cost(load('featherweight'), 'robot', 'win')).toBe(2);
+    expect(cost(load('well-oiled'), 'lizard', 'win')).toBe(2);
   });
 });
 
-describe('Grudge — the move that beat you takes an extra mark', () => {
-  it('marks their move every time you lose', () => {
+describe('Grudge — from your second loss on, the move that beat you takes an extra mark', () => {
+  /**
+   * Fired on every loss it was ~13pp — Major strength at a Minor price, the failure
+   * the design doc warns makes Minor + Minor the best build. JQ-209 gave the first
+   * loss to Small Mercy and the rest to Grudge, which halves it to ~7pp and turns
+   * two cards that overlapped into two that partition.
+   */
+  it('does nothing on the first loss', () => {
     expect(marks(load('grudge'), { own: 'paper', opponent: 'scissors', outcome: 'loss' })).toEqual({
       own: {},
-      opponent: { scissors: 1 },
+      opponent: {},
     });
+  });
+
+  it('marks their move on every loss after that', () => {
+    expect(
+      marks(load('grudge'), { own: 'paper', opponent: 'scissors', outcome: 'loss', lossesSoFar: 1 }),
+    ).toEqual({ own: {}, opponent: { scissors: 1 } });
     expect(
       marks(load('grudge'), { own: 'paper', opponent: 'scissors', outcome: 'loss', lossesSoFar: 2 }),
     ).toEqual({ own: {}, opponent: { scissors: 1 } });
@@ -267,11 +329,28 @@ describe('Small Mercy — the first move that beats you takes an extra mark', ()
   });
 });
 
-describe('Grudge and Small Mercy together stack on the same move', () => {
-  it('adds both marks rather than one overwriting the other', () => {
+describe('Grudge and Small Mercy divide the losses between them', () => {
+  /**
+   * They used to stack two marks on the first loss and one thereafter. JQ-209 gave
+   * Small Mercy the first loss and Grudge the rest, so the pair now marks exactly
+   * one move per loss — a steady mark rather than a spike, and neither card is the
+   * other's superset any more.
+   */
+  it('marks once on the first loss, from Small Mercy alone', () => {
     expect(
       marks(['grudge', 'small-mercy'], { own: 'paper', opponent: 'scissors', outcome: 'loss' }),
-    ).toEqual({ own: {}, opponent: { scissors: 2 } });
+    ).toEqual({ own: {}, opponent: { scissors: 1 } });
+  });
+
+  it('marks once on later losses, from Grudge alone', () => {
+    expect(
+      marks(['grudge', 'small-mercy'], {
+        own: 'paper',
+        opponent: 'scissors',
+        outcome: 'loss',
+        lossesSoFar: 1,
+      }),
+    ).toEqual({ own: {}, opponent: { scissors: 1 } });
   });
 });
 
@@ -327,18 +406,14 @@ describe('the helper whose effect is not implemented yet', () => {
 });
 
 describe('the stacking pairs the design doc says to watch', () => {
-  // Both bound to Rock, so they collide and are now draftable together. Both turn
-  // a loss into a draw, and the doc calls this "the pairing to check first".
-  it('Good Old Rock spares a Rock loss without spending Second Wind', () => {
-    const rules = rulesFor(['good-old-rock', 'second-wind'], { roll: 'paper' });
-    const rockLoss = { own: 'rock' as Move, opponent: 'paper' as Move, roundIndex: 0, lossesSoFar: 0 };
-    expect(rules.transformOutcome('loss', rockLoss)).toBe('draw');
-    // Because that never became a loss, Second Wind is still armed for the next one.
-    const laterLoss = { own: 'paper' as Move, opponent: 'scissors' as Move, roundIndex: 2, lossesSoFar: 0 };
-    expect(rules.transformOutcome('loss', laterLoss)).toBe('draw');
-    // And once Second Wind has genuinely been spent, losses land.
-    expect(rules.transformOutcome('loss', { ...laterLoss, lossesSoFar: 1 })).toBe('loss');
-  });
+  // The doc's own "pairing to check first" was Good Old Rock + Second Wind — both
+  // Rock-bound, both turning a loss into a draw. It is gone rather than fixed:
+  // JQ-236 retired Second Wind to make room for Tripwire, and cutting it retires
+  // the concern with it. No card now converts a loss to a draw except Good Old
+  // Rock, so there is no second save to stack, and nothing to test here.
+  //
+  // The remaining pair worth watching is Quarantine + Tripwire, which has its own
+  // block above — that one is a real interaction rather than a redundancy.
 
   it('Copycat and Good Old Rock together cool Rock every other round, not every third', () => {
     const rules = rulesFor(['good-old-rock', 'copycat'], {});
@@ -448,16 +523,144 @@ describe('Quarantine', () => {
   });
 });
 
+describe('Flywheel — every move on cooldown loses a mark', () => {
+  const firer = rulesFor(load('flywheel'));
+  const fire = () =>
+    firer.fireEffects({
+      firings: [{ id: 'flywheel' }],
+      own: 'rock',
+      opponent: 'rock',
+      ownDelays: { rock: 0, paper: 2, scissors: 1, lizard: 0, robot: 3 },
+      opponentDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+    });
+
+  it('takes one off each blocked move and skips the clear ones', () => {
+    expect(fire().marks).toEqual({ own: { paper: -1, scissors: -1, robot: -1 }, opponent: {} });
+  });
+
+  it('reaches across to nothing of theirs — it is relief, not denial', () => {
+    expect(fire().marks.opponent).toEqual({});
+    expect(fire().freezesOpponentDecay).toBe(false);
+  });
+});
+
+describe('Feint — this round\'s marks land on a move you name', () => {
+  const firer = rulesFor(load('feint'));
+  const fire = (target: Move, own: Move = 'rock') =>
+    firer.fireEffects({
+      firings: [{ id: 'feint', target }],
+      own,
+      opponent: 'paper',
+      ownDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+      opponentDelays: { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 },
+    });
+
+  /**
+   * The only card that moves marks rather than counting them, and so the only way to
+   * play the same move twice running — the design doc treats that as a fact about
+   * the game rather than a rule, and nothing else on the roster leans on it.
+   */
+  it('credits the played move back and charges the named one instead', () => {
+    expect(fire('robot').marks).toEqual({ own: { rock: -2, robot: 2 }, opponent: {} });
+  });
+
+  it('does nothing when it names the move being played', () => {
+    // Otherwise it would cancel its own credit and read as a free round.
+    expect(fire('rock').marks).toEqual({ own: {}, opponent: {} });
+  });
+
+  it('never touches their board', () => {
+    expect(fire('robot').marks.opponent).toEqual({});
+  });
+});
+
+/**
+ * JQ-236's secret half of the name-a-move pair. The marks are deliberately
+ * identical to Quarantine's — `reveal` decides who is told, never what a firing
+ * does — so what these assert is that the two really are the same effect, and that
+ * the difference between the cards lives entirely in disclosure and cadence.
+ */
+describe('Tripwire', () => {
+  const attacker = rulesFor(load('tripwire'));
+  const victim = rulesFor(load('copycat'));
+  const name = (target: Move) => [{ id: 'tripwire', target }];
+
+  it('adds 2 marks to the named move when they play it, exactly as Quarantine does', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: name('lizard') }],
+      attacker,
+      victim,
+    );
+    // Their lizard takes its own 2 choice marks, and Tripwire's 2 on top.
+    expect(b.lizard).toBe(4);
+  });
+
+  it('does nothing at all when they play something else', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: name('scissors') }],
+      attacker,
+      victim,
+    );
+    expect(b.scissors).toBe(0);
+    expect(b.lizard).toBe(2);
+  });
+
+  it('spends the charge on a miss just as on a hit', () => {
+    const missed = abilityMarks(['tripwire', 'old-habits'], [name('scissors')]);
+    expect(missed).toEqual({ tripwire: { marks: 2, available: false } });
+  });
+});
+
+/**
+ * The pair, drafted together. Legal since JQ-238 gave each ability its own slot,
+ * and worth a test because the two compose: Quarantine is announced, so a competent
+ * opponent steps off the move it names and picks from two rather than three — which
+ * is what lifts Tripwire's secret guess from a 1/3 hit to a 1/2.
+ */
+describe('Quarantine beside Tripwire', () => {
+  const attacker = rulesFor(['quarantine', 'tripwire']);
+  const victim = rulesFor(load('copycat'));
+  const both = (q: Move, t: Move) => [
+    { id: 'quarantine', target: q },
+    { id: 'tripwire', target: t },
+  ];
+
+  it('lands the secret name when they step off the announced one', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: both('scissors', 'lizard') }],
+      attacker,
+      victim,
+    );
+    // Quarantine named scissors aloud and they avoided it; the move they stepped
+    // onto was the one Tripwire had quietly named. 2 choice marks plus 2.
+    expect(b.lizard).toBe(4);
+    expect(b.scissors).toBe(0);
+  });
+
+  it('lands both weights on one move when both name it', () => {
+    const { b } = replayMatch(
+      [{ a: 'rock', b: 'lizard', firedA: both('lizard', 'lizard') }],
+      attacker,
+      victim,
+    );
+    // Allowed rather than rejected, per JQ-238, and strictly worse for the firer:
+    // the announced name is the one they dodge, so a Tripwire pointed at the same
+    // move is spent on a square they have already been warned off. It must still
+    // add up — 2 choice marks plus 2 plus 2.
+    expect(b.lizard).toBe(6);
+  });
+});
+
 describe('Rust', () => {
   const attacker = rulesFor(load('rust'));
   // Ferrus binds robot, so B enters the match with one live move and four clear.
   const victim = rulesFor(['ferrus', 'copycat']);
   const at = (target: Move) => [{ id: 'rust', target }];
 
-  it('adds 2 marks to a move they have live', () => {
+  it('adds a mark to a move already on their cooldown', () => {
     const { b } = replayMatch([{ a: 'rock', b: 'paper', firedA: at('robot') }], attacker, victim);
-    // robot enters on 2, loses one to the decrement, takes Rust's 2.
-    expect(b.robot).toBe(3);
+    // robot enters on 2, loses one to the decrement, takes Rust's 1.
+    expect(b.robot).toBe(2);
   });
 
   it('does nothing to a move they have clear — there is no rust to add', () => {
@@ -473,7 +676,7 @@ describe('Rust', () => {
       { a: 'rock' as const, b: 'paper' as const, firedA: at('robot') },
     ];
     const { b } = replayMatch(rounds, attacker, victim);
-    expect(b.robot).toBe(2);
+    expect(b.robot).toBe(1);
   });
 });
 
@@ -547,9 +750,9 @@ describe('two abilities fired by one seat in one round', () => {
       firer,
       victim,
     );
-    // Their scissors: 2 entering, 1 after the decrement, +2 from Rust and +1 from
-    // Thief. Either firing alone would leave 3 or 2; both leave 4.
-    expect(b.scissors).toBe(4);
+    // Their scissors: 2 entering, 1 after the decrement, +1 from Rust and +1 from
+    // Thief. Either firing alone would leave 2; both leave 3.
+    expect(b.scissors).toBe(3);
     // And Thief's own half still lands: the firer's lizard goes 2 → 1 → 0.
     expect(a.lizard).toBe(0);
   });
@@ -568,7 +771,7 @@ describe('two abilities fired by one seat in one round', () => {
       ownDelays: { rock: 0, paper: 0, scissors: 2, lizard: 2, robot: 0 },
       opponentDelays: { rock: 0, paper: 0, scissors: 2, lizard: 0, robot: 0 },
     });
-    expect(effect.marks).toEqual({ own: { lizard: -1 }, opponent: { scissors: 3 } });
+    expect(effect.marks).toEqual({ own: { lizard: -1 }, opponent: { scissors: 2 } });
   });
 
   it('floors the combined adjustment at zero when the source decremented away', () => {
@@ -593,7 +796,7 @@ describe('two abilities fired by one seat in one round', () => {
     // Thief still lands its half on the opponent: it moved a mark that existed
     // when the firing was validated, so the round pays out even though the floor
     // swallowed the subtraction.
-    expect(b.scissors).toBe(3);
+    expect(b.scissors).toBe(2);
   });
 
   it('lets one of the two settle the round while the other still adjusts marks', () => {

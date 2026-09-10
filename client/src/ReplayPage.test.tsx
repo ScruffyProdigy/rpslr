@@ -431,12 +431,22 @@ describe('<ReplayPage> play along', () => {
  * A match that reaches the floor, so the page has to draw a board where no move
  * is clear.
  *
- * Ben brought Rust and Freeze. Both open charged and recharge on 3, so they
- * fire together in rounds 1 and 4: Freeze holds Ana's marks where they are at
- * the end of the round, Rust adds two to a move she still had live, and her own
- * picks add two a round on top. She comes into round 5 pinned to Lizard and
- * round 6 with a mark on all five, playable only because `availableMoves` has a
- * floor.
+ * Rebuilt by JQ-209, which repriced the two cards that used to produce it. Rust
+ * added two marks a firing on a three-mark recharge and Freeze recharged at all;
+ * between them they buried a board twice in six rounds, which is the ~26pp each
+ * turned out to be worth. Neither can now, so the floor is reached by
+ * accumulation instead.
+ *
+ * Ana carries Echo Chamber, so every drawn round costs her an extra mark of her
+ * own. Ben's Quarantine names her pick in rounds 1 and 4 and lands both, adding
+ * two more each time. Five drawn rounds mean she pays for a pick every round with
+ * nothing coming back, and Ben's Freeze — once per match now, so the timing is
+ * the decision — holds the whole board for round 5. She comes into round 6 with a
+ * mark on all five, playable only because `availableMoves` has a floor.
+ *
+ * The same script as the floor fixture in `commentary.test.ts`, deliberately: that
+ * one asserts the board this one draws. Six rounds, because JQ-214 caps a best-of-3
+ * at `bestOf * 2` — the match ends at the cap on Ana's 1-0, not on the threshold.
  *
  * The commentary used to reconstruct that hand as `delays[m] === 0` and get
  * nothing back, and hand the empty list to a solver that indexes three rows and
@@ -448,20 +458,22 @@ function floorState(): MatchState {
     ['rock', 'rock', 'draw'],
     ['paper', 'paper', 'draw'],
     ['scissors', 'scissors', 'draw'],
-    ['rock', 'rock', 'draw'],
-    ['lizard', 'paper', 'a'],
-    ['rock', 'scissors', 'a'],
+    ['lizard', 'lizard', 'draw'],
+    ['robot', 'robot', 'draw'],
+    ['paper', 'rock', 'a'],
   ];
   const helped = seat(1, 'b', 'pb', 'Ben');
   return {
     ...finishedState({ bestOf: 3, currentRound: 6, gameMode: 'duel-helpers' }),
-    seats: [seat(0, 'a', 'pa', 'Ana'), { ...helped, loadout: ['rust', 'freeze'] }],
+    seats: [
+      { ...seat(0, 'a', 'pa', 'Ana'), loadout: ['echo-chamber', 'bookend'] },
+      { ...helped, loadout: ['quarantine', 'freeze'] },
+    ],
     results: script.map(([a, b, outcome], i) => round(i + 1, a, b, outcome)),
     abilityFirings: [
-      { round: 1, seatKey: 'b', helperId: 'rust', target: 'robot', source: null },
-      { round: 1, seatKey: 'b', helperId: 'freeze', target: null, source: null },
-      { round: 4, seatKey: 'b', helperId: 'rust', target: 'paper', source: null },
-      { round: 4, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+      { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
+      { round: 4, seatKey: 'b', helperId: 'quarantine', target: 'lizard', source: null },
+      { round: 5, seatKey: 'b', helperId: 'freeze', target: null, source: null },
     ],
   };
 }
@@ -473,7 +485,11 @@ describe('<ReplayPage> under the cooldown floor', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(floorState());
     render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    // Auto-play starts from an effect a commit *after* the match renders, so the
+    // transport still reads Play when 'Ana' appears — wait for Pause itself
+    // (JQ-213). These two were the last places in the file still doing it the old
+    // way, and CI caught them where a faster local run did not.
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     for (let n = 2; n <= 6; n++) {
       await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
@@ -482,9 +498,7 @@ describe('<ReplayPage> under the cooldown floor', () => {
     // Round 6 is the one Ana enters with a mark on every move. Reaching its
     // sentence at all is the assertion: the commentary threw on the way here.
     expect(
-      screen.getByText(
-        'Ana plays Rock, Ben plays Scissors — Rock crushes Scissors. Ana wins the match 2–0.',
-      ),
+      screen.getByText('Ana plays Paper, Ben plays Rock — Paper covers Rock. Ana wins the match 1–0.'),
     ).toBeInTheDocument();
   });
 
@@ -492,7 +506,11 @@ describe('<ReplayPage> under the cooldown floor', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(floorState());
     const { container } = render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    // Auto-play starts from an effect a commit *after* the match renders, so the
+    // transport still reads Play when 'Ana' appears — wait for Pause itself
+    // (JQ-213). These two were the last places in the file still doing it the old
+    // way, and CI caught them where a faster local run did not.
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     for (let n = 2; n <= 6; n++) {
       await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
