@@ -18,8 +18,12 @@ describe('helper roster', () => {
    * Ten and ten is a deliberate shape, not an accident of counting: the tiers now
    * play at different speeds rather than different sizes. Majors deny and Minors
    * relieve, because a mark of denial is worth 0.383 and a mark of relief 0.156 — so
-   * a denial card priced for a Minor would have to fire about once every six rounds,
-   * which is a Major's rhythm at a Minor's price.
+   * *reliable* denial priced for a Minor would have to fire about once every six
+   * rounds, which is a Major's rhythm at a Minor's price.
+   *
+   * Reliable, not all denial: a guess is denial already discounted by its hit rate,
+   * and lands at Minor money on a fast recharge. The rule bounds certainty, not
+   * prediction.
    */
   it('gives every move the same two Minors' + ' and at least one Major', () => {
     for (const move of MOVES) {

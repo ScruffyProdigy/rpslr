@@ -284,11 +284,18 @@ const MINORS = [
   // had used it, so "a Minor may fire" was a type fact rather than a roster one.
   //
   // All three relieve rather than deny, and that is the tier's identity rather than
-  // a coincidence. A mark of denial is worth 0.383 and a mark of relief 0.156, so a
-  // denial card priced for a Minor has to fire about once every six rounds — which
-  // is a Major's rhythm at a Minor's price, and reads as a worse Major rather than a
-  // different card. Relief is cheap enough to fire often, so **Majors deny, Minors
-  // relieve**, and the two tiers play at different speeds instead of different sizes.
+  // a coincidence. A mark of denial is worth 0.383 against relief's 0.156, so
+  // *reliable* denial priced for a Minor has to fire about once every six rounds —
+  // a Major's rhythm at a Minor's price, which reads as a worse Major rather than a
+  // different card. Relief is cheap enough to fire often, so Majors deny and Minors
+  // relieve, and the tiers play at different speeds instead of different sizes.
+  //
+  // Reliable is the load-bearing word, and an earlier draft of this comment left it
+  // out. A *guess* is denial already discounted by its hit rate: one mark landing
+  // one time in three is 0.128 a firing, which pays for a two-mark recharge at Minor
+  // money without being slow. So the rule bounds what a Minor may deny *for certain*
+  // — it does not close the tier to prediction, and JQ-236's secret name-a-move card
+  // is the case that showed the difference.
 
   // The board-wide burst, and the self-side mirror of Freeze: where that holds every
   // mark on their board for a round, this takes one off every mark on yours. About
