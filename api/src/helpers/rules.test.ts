@@ -595,7 +595,7 @@ describe('Quarantine', () => {
 
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['quarantine', 'old-habits'], [name('lizard')]);
-    expect(missed).toEqual({ quarantine: { marks: 4, available: false } });
+    expect(missed).toEqual({ quarantine: { marks: 3, available: false } });
   });
 });
 

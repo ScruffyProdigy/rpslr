@@ -141,20 +141,20 @@ describe('helper roster', () => {
       }),
     );
     expect(marks).toEqual({
-      quarantine: '0/4',
+      quarantine: '0/3',
       oracle: '0/3',
       // +1 mark on a 4-mark recharge is ~9.6pp; it was +2 on 3, which is ~26pp.
-      rust: '0/4',
+      rust: '0/3',
       // Denies and relieves in one action, so it carries the longest recurring gap.
-      thief: '0/6',
+      thief: '0/5',
       // `recharge: null` is once per match — the value the type always had and
       // nothing used until Freeze needed it.
       freeze: '0/null',
       sacrifice: '3/3',
       // The first two charged Minors. Both relieve rather than deny, which is what
       // lets them sit on a Minor's price without a Major's rhythm.
-      flywheel: '0/5',
-      feint: '0/4',
+      flywheel: '0/4',
+      feint: '0/3',
     });
   });
 

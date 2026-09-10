@@ -43,7 +43,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 4
+        "recharge": 3
       },
       "locked": false
     },
@@ -82,7 +82,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 4
+        "recharge": 3
       },
       "locked": false
     },
@@ -95,7 +95,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 6
+        "recharge": 5
       },
       "locked": false
     },
@@ -209,7 +209,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 5
+        "recharge": 4
       },
       "locked": false
     },
@@ -222,7 +222,7 @@
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 4
+        "recharge": 3
       },
       "locked": false
     },

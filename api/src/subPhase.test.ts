@@ -155,8 +155,8 @@ describe('the sub-phase, reached by a public firing rather than by a reveal', ()
     expect(state.seats.every((s) => s.player!.expiryStrikes === 0)).toBe(true);
     // The charge stays spent: it was spent when it was fired.
     expect((await service.getState(code, alice)).abilities.rust).toEqual({
-      // Rust recharges on 4 since JQ-209 repriced it.
-      marks: 4,
+      // Rust recharges on 3 since JQ-209 repriced it.
+      marks: 3,
       available: false,
     });
   });

@@ -37,7 +37,7 @@ describe('helper roster for queue-options', () => {
   it('says of every card whether it carries a charge, and on what clock', () => {
     const byId = new Map(helperChoices().map((c) => [c.id, c.load]));
     expect(byId.get('ferrus')).toEqual({ kind: 'passive' });
-    expect(byId.get('quarantine')).toEqual({ kind: 'ability', opening: 0, recharge: 4 });
+    expect(byId.get('quarantine')).toEqual({ kind: 'ability', opening: 0, recharge: 3 });
     // Sacrifice is the card the numbers exist for: it does nothing until round 4,
     // and a player drafting it blind has no way to know that from the blurb.
     expect(byId.get('sacrifice')).toEqual({ kind: 'ability', opening: 3, recharge: 3 });

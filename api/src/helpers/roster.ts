@@ -20,6 +20,12 @@ export type Tier = 'Major' | 'Minor' | 'Trinket';
  * how many marks it starts with, and so how long before it is first available, and
  * `recharge` is what firing costs, and so how often it comes back.
  *
+ * Read those as *rounds unavailable*, not as a cadence. A move played for 2 marks is
+ * gone for two rounds and back on the third, so an ability on `recharge: 3` is gone
+ * for three and fires again on the fourth — the gap is N + 1. Pricing a charged card
+ * as though `recharge: 3` meant "every third round" overstates it by a quarter, which
+ * is a mistake this file has made once and the design doc's own anchor made too.
+ *
  * `recharge: null` means it never does — "once per match" is a value here rather than
  * a separate kind. There is no per-round kind either: Quarantine names its move when
  * it fires, like any other ability.
@@ -135,13 +141,19 @@ const MAJORS = [
   // is gained from watching them switch. Early is the strong line. That is a skill
   // the card teaches by costing you when you get it wrong.
   //
-  // Recharge 4 rather than 3 is the whole of the reprice: 0.383 every third round is
-  // ~12.8pp against a 9-10pp target, every fourth is ~9.6pp. The magnitude cannot do
-  // this job — on a public card 2 marks is a credibility threshold rather than a
-  // value, so it is paid rarely and dropping it to 1 would stop the deterrence
-  // instead of shrinking it. Cadence is the only knob a public card has.
+  // Recharge 3 puts it on a four-round cadence, and 0.383 every fourth round is
+  // ~9.6pp. The magnitude cannot do this job — on a public card 2 marks is a
+  // credibility threshold rather than a value, so it is paid rarely and dropping it
+  // to 1 would stop the deterrence instead of shrinking it. Cadence is the only knob
+  // a public card has.
+  //
+  // Recharge N means unavailable for N rounds, so the gap between firings is N + 1 —
+  // the same convention a move uses, where 2 marks means gone for two rounds and back
+  // on the third. An earlier draft of this pass read "recharge 3" as "fires every
+  // third round" and priced every charged card about 20% high as a result. The doc's
+  // own anchor had it too: 26pp for firing every round, divided by 3 rather than by 4.
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'public',
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'public',
     blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   // `secret` on this axis and still sub-phased on the other: the move it names is
   // hidden from the opponent until the round resolves, and the window it opens is
@@ -172,14 +184,14 @@ const MAJORS = [
   // hit rate: +2 / 3 rounds = 0.67 marks a round, ~26pp, the number Quarantine was
   // itself repriced away from. One mark on a four-mark recharge is ~9.6pp.
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
     blurb: 'Secretly add a mark to a move already on their cooldown.' },
   // The only card that denies and relieves in one action, which is why it prices
   // at ~18pp on a 3-mark recharge: 0.33 x 0.383 of denial plus 0.33 x 0.156 of
   // relief. Six marks halves it to ~9pp and gives it a shape — it returns only in
   // a match that grinds, so it self-selects into the comeback slot beside Sacrifice.
   { id: 'thief', name: 'Thief', tier: 'Major', boundMove: 'lizard',
-    load: { kind: 'ability', opening: 0, recharge: 6 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 0, recharge: 5 }, reveal: 'secret',
     blurb: 'Secretly move one mark from one of your moves onto one of theirs.' },
   // Freeze holds both their blocked moves down an extra round, so it is worth ~2
   // marks a firing — the same ~26pp as Rust was, and for the same reason. Cutting
@@ -303,7 +315,7 @@ const MINORS = [
   // recharge. Rare and large, which is what makes it a different decision from the
   // small frequent one below rather than a bigger version of it.
   { id: 'flywheel', name: 'Flywheel', tier: 'Minor', boundMove: 'robot',
-    load: { kind: 'ability', opening: 0, recharge: 5 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'secret',
     blurb: 'Secretly clear a mark from every move you have on cooldown.' },
   // The only card on the roster that touches *where* marks land rather than how many
   // there are, and so the only way to play the same move twice running — which the
@@ -317,7 +329,7 @@ const MINORS = [
   // somewhere you can afford. ~6.2pp at 0 / 4 is an estimate rather than a
   // derivation, and the widest error bar in this pass.
   { id: 'feint', name: 'Feint', tier: 'Minor', boundMove: 'paper',
-    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'secret',
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
     blurb: "Secretly name one of your moves. This round's marks land on it instead." },
   // Opening tempo, which no card addresses and the shape table is entirely about:
   // a Major blocks rounds 1 and 2, a Minor round 1, a Trinket neither. Two marks of

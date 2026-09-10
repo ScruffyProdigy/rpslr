@@ -62,7 +62,7 @@ describe('the cooldown track takes a charged Minor unchanged', () => {
     // `slotsFor` never asked about tier — this is the assertion that it never had
     // to, and that the ticket's "no engine change" reading is right.
     expect(slotsFor(load('rust', 'whetstone'))).toEqual({
-      rust: { opening: 0, recharge: 4 },
+      rust: { opening: 0, recharge: 3 },
       whetstone: { opening: 0, recharge: 2 },
     });
   });
@@ -183,7 +183,7 @@ describe('GameService — a Major and a charged Minor in one loadout', () => {
 
     // Rust recharges on 3 and Whetstone on 2. Two slots, two clocks.
     expect((await service.getState(code, alice)).abilities).toEqual({
-      rust: { marks: 4, available: false },
+      rust: { marks: 3, available: false },
       whetstone: { marks: 2, available: false },
     });
   });

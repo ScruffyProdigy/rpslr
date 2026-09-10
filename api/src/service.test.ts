@@ -898,8 +898,8 @@ describe('GameService — two charged abilities in one round', () => {
     // distinction rather than two cards reading 3. Rust comes back on 4, Thief on 6,
     // so a seat holding both desyncs after the first double round.
     expect((await service.getState(code, alice)).abilities).toEqual({
-      rust: { marks: 4, available: false },
-      thief: { marks: 6, available: false },
+      rust: { marks: 3, available: false },
+      thief: { marks: 5, available: false },
     });
   });
 
