@@ -143,13 +143,13 @@ describe('WebSocket gameplay transport', () => {
 });
 
 describe('an unresolved ability firing never reaches the socket', () => {
-  it('keeps Quarantine\'s named move out of the pushed state until the round resolves', async () => {
+  it('keeps a secret firing\'s target out of the pushed state until the round resolves', async () => {
     const created = await service.createStandaloneMatch({
       gameMode: 'duel-helpers',
       hostName: 'Alice',
       bestOf: 3,
       seats: [
-        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'copycat'] }] },
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['rust', 'copycat'] }] },
         { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
       ],
     });
@@ -163,8 +163,8 @@ describe('an unresolved ability firing never reaches the socket', () => {
       matchId: state.match.id,
       seatId: state.seats[0].id,
       round: 1,
-      helperId: 'quarantine',
-      target: 'rock',
+      helperId: 'rust',
+      target: 'paper',
       source: null,
 });
 
@@ -173,7 +173,7 @@ describe('an unresolved ability firing never reaches the socket', () => {
     send(opponent, { type: 'subscribe', ref: code });
     const snapshot = await waitFor(opponent, (m) => m.type === 'state');
     expect((snapshot.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([]);
-    // Holding Quarantine is public; the move it named is not, until the round is over.
+    // Holding Rust is public; the move it named is not, until the round is over.
     expect(JSON.stringify(snapshot)).not.toContain('"target"');
 
     // Play the round out; now it is history, and history is public.
@@ -187,7 +187,7 @@ describe('an unresolved ability firing never reaches the socket', () => {
     await service.submitMove(code, challengerId, 'scissors');
     const after = await resolved;
     expect((after.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([
-      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock', source: null },
+      { round: 1, seatKey: '1', helperId: 'rust', target: 'paper', source: null },
     ]);
 
     opponent.close();
@@ -207,8 +207,10 @@ describe('WebSocket ability firings', () => {
       hostName: 'Alice',
       bestOf: 5,
       seats: [
-        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'poker-face'] }] },
-        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['rust', 'poker-face'] }] },
+        // Alice holds the secret card. JQ-209 made Quarantine public, so a fired
+        // Quarantine reaches Bob's socket by design and cannot prove this rule.
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['rust', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['quarantine', 'poker-face'] }] },
       ],
     });
     const code = created.state.match.code;
@@ -233,22 +235,22 @@ describe('WebSocket ability firings', () => {
       aliceWs,
       (m) =>
         m.type === 'state' &&
-        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.quarantine
+        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.rust
           ?.available === false,
     );
 
-    // Alice names the move she fears. Bob is about to be pushed the resulting state.
-    send(aliceWs, { type: 'fire', playerId: alice, helperId: 'quarantine', target: 'rock' });
+    // Alice deepens a cooldown in secret. Bob is about to be pushed the state.
+    send(aliceWs, { type: 'fire', playerId: alice, helperId: 'rust', target: 'scissors' });
 
     const pushed = await bobPush;
     // Asserted on the raw payload: the guess must not be anywhere in it, under any
     // field name. Bob can read Alice's *loadout* — that is public — so the string
-    // 'quarantine' is not the secret; the firing and its target are.
+    // 'rust' is not the secret; the firing and its target are.
     const raw = JSON.stringify(pushed.state);
     expect(JSON.parse(raw).abilityFirings).toEqual([]);
     expect(raw).not.toContain('"target"');
     // Bob is told about his own charge and only his own.
-    expect(Object.keys(JSON.parse(raw).abilities)).toEqual(['rust']);
+    expect(Object.keys(JSON.parse(raw).abilities)).toEqual(['quarantine']);
 
     // Alice's own socket, by contrast, is told her charge is spent.
     expect(await alicePush).toBeTruthy();
@@ -264,25 +266,28 @@ describe('WebSocket ability firings', () => {
     send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
     await waitFor(bobWs, (m) => m.type === 'state');
 
-    send(bobWs, { type: 'fire', playerId: bob, helperId: 'rust', target: 'scissors' });
+    send(bobWs, { type: 'fire', playerId: bob, helperId: 'quarantine', target: 'scissors' });
     await waitFor(
       bobWs,
       (m) =>
         m.type === 'state' &&
-        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.rust
+        (m.state as { abilities: Record<string, { available: boolean }> }).abilities.quarantine
           ?.available === false,
     );
 
     // Both hold a scissors-binding Major, so rock is what either can play.
     await service.submitMove(code, alice, 'rock');
     await service.submitMove(code, bob, 'rock');
+    // Quarantine fires in public, so Alice is handed the round's window and the
+    // round waits on her. She stands on Rock; the firing is disclosed either way.
+    await service.submitMove(code, alice, 'rock');
 
     const resolved = await waitFor(
       bobWs,
       (m) => (m.state as { results: unknown[] }).results?.length === 1,
     );
     expect((resolved.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([
-      { round: 1, seatKey: '2', helperId: 'rust', target: 'scissors', source: null },
+      { round: 1, seatKey: '2', helperId: 'quarantine', target: 'scissors', source: null },
     ]);
     bobWs.close();
   });
@@ -293,9 +298,9 @@ describe('WebSocket ability firings', () => {
     send(ws, { type: 'subscribe', ref: code, playerId: alice });
     await waitFor(ws, (m) => m.type === 'state');
 
-    send(ws, { type: 'fire', playerId: alice, helperId: 'rust', target: 'rock' });
+    send(ws, { type: 'fire', playerId: alice, helperId: 'thief', source: 'rock', target: 'rock' });
     const err = await waitFor(ws, (m) => m.type === 'error');
-    expect(err.error).toContain("does not hold 'rust'");
+    expect(err.error).toContain("does not hold 'thief'");
 
     // Still usable afterwards.
     send(ws, { type: 'ping' });

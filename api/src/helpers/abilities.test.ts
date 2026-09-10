@@ -36,7 +36,7 @@ describe('abilityMarks counts down like a move does', () => {
   it('charges the recharge marks when it fires', () => {
     // Decrement first, then the firing's cost, exactly as a chosen move is charged.
     const after = abilityMarks(load('quarantine', 'poker-face'), [[{ id: 'quarantine' }]]);
-    expect(after).toEqual({ quarantine: { marks: 3, available: false } });
+    expect(after).toEqual({ quarantine: { marks: 4, available: false } });
   });
 });
 

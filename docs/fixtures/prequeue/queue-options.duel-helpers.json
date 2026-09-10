@@ -39,11 +39,11 @@
       "label": "Quarantine",
       "section": "Major",
       "badge": "2 marks",
-      "description": "Secretly name a move. If they play it, it takes 2 extra marks.",
+      "description": "Name a move. If they play it, it takes 2 extra marks.",
       "load": {
         "kind": "ability",
         "opening": 0,
-        "recharge": 3
+        "recharge": 4
       },
       "locked": false
     },

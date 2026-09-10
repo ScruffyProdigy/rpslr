@@ -53,10 +53,15 @@ export const MARK_COST: Record<Tier, number> = { Major: 2, Minor: 1, Trinket: 0 
  * withheld until the round resolves; a `public` one is announced as it is fired,
  * which hands the seat it acts against something to answer.
  *
- * Only two of the six are secret out of necessity — Quarantine ("*if they play
- * it*") and Sacrifice (the wasted move is the cost). Rust, Thief and Freeze apply
- * whatever the opponent plays, so they would work identically in public. That they
- * are all secret today is a fact about this file, not about the engine.
+ * Sacrifice is the only card secret out of necessity: the cost is that they waste a
+ * move on a round already decided, which they would not do if told. Rust and Thief
+ * apply whatever the opponent plays, so they would work identically in public and
+ * are secret by convention rather than by function.
+ *
+ * Quarantine used to be listed here as the second necessity, on the argument that a
+ * name they can read is a name they dodge. That argument was backwards — dodging is
+ * the effect, and denying a live option outright beats collecting marks one time in
+ * three. It fires in public, and so does Freeze.
  *
  * Not the same axis as whether a firing needs a mid-round sub-phase. Oracle is
  * `secret` — its named move is hidden from the opponent until the round resolves —
@@ -116,11 +121,28 @@ const MAJORS = [
     load: PASSIVE, blurb: 'Your Lizard also beats Scissors, all match.' },
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
     load: PASSIVE, blurb: 'When you play Robot, the move they played takes an extra mark.' },
-  // Secret out of necessity: "if they play it" is only a threat while they cannot
-  // read the guess. An opponent who could would simply play something else.
+  // Public, and that is the card. An earlier draft called it "secret out of
+  // necessity" on the grounds that a name they can read is a name they dodge — but
+  // dodging *is* the effect. A move they will not play is a move denied, and a live
+  // option denied for a round is worth 0.383 outright, where the secret version
+  // collects 2 marks one time in three, or 0.255. Naming out loud is the stronger
+  // half as well as the more interesting one, so the card is priced on it.
+  //
+  // What it buys is a decision about *when*. `disclosedFirings` publishes a public
+  // firing the moment it happens, so firing before they commit deters — they pick
+  // knowing — while firing after they lock only forces a re-pick in the rounds they
+  // had already chosen the named move, and `submitMove` locks the firer, so nothing
+  // is gained from watching them switch. Early is the strong line. That is a skill
+  // the card teaches by costing you when you get it wrong.
+  //
+  // Recharge 4 rather than 3 is the whole of the reprice: 0.383 every third round is
+  // ~12.8pp against a 9-10pp target, every fourth is ~9.6pp. The magnitude cannot do
+  // this job — on a public card 2 marks is a credibility threshold rather than a
+  // value, so it is paid rarely and dropping it to 1 would stop the deterrence
+  // instead of shrinking it. Cadence is the only knob a public card has.
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
-    blurb: 'Secretly name a move. If they play it, it takes 2 extra marks.' },
+    load: { kind: 'ability', opening: 0, recharge: 4 }, reveal: 'public',
+    blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
   // `secret` on this axis and still sub-phased on the other: the move it names is
   // hidden from the opponent until the round resolves, and the window it opens is
   // for its own holder. The two questions are separate — see `Reveal`.

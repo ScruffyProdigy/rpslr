@@ -125,7 +125,7 @@ describe('helper roster', () => {
       }),
     );
     expect(marks).toEqual({
-      quarantine: '0/3',
+      quarantine: '0/4',
       oracle: '0/3',
       // +1 mark on a 4-mark recharge is ~9.6pp; it was +2 on 3, which is ~26pp.
       rust: '0/4',
@@ -147,7 +147,7 @@ describe('helper roster', () => {
     }
   });
 
-  it('fires Freeze in public and the rest in secret', () => {
+  it('fires Quarantine and Freeze in public, and the rest in secret', () => {
     // JQ-235 built the field and left every card secret, calling the first public
     // card a per-card balance decision. JQ-209 took it for Freeze: the card is worth
     // ~2 marks a firing whoever can see it, so cutting the effect would have made it
@@ -157,14 +157,20 @@ describe('helper roster', () => {
     // an earlier draft of this comment claimed — so it costs a mid-round pause, and
     // once per match is what keeps that affordable.
     //
-    // Quarantine and Sacrifice cannot follow it: both are secret out of necessity,
-    // since a named move that can be dodged collects nothing and a declared draw the
-    // opponent can see is not a wasted move. Rust and Thief could, and have not been.
+    // Quarantine joined it, and the argument that used to keep it secret — a named
+    // move they can read is a move they dodge — had the card backwards. Dodging is
+    // the effect: a live option denied for a round is 0.383, where collecting 2
+    // marks one time in three is 0.255. It is priced on the deterrent, which is why
+    // its recharge moved to 4 above.
+    //
+    // Sacrifice is the one card that genuinely cannot follow them: its cost is that
+    // the opponent wastes a move on a round already decided, which they would not do
+    // if told. Rust and Thief could, and have not been.
     const publicIds = HELPERS.filter((h) => firesInPublic(h.id)).map((h) => h.id);
-    expect(publicIds).toEqual(['freeze']);
-    for (const h of HELPERS.filter((h) => isAbility(h.load) && h.id !== 'freeze')) {
-      expect(h.reveal, h.id).toBe('secret');
-    }
+    expect(publicIds).toEqual(['quarantine', 'freeze']);
+    const secret = HELPERS.filter((h) => isAbility(h.load) && !firesInPublic(h.id));
+    expect(secret.map((h) => h.id)).toEqual(['oracle', 'sacrifice', 'rust', 'thief']);
+    for (const h of secret) expect(h.reveal, h.id).toBe('secret');
   });
 
   it('makes the blurb agree with the field, so card text cannot lie about it', () => {

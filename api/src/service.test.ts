@@ -478,12 +478,14 @@ describe('GameService — ability firings', () => {
   }
 
   it('withholds a firing from the round still being played', async () => {
+    // Rust is the secret exemplar since JQ-209 made Quarantine public. Any card with
+    // a target and `reveal: 'secret'` does this job; Quarantine no longer can.
     const { code, matchId, seatId } = await playingMatch();
     await repo.recordAbilityFiring({
       matchId,
       seatId,
       round: 1,
-      helperId: 'quarantine',
+      helperId: 'rust',
       target: 'rock',
       source: null,
     });
@@ -530,6 +532,10 @@ describe('GameService — ability firings', () => {
     });
 
     await service.submitMove(code, hostId, 'paper');
+    await service.submitMove(code, challengerId, 'rock');
+    // Quarantine fires in public since JQ-209, so the seat it names is handed the
+    // round's window. Standing on Rock is what walks into the marks — which is the
+    // point of the card being answerable: the marks land on a choice, not a guess.
     await service.submitMove(code, challengerId, 'rock');
 
     const state = await service.getState(code);
@@ -790,21 +796,23 @@ describe('GameService — firing an ability', () => {
   });
 
   it('withholds an unresolved firing from the state, and discloses it once the round resolves', async () => {
+    // The seats are the other way round since JQ-209: Alice holds the secret card,
+    // because a fired Quarantine is disclosed at once now and would not be withheld.
     const { code, alice, bob } = await helpersMatch(
-      ['quarantine', 'poker-face'],
       ['rust', 'poker-face'],
+      ['quarantine', 'poker-face'],
     );
-    await service.fireAbility(code, alice, { helperId: 'quarantine', target: 'rock' });
+    await service.fireAbility(code, alice, { helperId: 'rust', target: 'scissors' });
 
     const midRound = await service.getState(code, bob);
     expect(midRound.abilityFirings).toEqual([]);
     // Bob is told about his own charge and nothing about Alice's.
-    expect(Object.keys(midRound.abilities)).toEqual(['rust']);
+    expect(Object.keys(midRound.abilities)).toEqual(['quarantine']);
 
     // Both hold a scissors-binding Major, so both open with scissors on cooldown.
     const resolved = await playRound(code, alice, 'rock', bob, 'rock');
     expect(resolved.abilityFirings).toEqual([
-      { round: 1, seatKey: '1', helperId: 'quarantine', target: 'rock', source: null },
+      { round: 1, seatKey: '1', helperId: 'rust', target: 'scissors', source: null },
     ]);
   });
 });
@@ -1374,14 +1382,15 @@ describe('GameService — Oracle', () => {
   });
 
   it('leaves every other loadout resolving through the unchanged path', async () => {
-    const { code, alice, bob } = await oracleMatch(['quarantine', 'poker-face']);
-    // Bob fires Quarantine — not Oracle, so it reveals him nothing, and secret, so
-    // it hands Alice nothing to answer. His round resolves the moment both are in,
-    // with no sub-phase between. Freeze used to stand here and no longer can: it
-    // fires in public since JQ-209, which is itself a route into the window.
-    await service.fireAbility(code, bob, { helperId: 'quarantine', target: 'rock' });
+    const { code, alice, bob } = await oracleMatch(['rust', 'poker-face']);
+    // Bob fires Rust — not Oracle, so it reveals him nothing, and secret, so it
+    // hands Alice nothing to answer. His round resolves the moment both are in, with
+    // no sub-phase between. Freeze stood here once and Quarantine after it; JQ-209
+    // made both public, and a public firing is itself a route into the window. Rust
+    // and Thief are what is left, which is worth knowing if this test moves again.
+    await service.fireAbility(code, bob, { helperId: 'rust', target: 'paper' });
     await service.submitMove(code, alice, 'rock');
-    // Quarantine binds Bob's scissors, so he plays a move he actually has.
+    // Rust binds Bob's scissors, so he plays a move he actually has.
     const state = await service.submitMove(code, bob, 'lizard');
 
     expect(state.results).toHaveLength(1);
