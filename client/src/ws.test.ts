@@ -95,4 +95,41 @@ describe('connectMatchSocket', () => {
       JSON.stringify({ type: 'move', playerId: 'player-a', move: 'rock', round: 3 }),
     );
   });
+
+  it('sends a firing as its own message, naming its round (JQ-221)', () => {
+    // Its own message rather than a field on `move`, because a firing may precede
+    // the pick it hedges against — and Oracle has to fire, reveal, and only then
+    // be picked against.
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {} });
+    FakeSocket.instances[0].open();
+    socket.sendFire('player-a', { helperId: 'thief', source: 'rock', target: 'paper' }, 3);
+
+    expect(FakeSocket.instances[0].sent).toContain(
+      JSON.stringify({
+        type: 'fire',
+        playerId: 'player-a',
+        helperId: 'thief',
+        target: 'paper',
+        source: 'rock',
+        round: 3,
+      }),
+    );
+  });
+
+  it('omits the moves an ability does not name, rather than sending nulls', () => {
+    // `namedMovesFor` refuses a target an ability has no use for — "'freeze'
+    // takes no target" — and a null would be one.
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {} });
+    FakeSocket.instances[0].open();
+    socket.sendFire('player-a', { helperId: 'freeze', source: null, target: null }, 2);
+
+    expect(FakeSocket.instances[0].sent).toContain(
+      JSON.stringify({ type: 'fire', playerId: 'player-a', helperId: 'freeze', round: 2 }),
+    );
+  });
+
+  it('reports a closed socket so the caller falls back to REST', () => {
+    const socket = connectMatchSocket('RPS-1234', 'player-a', { onState: () => {} });
+    expect(socket.sendFire('player-a', { helperId: 'freeze' }, 1)).toBe(false);
+  });
 });

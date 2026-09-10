@@ -8,11 +8,13 @@ import {
   type Seat,
   type StatusResponse,
 } from './api';
+import { AbilityRail, type FiringChoice } from './components/AbilityRail';
 import { History } from './components/History';
 import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
+import { SubPhasePrompt } from './components/SubPhasePrompt';
 import { RoundTimer } from './components/RoundTimer';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
@@ -83,7 +85,10 @@ export default function App() {
         if (s.match.externalMatchId) setExternalMatchId(s.match.externalMatchId);
       })
       .catch(() => {});
-  }, [lobbyLink.matchId]);
+    // Runs once. `lobbyLink` is module scope — read from `window.location.search`
+    // at import — so `lobbyLink.matchId` cannot change between renders, and naming
+    // it here claimed a reactivity it never had.
+  }, []);
 
   return (
     <div className="app">
@@ -354,8 +359,16 @@ function Game({
 
   async function play(move: Move) {
     if (!myPlayerId || !state || !ref) return;
-    if (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove) return;
+    // The double-commit guard has to stay for the pick phase, so the sub-phase
+    // re-pick is an explicit exception rather than a loosening of it: an entitled
+    // seat's move is *replaced* there, and re-sending the one they had is how they
+    // say "keep it".
+    const repicking = mayRepick(state);
+    if (!repicking && (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove)) return;
     setError(null);
+    // Otherwise the picker would keep showing the pick being replaced: the locked
+    // move wins over the pending one when the board decides what you chose.
+    if (repicking) setLockedMove(null);
     setPendingMove(move);
     const round = state.match.currentRound;
     const sent = socketRef.current?.sendMove(myPlayerId, move, round);
@@ -369,6 +382,27 @@ function Game({
     } catch (err) {
       setPendingMove(null);
       if (!isLateMoveConflict((err as Error).message)) setError((err as Error).message);
+    }
+  }
+
+  /**
+   * Spend a charge on the round being played.
+   *
+   * Socket first with the REST route as fallback, exactly as `play` does — either
+   * path publishes to the opponent through the hub. Optimistic only in the one
+   * respect that matters for a second tap: the rail closes immediately, so the
+   * one-per-round rule is not left to a round-trip to enforce.
+   */
+  async function fire(choice: FiringChoice) {
+    if (!myPlayerId || !state || !ref) return;
+    setError(null);
+    const round = state.match.currentRound;
+    const sent = socketRef.current?.sendFire(myPlayerId, choice, round);
+    if (sent) return;
+    try {
+      setState(await api.fireAbility(ref, myPlayerId, { ...choice, round }));
+    } catch (err) {
+      setError((err as Error).message);
     }
   }
 
@@ -401,6 +435,7 @@ function Game({
         error={error}
         myChosenMove={myChosenMove}
         onPlay={play}
+        onFire={fire}
       />
     </>
   );
@@ -511,6 +546,55 @@ function isLateMoveConflict(message: string): boolean {
   );
 }
 
+/**
+ * Whether this viewer may replace their pick in the round's sub-phase.
+ *
+ * Every clause is load-bearing. `entitlement` is seat-private, so its presence is
+ * what separates a seat that may re-pick from one whose move `submitMove` refuses
+ * ("your move is locked while the round resolves"). The round check is why
+ * `Entitlement` carries a round: a claim that outlived its sub-phase must not
+ * reopen the next round's pick. And `acted` is the server's own record of having
+ * answered — inferred nowhere, because a seat that re-picked the move it already
+ * had is indistinguishable from one that has not answered.
+ */
+function mayRepick(state: MatchState): boolean {
+  const claim = state.entitlement;
+  return (
+    state.match.phase === 'react' &&
+    claim != null &&
+    claim.round === state.match.currentRound &&
+    !claim.acted
+  );
+}
+
+/**
+ * Why the round will not take a firing right now, or null when it will.
+ *
+ * Each reason is one the player can act on — wait, reconnect, watch the round
+ * out — which is why they are not collapsed into a single disabled flag. The
+ * The sub-phase case is not cosmetic: `fireAbility` refuses during it ("the round
+ * is already resolving" — non-cascading, or a public firing inside a window would
+ * open another and the round would never close), so the rail must not offer what
+ * the server will refuse, and must not blame the network for it.
+ */
+function firingUnavailable({
+  connected,
+  allSeated,
+  revealingNow,
+  match,
+}: {
+  connected: boolean;
+  allSeated: boolean;
+  revealingNow: boolean;
+  match: MatchState['match'];
+}): string | null {
+  if (!connected) return 'Reconnecting — you can fire once the board is back.';
+  if (!allSeated) return 'Waiting for your opponent.';
+  if (match.phase === 'react') return 'The round is resolving.';
+  if (revealingNow) return 'Wait for the round to finish.';
+  return null;
+}
+
 export function Board({
   myPlayerId,
   mySeatKey,
@@ -519,6 +603,7 @@ export function Board({
   error,
   myChosenMove,
   onPlay,
+  onFire,
 }: {
   myPlayerId: string;
   mySeatKey: string;
@@ -527,6 +612,7 @@ export function Board({
   error: string | null;
   myChosenMove: Move | null;
   onPlay: (move: Move) => void;
+  onFire?: (choice: FiringChoice) => void;
 }) {
   const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
   const roundDeadline = useRoundDeadline(state);
@@ -551,6 +637,10 @@ export function Board({
   const showRules = !finished && allSeated && match.currentRound <= 1;
   const myDelays = mySeat?.delays ?? {};
   const oppDelays = oppSeat?.delays ?? {};
+  // The holder may replace their pick; the opponent's stays locked while the
+  // round resolves, so the picker must not offer them a tap the server refuses.
+  const repicking = mayRepick(state);
+  const resolvingWithoutMe = match.phase === 'react' && !repicking;
   // Your last two picks, most recent first: explains exactly why each of your
   // moves is on cooldown, without inferring it from the mark count.
   const myRecentMoves = results
@@ -656,14 +746,21 @@ export function Board({
                 Opponent has locked in — pick your move!
               </p>
             )}
+            {resolvingWithoutMe && (
+              <p className="hint" role="status">
+                Both locked in — the round is resolving.
+              </p>
+            )}
           </div>
           <MovePicker
             myDelays={myDelays}
             oppDelays={oppDelays}
             myChosenMove={myChosenMove}
-            lockedIn={youMovedThisRound}
+            lockedIn={youMovedThisRound && !repicking}
             opponentLockedIn={opponentLockedIn}
-            disabled={!connected || !allSeated || youMovedThisRound || revealingNow}
+            disabled={
+              !connected || !allSeated || (youMovedThisRound && !repicking) || revealingNow
+            }
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             myOpeningDelays={myOpeningDelays}
@@ -689,11 +786,31 @@ export function Board({
               {error}
             </p>
           )}
+          {/* Below the pentagon, both of them. The board-status slot above it is
+              sized for a one-liner, and the tap surface must not move under a
+              thumb mid-decision — which is exactly when these appear. */}
+          <SubPhasePrompt
+            entitlement={state.entitlement}
+            round={match.currentRound}
+            myMove={state.currentRoundMoves[myPlayerId] ?? null}
+            onKeep={onPlay}
+          />
+          {onFire && !finished && (
+            <AbilityRail
+              loadout={mySeat?.loadout ?? null}
+              abilities={state.abilities}
+              myMarks={myDelays}
+              oppMarks={oppDelays}
+              unavailable={firingUnavailable({ connected, allSeated, revealingNow, match })}
+              onFire={onFire}
+            />
+          )}
         </div>
       )}
 
       <History
         results={results}
+        firings={state.abilityFirings}
         mySeatKey={mySeatKey}
         myPlayerId={myPlayerId}
         you={you}

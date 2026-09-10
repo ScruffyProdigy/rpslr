@@ -1,4 +1,5 @@
-import type { AbilityFiring } from '@game/types';
+import type { AbilityFiring, Entitlement } from '@game/types';
+import type { AbilityMap } from '@game/helpers/abilities';
 import type { Loadout } from '@game/helpers/loadout';
 import { getEnv } from './env';
 
@@ -21,7 +22,7 @@ export type MatchStatus = 'waiting' | 'playing' | 'finished';
  * Nothing here branches on it yet — the countdown reads the deadline rather than
  * the phase, so a sub-phase renders as a shorter clock — but the server can send
  * it, and a type that says otherwise is a lie waiting to be believed. The prompt
- * itself belongs with the ability HUD (JQ-221).
+ * itself is the ability HUD's (JQ-221) — see `SubPhasePrompt`.
  */
 export type Phase = 'pick' | 'react';
 /** How a match ended; everything but 'played' comes from the idle policy. */
@@ -115,6 +116,29 @@ export interface MatchState {
    */
   abilityFirings: AbilityFiring[];
   /**
+   * Where the *viewing* seat's own charges stand, per held ability.
+   *
+   * Seat-private, and the reason a snapshot is projected per viewer rather than
+   * broadcast as-is: a charge already spent this round reads unavailable here,
+   * and that difference is exactly the tell an opponent must not get. Empty for a
+   * viewer the server cannot identify — the REST state route among them — and for
+   * any seat holding no abilities, which is every seat in `duel`.
+   *
+   * The rail renders this and never recomputes it. A charge is the server's fold
+   * over the rounds; a second fold in the frontend is a second cooldown engine to
+   * keep in step (JQ-207's argument, for charges).
+   */
+  abilities: AbilityMap;
+  /**
+   * This seat's claim on the mid-round sub-phase while `match.phase` is `react`,
+   * or null when it has none.
+   *
+   * Seat-private like `abilities`. Carries its own round so a claim that outlived
+   * its sub-phase cannot be rendered, and `acted` so a seat that has already used
+   * its window is not offered it twice.
+   */
+  entitlement: Entitlement | null;
+  /**
    * The server's clock when this snapshot was built. The countdown is rendered
    * as an offset from this, never from the device clock, which may be far off.
    */
@@ -179,5 +203,18 @@ export const api = {
       // `round` keeps a move that arrives after its round resolved from being
       // recorded against the next one.
       body: JSON.stringify({ playerId, move, round }),
+    }),
+
+  // Spending a charge is a separate act from committing a move, so it is a
+  // separate route. The socket is the usual path; this is the same fallback a
+  // move has, and it publishes to the opponent through the hub either way.
+  fireAbility: (
+    ref: string,
+    playerId: string,
+    firing: { helperId: string; target?: Move | null; source?: Move | null; round: number },
+  ) =>
+    request<MatchState>(`/api/v1/matches/${ref}/fire`, {
+      method: 'POST',
+      body: JSON.stringify({ playerId, ...firing }),
     }),
 };

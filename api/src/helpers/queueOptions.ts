@@ -16,7 +16,7 @@
  */
 
 import type { PreQueueGroup } from '../gameModes.js';
-import { HELPERS, MARK_COST, type Tier } from './roster.js';
+import { HELPERS, MARK_COST, type Load, type Tier } from './roster.js';
 
 /** One entry in the roster body. Field names and order are the contract's. */
 export interface QueueOptionChoice {
@@ -25,6 +25,22 @@ export interface QueueOptionChoice {
   section: string;
   badge: string;
   description: string;
+  /**
+   * Whether the card carries a charge, and on what clock — the roster's own `Load`,
+   * passed through rather than flattened to a boolean.
+   *
+   * JQ-237 required this. Until then "no Major" meant "nothing to remember to use",
+   * so a player who wanted a simple first match picked Minor + Minor and was
+   * guaranteed one; now that a Minor may fire, zero-load is a property of the two
+   * cards actually picked and the picker has to be able to say so.
+   *
+   * The numbers ride along rather than a bare flag because the picker has wanted
+   * them since the roster was written — `opening` is why Sacrifice does nothing
+   * until round 4, which no blurb states and no player can otherwise learn before
+   * drafting it. Like `section` and `badge`, this is data for the lobby to render;
+   * nothing here teaches it what a mark is.
+   */
+  load: Load;
   /**
    * Always false here. `locking: "none"` — every helper is available to every
    * player, so a locked choice (which carries a requirement rather than vanishing,
@@ -56,6 +72,7 @@ export function helperChoices(): QueueOptionChoice[] {
     section: helper.tier,
     badge: badgeForTier(helper.tier),
     description: helper.blurb,
+    load: helper.load,
     locked: false,
   }));
 }

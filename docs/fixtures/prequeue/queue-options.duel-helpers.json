@@ -7,6 +7,9 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "When you play Rock, a loss becomes a draw.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -15,6 +18,9 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Your Lizard also beats Scissors, all match.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -23,6 +29,9 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "When you play Robot, the move they played takes an extra mark.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -31,6 +40,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly name a move. If they play it, it takes 2 extra marks.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -39,6 +53,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly learn one live move they had not chosen, then re-pick.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -47,6 +66,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly declare the round a draw before picking, and clear all your marks.",
+      "load": {
+        "kind": "ability",
+        "opening": 3,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -55,6 +79,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly add 2 marks to a move they currently have live.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -63,6 +92,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly move one mark from one of your moves onto one of theirs.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -71,6 +105,11 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "Secretly stop their marks decrementing this round.",
+      "load": {
+        "kind": "ability",
+        "opening": 0,
+        "recharge": 3
+      },
       "locked": false
     },
     {
@@ -79,6 +118,9 @@
       "section": "Major",
       "badge": "2 marks",
       "description": "The first round you lose is a draw instead.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -87,6 +129,9 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "On a drawn round, their move takes an extra mark and yours doesn't.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -95,6 +140,9 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "A Scissors mirror is a win for you, not a draw.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -103,6 +151,9 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "The move that beat you last round takes an extra mark for them.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -111,6 +162,9 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "Your winning move takes 3 marks; your losing move takes 1.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -119,6 +173,9 @@
       "section": "Minor",
       "badge": "1 mark",
       "description": "Your Lizard takes 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -127,6 +184,9 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "The opponent is never told you have locked in.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -135,6 +195,9 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "The first round you lose, the move that beat you takes an extra mark.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -143,6 +206,9 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "On a drawn round, your move takes 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -151,6 +217,9 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "Your first move of the match takes 1 mark instead of 2.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -159,6 +228,9 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "You are shown which move the opponent has played most this match.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     },
     {
@@ -167,8 +239,10 @@
       "section": "Trinket",
       "badge": "Free",
       "description": "You are shown the opponent's cooldowns as they will stand next round.",
+      "load": {
+        "kind": "passive"
+      },
       "locked": false
     }
   ]
 }
-

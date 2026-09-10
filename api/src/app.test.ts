@@ -357,7 +357,7 @@ describe('GET /api/v1/players/:lobbyUserId/queue-options', () => {
     expect(serialize(res.body)).toBe(serialize(prequeueFixture('queue-options.duel-helpers')));
   });
 
-  it('carries id, label, section, badge, description and locked on every choice', async () => {
+  it('carries id, label, section, badge, description, load and locked on every choice', async () => {
     const res = await request(buildApp())
       .get('/api/v1/players/u_1/queue-options')
       .query({ modeKey: 'duel-helpers' });
@@ -368,9 +368,13 @@ describe('GET /api/v1/players/:lobbyUserId/queue-options', () => {
         'section',
         'badge',
         'description',
+        // JQ-237: whether this card carries a charge, and on what clock. Zero-load
+        // stopped being something a tier could promise once a Minor could fire.
+        'load',
         'locked',
       ]);
       expect(choice.locked).toBe(false);
+      expect(choice.load.kind).toMatch(/^(passive|ability)$/);
     }
   });
 
