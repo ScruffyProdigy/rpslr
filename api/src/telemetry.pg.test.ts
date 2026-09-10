@@ -81,6 +81,11 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     // Helpers are chosen for what they do NOT do: none of these change how a round
     // resolves, so the outcomes are the plain RPSLR ones and the arithmetic in the
     // assertions is about the views rather than about the cards.
+    //
+    // Quarantine is the one that changes the round's *shape* rather than its result.
+    // Since JQ-209 it fires in public, so the seat it names is handed the round's
+    // window and the round waits on them — hence the extra `submitMove` in A and B.
+    // Each stands on the move it already had, so both outcomes are what they were.
 
     // A: Quarantine + Copycat beats Oracle + Watchful, and the named move lands.
     const a = await service.createStandaloneMatch({
@@ -100,6 +105,8 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     });
     await service.submitMove(a.state.match.code, a.you.playerId, 'rock');
     await service.submitMove(a.state.match.code, aJoin.you.playerId, 'scissors');
+    // Bob answers the public firing by standing on Scissors, so the name still lands.
+    await service.submitMove(a.state.match.code, aJoin.you.playerId, 'scissors');
 
     // B: the same loadout wins again, and this time Quarantine names the wrong move.
     const b = await service.createStandaloneMatch({
@@ -118,6 +125,8 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       target: 'paper',
     });
     await service.submitMove(b.state.match.code, b.you.playerId, 'rock');
+    await service.submitMove(b.state.match.code, bJoin.you.playerId, 'lizard');
+    // Dan answers it too; Paper was never his move, so the name still misses.
     await service.submitMove(b.state.match.code, bJoin.you.playerId, 'lizard');
 
     // C: a mirror. Someone wins it, and it still tells us nothing about the loadout.
