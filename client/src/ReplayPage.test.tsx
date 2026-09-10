@@ -196,8 +196,11 @@ describe('<ReplayPage> commentary', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
+    // Auto-play starts from an effect that runs a commit *after* the match
+    // renders, so the transport still reads Play at the moment 'Ana' appears
+    // (JQ-213). Wait for the button to say Pause rather than for the names.
     // Paused, so the round is read rather than watched and shows all at once.
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     expect(
       screen.getByText(
@@ -233,9 +236,13 @@ describe('<ReplayPage> commentary', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(finishedState());
     const { container } = render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
+    // The empty line is only true *while* the replay is playing, and playing
+    // begins one commit after the match renders — so the Pause button is what
+    // says the reveal is under way, not the players' names (JQ-213).
+    const pause = await screen.findByRole('button', { name: 'Pause' });
 
     expect(container.querySelector('.replay-commentary__line')).toHaveTextContent('');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await userEvent.click(pause);
     expect(container.querySelector('.replay-commentary__line')).toHaveTextContent(
       /Ana plays Rock/,
     );
@@ -276,7 +283,9 @@ describe('<ReplayPage> first-visit rules', () => {
     await screen.findByText('Ana');
     await waitFor(() => expect(container.querySelector('.htp-dialog')).toBeInTheDocument());
 
-    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    // Same one-commit gap as JQ-213: the rules dialog is up before auto-play
+    // has been switched on, so the transport is waited for rather than read.
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous round' })).toBeDisabled();
   });
 });
