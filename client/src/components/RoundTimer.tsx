@@ -40,8 +40,8 @@ export function RoundTimer({ deadline }: { deadline: RoundDeadline }) {
   if (secondsLeft === null) return null;
 
   // Below a quarter of the allowance, and always in the last five seconds —
-  // five is urgent whatever the allowance, and a quarter of round 1's 45s is
-  // still 11s, which is too late to be the only warning.
+  // five is urgent whatever the allowance, and a quarter of round 1's 60s is
+  // still 15s, which is too late to be the only warning.
   const urgent =
     secondsLeft <= 5 || (totalSeconds !== null && secondsLeft <= Math.ceil(totalSeconds / 4));
   const critical = secondsLeft <= 5;

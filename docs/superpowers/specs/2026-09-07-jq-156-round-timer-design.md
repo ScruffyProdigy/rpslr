@@ -32,20 +32,26 @@ loses players.
 | Question | Decision |
 | --- | --- |
 | Expiry policy | Escalating: auto-pick first, forfeit on the second consecutive miss |
-| Round allowance | 20s of thinking time, plus the 3.2s reveal hold on rounds 2+; 45s for round 1 |
+| Round allowance | 20s of thinking time, plus the 3.2s reveal hold on rounds 2+; 60s for round 1 |
 | Forfeit trigger | 2 consecutive expiries, **or** 45s disconnected |
 | Auto-picked move | Uniformly random among that player's live moves |
 
 **Why escalating.** One missed round is usually a tab-switch, not a departure;
 ending the match on it is disproportionate. Two in a row is a departure. A
-no-show therefore resolves in roughly 45 + 20 ≈ 65s, which is bounded enough
+no-show therefore resolves in roughly 60 + 20 ≈ 80s, which is bounded enough
 that waiting feels finite.
 
-**Why 45s for round 1.** The how-to-play panels open themselves over the board on
+**Why a longer round 1.** The how-to-play panels open themselves over the board on
 a player's first match ever (JQ-96). They are ~850px of content in a 775px box
 on a phone and the graph steps a move every 2.5s, so a thorough first read is
 plausibly 30s. Round 1 is read-time plus decide-time; later rounds are only a
 two-tap pick.
+
+> **Amended 2026-09-10:** round 1 was raised from 45s to 60s. A thorough first
+> read plus a first-ever pick was landing uncomfortably close to the old
+> allowance, and being generous here costs a slower no-show rather than a worse
+> game. Every figure in this document reflects the new value. The caveat below
+> is unchanged, and so is the reasoning above it.
 
 This is currently safe only because matchmaking is expected to pair newcomers
 with newcomers. **The assumption stops holding the moment a newcomer can be
@@ -53,6 +59,15 @@ matched against a veteran** — at that point round 1's allowance needs revisiti
 and the sharper fix is to start the round-1 clock when the rules panel closes
 (with a ceiling), which was considered and rejected here for putting a
 client-reported event in charge of a server-authoritative deadline.
+
+**Which limit bites first.** The disconnect grace (45s) sits between the two pick
+allowances — longer than rounds 2+ (23.2s), shorter than round 1 (60s) — so which
+limit ends a silent player's match depends on the round and on whether their
+socket is still open. `decidePenalty` checks the grace before the deadline, so a
+player who has *dropped* during round 1 forfeits on the grace at 45s rather than
+ever reaching their 60s pick deadline. That ordering is deliberate: a socket gone
+45s is absent rather than slow, whatever phase happens to be running. A player who
+is merely slow — still connected — always gets the whole allowance.
 
 **Why the reveal hold is added rather than charged.** The client replays the
 previous round's showdown for 3.2s (`REVEAL_HOLD_MS` + `REVEAL_OUTRO_MS`) with

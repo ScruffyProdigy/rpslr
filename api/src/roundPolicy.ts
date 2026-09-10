@@ -54,7 +54,7 @@ export interface RoundPolicy {
  * over the board on a player's first match ever (JQ-96), and a thorough first
  * read is plausibly 30s. Later rounds only have to cover a two-tap pick.
  */
-const FIRST_ROUND_MS = 45_000;
+const FIRST_ROUND_MS = 60_000;
 const LATER_ROUND_MS = 20_000;
 
 /**
