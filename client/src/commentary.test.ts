@@ -718,36 +718,48 @@ describe('commentary at a helpers match', () => {
  *
  * Ben brought Rust and Freeze, which is the pair that drives a board past the
  * point `delays[m] === 0` can read. Both open charged and recharge on 3, so
- * they fire together in rounds 1 and 4: Freeze stops Ana's marks coming off at
- * the end of the round, Rust puts two more on a move she still had live, and
- * her own picks add two a round on top. By round 5 she is down to a single
- * playable move, and by round 6 every one of the five carries a mark and the
- * floor is the only thing giving her a hand at all.
+ * Rebuilt by JQ-209, which repriced the two cards that used to produce it. Rust
+ * added two marks a firing on a three-mark recharge and Freeze recharged at all;
+ * between them they could bury a board twice in six rounds, which is exactly the
+ * ~26pp each was found to be worth. Neither can now, so the floor is reached the
+ * way the game intends instead: by accumulation.
+ *
+ * Ana carries Echo Chamber, so every drawn round costs her an extra mark of her
+ * own; Ben's Quarantine names her pick in rounds 1 and 4 and lands both, adding two
+ * more each time; and five drawn rounds mean she pays for a pick every round with
+ * nothing coming back. Ben's Freeze then holds the whole board for round 5 — once
+ * per match now, so its timing is the decision. By round 5 she is down to a single
+ * playable move, and by round 6 every one of the five carries a mark and the floor
+ * is the only thing giving her a hand at all.
  *
  * Scripted rather than mutated. The frames come from `buildReplay` over the
  * engine's own reconstruction, so this is a board the server can actually
  * arrive at, and every move in it is one `availableMoves` would have allowed.
  */
 const FLOOR_SEATS = (): Seat[] => [
-  seat(0, 'a', 'pa', 'Ana'),
-  seat(1, 'b', 'pb', 'Ben', ['rust', 'freeze']),
+  seat(0, 'a', 'pa', 'Ana', ['echo-chamber', 'bookend']),
+  seat(1, 'b', 'pb', 'Ben', ['quarantine', 'freeze']),
 ];
 
 const FLOOR_ROUNDS = [
   round(1, 'rock', 'rock', 'draw'),
   round(2, 'paper', 'paper', 'draw'),
   round(3, 'scissors', 'scissors', 'draw'),
-  round(4, 'rock', 'rock', 'draw'),
-  round(5, 'lizard', 'paper', 'a'),
-  round(6, 'rock', 'scissors', 'a'),
+  round(4, 'lizard', 'lizard', 'draw'),
+  round(5, 'robot', 'robot', 'draw'),
+  round(6, 'paper', 'rock', 'a'),
+  round(7, 'rock', 'scissors', 'a'),
 ];
 
-/** Rust names a move Ana still had live; Freeze needs no target. */
+/**
+ * Quarantine names the move Ana is about to play and lands both times — a hit is
+ * two marks, and its three-mark recharge puts it in rounds 1 and 4. Freeze needs no
+ * target and comes once per match, spent in round 5 where it does the most.
+ */
 const FLOOR_FIRINGS: AbilityFiring[] = [
-  { round: 1, seatKey: 'b', helperId: 'rust', target: 'robot', source: null },
-  { round: 1, seatKey: 'b', helperId: 'freeze', target: null, source: null },
-  { round: 4, seatKey: 'b', helperId: 'rust', target: 'paper', source: null },
-  { round: 4, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+  { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
+  { round: 4, seatKey: 'b', helperId: 'quarantine', target: 'lizard', source: null },
+  { round: 5, seatKey: 'b', helperId: 'freeze', target: null, source: null },
 ];
 
 const floorReplay = (): Replay =>
@@ -759,23 +771,22 @@ describe('commentary under the floor (JQ-234)', () => {
     // stops this match reaching the floor, the tests below stop testing anything
     // and should say so here rather than quietly passing.
     const frames = floorReplay().frames;
-    expect(ALL_MOVES.filter((m) => isPlayable(m, frames[4].a.delaysBefore))).toEqual(['lizard']);
+    expect(ALL_MOVES.filter((m) => isPlayable(m, frames[4].a.delaysBefore))).toEqual(['robot']);
     expect(ALL_MOVES.every((m) => frames[5].a.delaysBefore[m] > 0)).toBe(true);
+    // Rock and Paper sit on one mark each and everything else is deeper, so the
+    // floor hands her the two shallowest rather than nothing.
     expect(ALL_MOVES.filter((m) => isPlayable(m, frames[5].a.delaysBefore))).toEqual([
       'rock',
-      'scissors',
-      'robot',
+      'paper',
     ]);
   });
 
   it('values a round pinned to one move instead of reading it as an empty hand', () => {
     // `delays[m] === 0` called Ana's round-5 hand empty, and the solver it fed
-    // threw on the way past. The hand is Lizard, and the round has a value.
+    // threw on the way past. The hand is Robot, and the round has a value.
     const replay = floorReplay();
     expect(() => calloutsFor(replay.frames[4], replay)).not.toThrow();
-    expect(narrate(replay, 5)).toBe(
-      'Ana plays Lizard, Ben plays Paper — Lizard eats Paper. Ana leads 1–0.',
-    );
+    expect(narrate(replay, 5)).toBe('Both play Robot — no winner. No score yet.');
   });
 
   it('projects a fully-marked hand as the moves the floor leaves, not as nothing', () => {
@@ -784,7 +795,7 @@ describe('commentary under the floor (JQ-234)', () => {
     // number that passes every gate below without meaning anything.
     const ahead = lookahead(floorReplay().frames[4]);
     expect(ALL_MOVES.every((m) => ahead.a[m] > 0)).toBe(true);
-    expect(ahead.value).toBeCloseTo(-1 / 3);
+    expect(ahead.value).toBeCloseTo(0);
   });
 
   it('says something checkable about every round of it, and nothing infinite', () => {

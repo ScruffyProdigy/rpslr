@@ -714,8 +714,8 @@ describe('GameService — firing an ability', () => {
     const state = await playRound(code, alice, 'rock', bob, 'paper');
 
     expect(state.results[0].outcome).toBe('2');
-    // Bob's lizard: 2 entering, decremented to 1, then Rust's 2 on top.
-    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 0, lizard: 3, robot: 0 });
+    // Bob's lizard: 2 entering, decremented to 1, then Rust's 1 on top.
+    expect(state.seats[1].delays).toEqual({ rock: 0, paper: 2, scissors: 0, lizard: 2, robot: 0 });
     expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 1, lizard: 0, robot: 0 });
   });
 
@@ -745,7 +745,11 @@ describe('GameService — firing an ability', () => {
     await playRound(code, alice, 'rock', bob, 'paper');
 
     await service.fireAbility(code, alice, { helperId: 'freeze' });
-    const state = await playRound(code, alice, 'paper', bob, 'rock');
+    // Freeze fires in public since JQ-209, so Bob is handed the round's sub-phase to
+    // answer it. He stands on the pick he already made; the round resolves on that.
+    await service.submitMove(code, alice, 'paper');
+    await service.submitMove(code, bob, 'rock');
+    const state = await service.submitMove(code, bob, 'rock');
 
     // Bob's marks did not come off this round: scissors held at 1 and paper at 2,
     // where an unfrozen round would have left 0 and 1.
@@ -756,7 +760,8 @@ describe('GameService — firing an ability', () => {
     // than at firing time.
     expect(state.abilities).toEqual({ rust: { marks: 0, available: true } });
     const asAlice = await service.getState(code, alice);
-    expect(asAlice.abilities).toEqual({ freeze: { marks: 3, available: false } });
+    // `recharge: null` is once per match, so a fired Freeze never comes back.
+    expect(asAlice.abilities).toEqual({ freeze: { marks: null, available: false } });
   });
 
   it("resolves a Sacrificed round as a draw and clears only the firing seat's marks", async () => {
@@ -876,15 +881,17 @@ describe('GameService — two charged abilities in one round', () => {
     await service.submitMove(code, alice, 'rock');
     const state = await service.submitMove(code, bob, 'rock');
 
-    // Bob's scissors: 2 entering, 1 after the decrement, +2 from Rust and +1 from
-    // Thief. Three marks from one round, which is the point of bringing two cards.
-    expect(state.seats[1].delays).toEqual({ rock: 2, paper: 0, scissors: 4, lizard: 0, robot: 0 });
+    // Bob's scissors: 2 entering, 1 after the decrement, +1 from Rust and +1 from
+    // Thief. Two marks from one round, which is the point of bringing two cards.
+    expect(state.seats[1].delays).toEqual({ rock: 2, paper: 0, scissors: 3, lizard: 0, robot: 0 });
     // Thief's own half landed too: Alice's lizard went 2 → 1 → 0.
     expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 1, lizard: 0, robot: 0 });
-    // Both charges are spent, each on its own recharge.
+    // Both charges are spent, each on its own recharge — which JQ-209 made a real
+    // distinction rather than two cards reading 3. Rust comes back on 4, Thief on 6,
+    // so a seat holding both desyncs after the first double round.
     expect((await service.getState(code, alice)).abilities).toEqual({
-      rust: { marks: 3, available: false },
-      thief: { marks: 3, available: false },
+      rust: { marks: 4, available: false },
+      thief: { marks: 6, available: false },
     });
   });
 
@@ -1342,7 +1349,21 @@ describe('GameService — Oracle', () => {
       acted: false,
     });
 
-    const state = await service.submitMove(code, alice, 'rock');
+    // Alice acting does not end the round any more: Freeze is public since JQ-209,
+    // so Bob holds the other half of the same sub-phase — one window, two seats
+    // entitled for different reasons. Oracle told Alice something; Freeze handed Bob
+    // something to answer.
+    const midway = await service.submitMove(code, alice, 'rock');
+    expect(midway.match.phase).toBe('react');
+    expect((await service.getState(code, bob)).entitlement).toEqual({
+      round: 1,
+      reveals: [],
+      incoming: [{ helperId: 'freeze', target: null }],
+      acted: false,
+    });
+
+    // Bob's scissors is Rust-bound and on 2, so he stands on the pick he made.
+    const state = await service.submitMove(code, bob, 'rock');
     expect(state.match.phase).toBe('pick');
     expect(state.abilityFirings).toEqual([
       { round: 1, seatKey: '1', helperId: 'oracle', target: 'paper', source: null },
@@ -1353,12 +1374,15 @@ describe('GameService — Oracle', () => {
   });
 
   it('leaves every other loadout resolving through the unchanged path', async () => {
-    const { code, alice, bob } = await oracleMatch(['freeze', 'poker-face']);
-    // Bob fires Freeze, which is not Oracle: his round resolves the moment both
-    // are in, with no sub-phase between.
-    await service.fireAbility(code, bob, { helperId: 'freeze' });
+    const { code, alice, bob } = await oracleMatch(['quarantine', 'poker-face']);
+    // Bob fires Quarantine — not Oracle, so it reveals him nothing, and secret, so
+    // it hands Alice nothing to answer. His round resolves the moment both are in,
+    // with no sub-phase between. Freeze used to stand here and no longer can: it
+    // fires in public since JQ-209, which is itself a route into the window.
+    await service.fireAbility(code, bob, { helperId: 'quarantine', target: 'rock' });
     await service.submitMove(code, alice, 'rock');
-    const state = await service.submitMove(code, bob, 'scissors');
+    // Quarantine binds Bob's scissors, so he plays a move he actually has.
+    const state = await service.submitMove(code, bob, 'lizard');
 
     expect(state.results).toHaveLength(1);
     expect(state.match.currentRound).toBe(2);
