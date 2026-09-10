@@ -98,6 +98,31 @@ FROM v_match_telemetry GROUP BY game_mode;
 SELECT end_reason, COUNT(*) FROM v_match_telemetry GROUP BY end_reason;
 ```
 
+### Pacing (JQ-262)
+
+The mid-round sub-phase is a pause in a game built on simultaneous commitment, so
+how often it happens is a budget. The written answer and the trigger to act on it
+are in `docs/superpowers/specs/2026-09-10-jq-262-sub-phase-pacing-budget.md`; the
+short version is **a third of a match's rounds may pause**, measured as the median
+`paused_round_share`.
+
+```sql
+-- The number the pacing decision is written against. Median, not mean: the line
+-- that breaks the budget is a deliberate outlier and a mean would let it drag.
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY paused_round_share)
+FROM v_sub_phase_budget WHERE game_mode = 'duel-helpers';
+
+-- The distribution behind it. A long tail at 1.0 is the staggered line being
+-- played; a clump around 0.33 is greedy play, which is what the budget assumes.
+SELECT paused_round_share, COUNT(*)
+FROM v_sub_phase_budget WHERE game_mode = 'duel-helpers'
+GROUP BY paused_round_share ORDER BY paused_round_share;
+
+-- Which cards are buying the pauses — the lever, if the trigger ever fires.
+-- `firings` minus `rounds_paused` is charges spent that bought no pause at all.
+SELECT * FROM v_sub_phase_sources;
+```
+
 ## Running against a local database
 
 ```bash
@@ -118,8 +143,15 @@ psql "$(./scripts/db.sh url)" -c 'SELECT * FROM v_helper_pick_rate'
 | `v_shape_win_rate` | loadout shape |
 | `v_ability_firings` | one charge spent, with `target_hit` |
 | `v_charge_usage` | ability helper: brought vs fired |
+| `v_sub_phase_rounds` | one round that paused, with `from_reveal` / `from_public_firing` |
+| `v_sub_phase_budget` | one finished match: `sub_phases`, causes, `paused_round_share` |
+| `v_sub_phase_sources` | window-opening helper: `firings` vs `rounds_paused` |
 
 `v_match_telemetry` assumes two seats per match, which is what `resolveDuelRound`
 already assumes. A mode with more seats would need it widened.
+
+The two cause columns on `v_sub_phase_rounds` are **not exclusive** — one round can
+hold both, and it is still one pause, because the rule is one sub-phase per round.
+Count rows for a pause count; never sum the causes.
 
 There is no dashboard, by design — these are the queries.
