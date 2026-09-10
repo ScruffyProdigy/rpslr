@@ -280,4 +280,56 @@ describe('the sub-phase, reached by a public firing rather than by a reveal', ()
       expect(state.match.currentRound).toBe(2);
     });
   });
+
+  /**
+   * JQ-262: does *when* a public ability is fired change whether it costs a pause?
+   *
+   * The pacing question assumed it did. `disclosedFirings` announces a public firing
+   * the moment it happens, while the phase is still `pick`, so the reasoning ran:
+   * fire early and the opponent hears it before committing, the ordinary pick phase
+   * absorbs the news, and no window is owed. Fire late and you concede one. On that
+   * reading the sub-phase budget is spent by misplay and needs no machinery.
+   *
+   * It is not what the service does. Entitlement is `entitlementsIn`, which asks
+   * only whether a public firing acted against this seat in this round — there is no
+   * clock in it, and `AbilityFiring` records no time to consult even if there were.
+   * Both orders below therefore open the window, and the budget is spent by design.
+   *
+   * Pinned rather than left implicit because the design question turns on it: these
+   * two tests are the ones that fail if anyone later makes entitlement conditional
+   * on firing order, which would be a real rules change and not an optimisation.
+   */
+  describe('firing order against the opponent’s commit', () => {
+    it('opens the window when the firing precedes the opponent’s commit', async () => {
+      // The earliest a firing can happen: nobody has picked yet, so Bob hears Rust
+      // named while he still has his whole pick phase to answer it in.
+      const { code, alice, bob } = await match();
+      await service.fireAbility(code, alice, { helperId: 'rust', target: 'scissors' });
+      expect((await service.getState(code, bob)).abilityFirings).toHaveLength(1);
+
+      await service.submitMove(code, alice, 'rock');
+      const state = await service.submitMove(code, bob, 'rock');
+
+      // Answered in advance and the window is owed anyway.
+      expect(state.match.phase).toBe('react');
+      expect(state.results).toEqual([]);
+      expect((await service.getState(code, bob)).entitlement).toMatchObject({
+        incoming: [{ helperId: 'rust', target: 'scissors' }],
+      });
+    });
+
+    it('opens the same window when the firing follows the opponent’s commit', async () => {
+      // The latest a firing can happen: Bob is locked in, and Alice fires knowing
+      // the round is one commit from resolving.
+      const { code, alice, bob } = await match();
+      await service.submitMove(code, bob, 'rock');
+      await service.fireAbility(code, alice, { helperId: 'rust', target: 'scissors' });
+      const state = await service.submitMove(code, alice, 'rock');
+
+      expect(state.match.phase).toBe('react');
+      expect((await service.getState(code, bob)).entitlement).toMatchObject({
+        incoming: [{ helperId: 'rust', target: 'scissors' }],
+      });
+    });
+  });
 });
