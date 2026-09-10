@@ -170,8 +170,17 @@ const MAJORS = [
   // This is the roster's first public firing, which the design doc asks for in as
   // many words: Rust, Thief and Freeze "apply regardless of what the opponent
   // plays, so they work identically in public" and are secret by convention rather
-  // than by function. It costs no sub-phase — a firing announced before the pick
-  // phase lands in a window the round already has. See `Reveal` above.
+  // than by function.
+  //
+  // It does cost a sub-phase, and an earlier draft of this comment claimed it did
+  // not. `entitlementsIn` hands the seat a public firing acts *against* the round's
+  // window, so the disclosure lands after both have committed rather than before —
+  // the design doc's third row, not its second. The ~11pp above is priced on that
+  // reading and stands: the discount comes from the opponent getting a reaction,
+  // and a mid-round re-pick is a reaction. What changes is the cost side. Every
+  // Freeze is a mid-round pause, and the doc is explicit that the budget for those
+  // is small. Once per match is what keeps it affordable, and a public card on a
+  // short recharge would not be. See `Reveal` above.
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
     load: { kind: 'ability', opening: 0, recharge: null }, reveal: 'public',
     blurb: 'Stop their marks decrementing this round.' },

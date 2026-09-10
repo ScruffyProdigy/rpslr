@@ -151,8 +151,11 @@ describe('helper roster', () => {
     // JQ-235 built the field and left every card secret, calling the first public
     // card a per-card balance decision. JQ-209 took it for Freeze: the card is worth
     // ~2 marks a firing whoever can see it, so cutting the effect would have made it
-    // Rust without a target. Being announced before anyone commits is what prices it
-    // instead, and it costs no sub-phase — the pick phase is already the window.
+    // Rust without a target. Being answerable is what prices it instead: the seat it
+    // acts against is handed the round's sub-phase and re-picks knowing its board is
+    // frozen. That is a reaction *after* commitment, not the pre-commit announcement
+    // an earlier draft of this comment claimed — so it costs a mid-round pause, and
+    // once per match is what keeps that affordable.
     //
     // Quarantine and Sacrifice cannot follow it: both are secret out of necessity,
     // since a named move that can be dodged collects nothing and a declared draw the
