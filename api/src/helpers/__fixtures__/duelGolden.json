@@ -2589,6 +2589,7 @@
         "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
+        "entitlement": null,
         "match": {
           "bestOf": 5,
           "code": "<code>",
@@ -2611,7 +2612,6 @@
           "winnerSeatKey": null
         },
         "matchWinnerSeatKey": null,
-        "oracle": null,
         "results": [
           {
             "autoPicked": [],
@@ -2686,6 +2686,7 @@
         "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
+        "entitlement": null,
         "match": {
           "bestOf": 5,
           "code": "<code>",
@@ -2708,7 +2709,6 @@
           "winnerSeatKey": null
         },
         "matchWinnerSeatKey": null,
-        "oracle": null,
         "results": [
           {
             "autoPicked": [],
@@ -2792,6 +2792,7 @@
         "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
+        "entitlement": null,
         "match": {
           "bestOf": 5,
           "code": "<code>",
@@ -2814,7 +2815,6 @@
           "winnerSeatKey": null
         },
         "matchWinnerSeatKey": null,
-        "oracle": null,
         "results": [
           {
             "autoPicked": [],
@@ -2907,6 +2907,7 @@
         "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
+        "entitlement": null,
         "match": {
           "bestOf": 5,
           "code": "<code>",
@@ -2929,7 +2930,6 @@
           "winnerSeatKey": null
         },
         "matchWinnerSeatKey": null,
-        "oracle": null,
         "results": [
           {
             "autoPicked": [],
@@ -3031,6 +3031,7 @@
         "abilities": {},
         "abilityFirings": [],
         "currentRoundMoves": {},
+        "entitlement": null,
         "match": {
           "bestOf": 5,
           "code": "<code>",
@@ -3053,7 +3054,6 @@
           "winnerSeatKey": "1"
         },
         "matchWinnerSeatKey": "1",
-        "oracle": null,
         "results": [
           {
             "autoPicked": [],
@@ -3165,6 +3165,7 @@
       "abilities": {},
       "abilityFirings": [],
       "currentRoundMoves": {},
+      "entitlement": null,
       "match": {
         "bestOf": 5,
         "code": "<code>",
@@ -3187,7 +3188,6 @@
         "winnerSeatKey": "1"
       },
       "matchWinnerSeatKey": "1",
-      "oracle": null,
       "results": [
         {
           "autoPicked": [],

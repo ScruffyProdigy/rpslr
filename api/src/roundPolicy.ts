@@ -15,11 +15,11 @@
  *
  * ## Why a *phase* deadline rather than a round deadline
  *
- * A round is not always one decision. `duel-helpers` has an Oracle sub-phase —
- * after both players lock in, a charge-holder who paid for it may re-pick before
- * the round resolves — and its draft screen will have a deadline of its own
- * before round 1. Keying the deadline to a phase is what let Oracle land without
- * touching a single existing call site.
+ * A round is not always one decision. `duel-helpers` has a mid-round sub-phase —
+ * after both players lock in, anyone entitled to it may re-pick before the round
+ * resolves — and its draft screen will have a deadline of its own before round 1.
+ * Keying the deadline to a phase is what let that land without touching a single
+ * existing call site.
  *
  * @see docs/superpowers/specs/2026-09-07-jq-156-round-timer-design.md
  */
@@ -27,11 +27,18 @@
 import { availableMoves, type DelayMap, type Move } from './game.js';
 
 /**
- * A timed segment of a match. `oracle` is the mid-round sub-phase JQ-150 adds —
- * between both-locked and resolve, and only when the Oracle holder has paid for
- * it. `duel-helpers` will add `draft` too, which is why this stays a union.
+ * A timed segment of a match.
+ *
+ * `react` is the mid-round sub-phase: between both-locked and resolve, and only
+ * when someone is entitled to it — an ability revealed something to its holder, or
+ * a public firing acted against them. It was called `oracle` when Oracle was its
+ * only member (JQ-150); JQ-239 generalised it, because the class is "information
+ * that reaches a player after their commitment and before the round resolves" and
+ * Oracle is one way in rather than the reason for the window.
+ *
+ * `duel-helpers` will add `draft` too, which is why this stays a union.
  */
-export type Phase = 'pick' | 'oracle';
+export type Phase = 'pick' | 'react';
 
 export interface RoundPolicy {
   /** How long a player has in this phase. Round 1 is deliberately longer. */
@@ -70,21 +77,22 @@ const LATER_ROUND_MS = 20_000;
 const REVEAL_DEAD_TIME_MS = 3_200;
 
 /**
- * Oracle's sub-phase: one narrow decision — keep the move you already chose, or
- * swap it for another live one — taken with the reveal already in hand. Shorter
- * than a pick because the thinking that a pick pays for has already happened,
- * and because the opponent is locked in and waiting through every second of it.
+ * The sub-phase: one narrow decision — keep the move you already chose, or swap it
+ * for another live one — taken with whatever prompted the window already in hand.
+ * Shorter than a pick because the thinking that a pick pays for has already
+ * happened, and because everyone entitled is deciding at the same moment while
+ * anyone who is not is locked in and waiting through every second of it.
  *
  * Round-independent: there is no first-round reading to do here, and no reveal
  * animation to sit through, so neither of the pick allowances' two adjustments
  * applies.
  */
-const ORACLE_MS = 12_000;
+const REACT_MS = 12_000;
 
 export const DUEL_POLICY: RoundPolicy = {
   allowanceMs: (phase, round) =>
-    phase === 'oracle'
-      ? ORACLE_MS
+    phase === 'react'
+      ? REACT_MS
       : round <= 1
         ? FIRST_ROUND_MS
         : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,

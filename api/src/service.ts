@@ -28,10 +28,12 @@ import {
   type PlayerRules,
 } from './game.js';
 import { chargesNow, slotsFor, type AbilityMap } from './helpers/abilities.js';
-import { nameUnplayedMove } from './helpers/oracle.js';
 import { viewSnapshotAs, type MatchSnapshot } from './matchView.js';
 import { rollFor } from './helpers/rules.js';
 import { uniformPicker } from './helpers/loadout.js';
+import { disclosedFirings } from './helpers/disclosure.js';
+import { informsItsHolder, revealDrawFor } from './helpers/reveals.js';
+import { firesInPublic } from './helpers/roster.js';
 import {
   boardsThroughMatch,
   firedIn,
@@ -62,10 +64,10 @@ import {
 } from './repository.js';
 import type {
   AbilityFiring,
+  Entitlement,
   Match,
   MatchEndReason,
   MatchState,
-  OracleReveal,
   RoundResult,
   Seat,
   SeatReservation,
@@ -387,6 +389,11 @@ export class GameService {
       match.status === 'playing'
         ? await this.repo.getMovesForRound(match.id, match.currentRound)
         : {};
+    // Only read while the window is open; outside it there is nothing to project.
+    const acted =
+      match.phase === REACT
+        ? await this.repo.listSubPhaseActions(match.id, match.currentRound)
+        : [];
     const submittedPlayerIds = Object.keys(rawRoundMoves);
     const need = winsNeeded(match.bestOf);
     // A forfeit ends a match without anyone scoring, so a recorded winner
@@ -406,24 +413,25 @@ export class GameService {
         submittedPlayerIds,
         currentRoundMoves: rawRoundMoves,
         matchWinnerSeatKey: match.winnerSeatKey ?? scoredWinner?.seatKey ?? null,
-        abilityFirings: resolvedFirings(firings, results),
+        abilityFirings: disclosedFirings(firings, new Set(results.map((r) => r.round))),
         abilities: {},
-        oracle: null,
+        entitlement: null,
         serverNow: new Date(this.now()).toISOString(),
       }),
       abilitiesByPlayerId: chargesByPlayerId(seats, results, firings, match.currentRound),
       movesByPlayerId: rawRoundMoves,
-      oracleByPlayerId: oracleByPlayerId(match, seats, firings),
+      entitlementByPlayerId: entitlementByPlayerId(match, seats, firings, acted),
     };
   }
 
   /**
    * Hide in-progress opponent moves; resolved rounds still expose both in `results`.
-   * `abilities` and `oracle` are emptied for the same reason and by the same hand —
-   * seat-private state is only ever added back by `viewSnapshotAs`, for that seat.
+   * `abilities` and `entitlement` are emptied for the same reason and by the same
+   * hand — seat-private state is only ever added back by `viewSnapshotAs`, for that
+   * seat.
    */
   private publicView(state: MatchState): MatchState {
-    return { ...state, currentRoundMoves: {}, abilities: {}, oracle: null };
+    return { ...state, currentRoundMoves: {}, abilities: {}, entitlement: null };
   }
 
   /** The shared view, for callers with no seat to view as (provisioning, mostly). */
@@ -493,13 +501,16 @@ export class GameService {
       );
     }
 
-    // Oracle's sub-phase: this is a re-pick, not a first pick. Both moves are
-    // already recorded, so the holder's is replaced rather than inserted, and the
-    // round resolves on the spot — re-sending the move they already had is how a
-    // holder says "keep it" without waiting out the clock.
-    if (match.phase === 'oracle') {
-      const holders = oracleHoldersIn(seats, firings, match.currentRound);
-      if (!holders.some((s) => s.seatKey === mySeat.seatKey)) {
+    // The sub-phase: this is a re-pick, not a first pick. Both moves are already
+    // recorded, so an entitled seat's is replaced rather than inserted, and
+    // re-sending the move they already had is how a player says "keep it" without
+    // waiting out the clock. A seat with no entitlement stays locked.
+    if (match.phase === REACT) {
+      const acted = new Set(
+        await this.repo.listSubPhaseActions(match.id, match.currentRound),
+      );
+      const entitlements = entitlementsIn(seats, firings, match.currentRound, acted);
+      if (!entitlements.has(mySeat.seatKey)) {
         throw new ConflictError('your move is locked while the round resolves');
       }
       await this.repo.replaceMove({
@@ -508,13 +519,21 @@ export class GameService {
         playerId,
         move: move as Move,
       });
-      // Both seats may hold Oracle — a loadout is per seat, and nothing stops the
-      // two matching. Then both are deciding in secret at the same time, and
-      // resolving on the first re-pick would both cut the other's sub-phase short
-      // and tell them, by the round simply ending, that their opponent had
-      // already moved. A mirror waits the clock out, which is the rule the pick
-      // phase runs on and for the same reason.
-      if (holders.length > 1) return this.publishState(match.id, playerId);
+      // Acting is written down rather than inferred, because a seat that re-picks
+      // the move it already had is indistinguishable from one that has not answered.
+      await this.repo.recordSubPhaseAction({
+        matchId: match.id,
+        seatId: mySeat.id,
+        round: match.currentRound,
+      });
+      acted.add(mySeat.seatKey);
+      // Simultaneous, which is the balance mechanism and not only fairness — see
+      // `REACT`. Resolving on the first of several would cut the others' window
+      // short *and* tell them, by the round simply ending, that someone else had
+      // already moved.
+      if ([...entitlements.keys()].some((seatKey) => !acted.has(seatKey))) {
+        return this.publishState(match.id, playerId);
+      }
       return this.resolveDuelRound(
         match.id,
         match.currentRound,
@@ -545,9 +564,9 @@ export class GameService {
       return this.publishState(match.id, playerId);
     }
 
-    // Both locked. A charge already spent on Oracle buys a sub-phase here, before
-    // anything resolves; every other round goes straight through, unchanged.
-    if (await this.enterOracleSubPhase(match, seats, moves, results, firings)) {
+    // Both locked. A round that bought an entitlement stops here, before anything
+    // resolves; every other round goes straight through, unchanged.
+    if (await this.enterSubPhase(match, seats, moves, results, firings)) {
       return this.publishState(match.id, playerId);
     }
 
@@ -564,57 +583,72 @@ export class GameService {
   }
 
   /**
-   * Open Oracle's mid-round sub-phase if this round bought one, and say whether
-   * it did.
+   * Open the mid-round sub-phase if this round bought one, and say whether it did.
    *
-   * Reached only from a round both players locked in on time. A round that ran
-   * out of clock resolves instead: it has already overrun, and granting a further
-   * allowance on top would be rewarding the overrun. The holder's charge is spent
+   * Reached only from a round both players locked in on time. A round that ran out
+   * of clock resolves instead: it has already overrun, and granting a further
+   * allowance on top would be rewarding the overrun. A holder's charge is spent
    * either way — it was spent when they fired.
+   *
+   * Draws come first, because an entitlement built on a reveal has nothing to show
+   * until the reveal exists. Which abilities draw is `helpers/reveals.ts`'s to say;
+   * no ability is named here.
    */
-  private async enterOracleSubPhase(
+  private async enterSubPhase(
     match: Match,
     seats: Seat[],
     moves: Record<string, Move>,
     results: RoundResult[],
     firings: AbilityFiring[],
   ): Promise<boolean> {
-    const holders = oracleHoldersIn(seats, firings, match.currentRound);
-    if (holders.length === 0) return false;
-
     // Marks as they stand *entering* the round, which is what the opponent was
-    // choosing from — the same basis `submitMove` validates a pick against, so
-    // Oracle can never name a move they could not have played.
+    // choosing from — the same basis `submitMove` validates a pick against, so a
+    // reveal can never name a move they could not have played.
     const delays = delaysBySeat(results, seats, firings);
+    let drew = false;
     let wroteAny = false;
-    // Every holder is named a move, not just the first one found: two Oracles
-    // facing each other is a legal pairing, and a holder whose charge was spent
-    // to be told nothing would have been robbed by an implementation detail.
-    for (const holder of holders) {
-      const opponent = seats.find((s) => s.seatKey !== holder.seatKey);
-      if (!opponent?.player) continue;
-      const named = nameUnplayedMove(
-        delays[opponent.seatKey],
-        moves[opponent.player.id],
-        this.rng,
-      );
-      // Write-once. Two readers racing in here must not draw two different moves:
-      // a holder who could provoke a re-roll would learn the opponent's move as
-      // the one the server never names. The loser reads the winner's move back.
-      if (
-        await this.repo.nameAbilityFiringTarget({
-          matchId: match.id,
-          seatId: holder.id,
-          round: match.currentRound,
-          target: named,
-        })
-      ) {
-        wroteAny = true;
+    for (const seat of seats) {
+      const opponent = seats.find((s) => s.seatKey !== seat.seatKey);
+      if (!seat.player || !opponent?.player) continue;
+      // Every firing, not just the first found: two seats may hold the same card,
+      // and since JQ-238 one seat may fire two. A holder whose charge was spent to
+      // be told nothing would have been robbed by an implementation detail.
+      for (const firing of firedIn(firings, match.currentRound, seat.seatKey)) {
+        const draw = revealDrawFor(firing.id);
+        if (!draw) continue;
+        drew = true;
+        const named = draw({
+          opponentDelays: delays[opponent.seatKey],
+          opponentMove: moves[opponent.player.id],
+          rng: this.rng,
+        });
+        // Write-once. Two readers racing in here must not draw two different moves:
+        // a holder who could provoke a re-roll would learn the opponent's move as
+        // the one the server never names. The loser reads the winner's move back.
+        if (
+          await this.repo.nameAbilityFiringTarget({
+            matchId: match.id,
+            seatId: seat.id,
+            round: match.currentRound,
+            helperId: firing.id,
+            target: named,
+          })
+        ) {
+          wroteAny = true;
+        }
       }
     }
-    // Only a writer starts the clock, so a reader that lost every race cannot
-    // hand the holders a second allowance by resetting the deadline.
-    if (wroteAny) await this.startPhase(match.id, match.gameMode, match.currentRound, 'oracle');
+
+    if (entitlementsIn(seats, firings, match.currentRound, new Set()).size === 0) return false;
+
+    // Only a writer starts the clock, so a reader that lost every race cannot hand
+    // the entitled a second allowance by resetting the deadline.
+    if (drew && !wroteAny) return true;
+    // An entitlement that rests on a public firing alone has no draw to race on, so
+    // the phase itself is the guard: whoever gets there first starts the clock and
+    // the rest find it already running.
+    if ((await this.repo.getMatch(match.id))?.phase === REACT) return true;
+    await this.startPhase(match.id, match.gameMode, match.currentRound, REACT);
     return true;
   }
 
@@ -668,18 +702,22 @@ export class GameService {
     if (!slotsFor(mySeat.loadout)[helperId]) {
       throw new ValidationError(`this seat does not hold '${helperId}'`);
     }
-    // Oracle is declared during the pick phase and pays off after both players
-    // lock in, so firing it once the sub-phase is already running is too late —
-    // and firing it *into* the sub-phase, where the charge is already spent,
-    // would be a second spend on a round that has one slot.
-    if (match.phase === 'oracle') {
+    // Firing is a pick-phase action, so the sub-phase refuses one. Non-cascading
+    // on purpose: without this a public firing inside a sub-phase would open
+    // another, and the round would never close. It is also why a round has at most
+    // one — the only way in is the commit that completes the round's picks.
+    if (match.phase === REACT) {
       throw new ConflictError('the round is already resolving');
     }
 
     const results = await this.repo.listResults(match.id);
     const allFirings = await this.repo.listAbilityFirings(match.id);
-    if (firedIn(allFirings, match.currentRound, mySeat.seatKey).length > 0) {
-      throw new ConflictError('this seat already fired an ability this round');
+    // Per slot, not per seat. Choosing two charge helpers is a statement that you
+    // want to play an ability-heavy game, and one-per-seat silently made the second
+    // card worth a fraction of its standalone value — a trap that teaches nothing.
+    // The tier ladder already taxes Major + Major on tempo; this was charging twice.
+    if (firedIn(allFirings, match.currentRound, mySeat.seatKey).some((f) => f.id === helperId)) {
+      throw new ConflictError(`this seat already fired '${helperId}' this round`);
     }
     const charge = chargesNow(
       mySeat.loadout,
@@ -699,7 +737,7 @@ export class GameService {
       opponent: delays[theirSeat.seatKey],
     });
 
-    // The repository's one-per-seat-per-round constraint is the authority on a
+    // The repository's one-per-slot-per-round constraint is the authority on a
     // double-spend, not the check above: two taps racing through two connections
     // both pass it, and only one insert survives.
     await this.repo.recordAbilityFiring({
@@ -797,7 +835,7 @@ export class GameService {
     if (match) this.presence?.disconnect(match.id, playerId);
   }
 
-  /** Put a phase on the clock. Rounds open on `pick`; Oracle adds the other one. */
+  /** Put a phase on the clock. Rounds open on `pick`; the sub-phase is the other. */
   private async startPhase(
     matchId: string,
     gameMode: string,
@@ -846,13 +884,13 @@ export class GameService {
     const now = this.now();
     const deadline = match.phaseDeadline ? Date.parse(match.phaseDeadline) : null;
 
-    // Oracle's sub-phase answers to the clock but not to the idle policy. Both
-    // players picked on time — the strike system counts a run of silence, and
-    // there has been none — so expiry costs nobody a strike and cannot forfeit
-    // anyone. It simply resolves the round on the moves as they stand: the
-    // holder's original pick, since they did not replace it. The charge stays
-    // spent, which is what declining to use what you paid for costs.
-    if (match.phase === 'oracle') {
+    // The sub-phase answers to the clock but not to the idle policy. Both players
+    // picked on time — the strike system counts a run of silence, and there has
+    // been none — so expiry costs nobody a strike and cannot forfeit anyone. It
+    // simply resolves the round on the moves as they stand: every original pick,
+    // for anyone who did not replace theirs. Charges stay spent, which is what
+    // declining to use what you paid for costs.
+    if (match.phase === REACT) {
       if (deadline === null || now < deadline) return;
       await this.resolveDuelRound(
         matchId,
@@ -1024,32 +1062,74 @@ function rulesForSeat(seat: Seat): PlayerRules {
 }
 
 /**
- * The first ability to change the round protocol rather than the marks.
+ * The mid-round sub-phase, and who is entitled to one.
  *
- * The first, not the only one there can be. Anything that reaches a player after
- * their commitment and before the round resolves wants this same window, and a
- * firing the opponent can *see* gets there too — it hands the seat it acts
- * against something to answer, at a moment their pick is already locked. Every
- * ability is secret today, which is the only reason Oracle is alone in here.
+ * The class is **information that reaches a player after their commitment and
+ * before the round resolves** — the one gap in a round with no window in it. Not
+ * "does it produce information": every firing does. What matters is when it lands.
+ * Information that arrives at a round boundary needs no window, because the next
+ * pick phase already is one.
  *
- * So the sub-phase below is a class's machinery wearing one card's name. It is
- * spelled Oracle-shaped because a general predicate with exactly one member is
- * harder to read than the member, not because generalising it is a mistake —
- * JQ-239 does that when the second member arrives.
+ * Two ways in, and the service names neither an ability nor a card to find them:
+ *
+ *   1. an ability revealed something to its own *holder* (`helpers/reveals.ts`);
+ *   2. a `public` firing acted against this seat (`reveal` on the card).
+ *
+ * JQ-150 built this Oracle-shaped, when Oracle was the only member. It is the
+ * class's machinery rather than one card's, and JQ-239 spelled it that way.
+ *
+ * ## Why entitlement must not depend on being hit
+ *
+ * A public firing entitles the seat it acts against whether or not it landed. If it
+ * only entitled a seat it hit, then *not* getting a window would tell the firer
+ * that it missed — the absence of a sub-phase would become information, in exactly
+ * the way a phase transition already leaks lock-in timing past Poker Face.
+ *
+ * ## Why everyone acts at once
+ *
+ * An information card plus a blocking card otherwise multiply into certainty. With
+ * three live moves and the opponent committed to A: Oracle names B, a public block
+ * denies C, so the move is A and the firer re-picks to beat it — a 100% win round,
+ * in a game that caps Oracle at a guaranteed win 30% of the time.
+ *
+ * Simultaneity defuses it. The opponent re-picks at the same moment, so they can
+ * move off A while the firer is re-picking to beat A: the read goes stale exactly
+ * when it would otherwise be decisive. Both properties above are doing balance
+ * work, not just protocol work.
  */
-const ORACLE = 'oracle';
+const REACT: Phase = 'react';
 
 /**
- * The seats that spent Oracle on this round.
+ * Who may act in this round's sub-phase, keyed by seat key.
  *
- * Plural on purpose. A loadout is chosen per seat and nothing makes the two
- * differ, so both players facing each other with Oracle is a legal pairing —
- * rare, but every code path that assumes a single holder is wrong when it lands.
+ * Pure, and the single answer to "is anyone entitled" — entry, the lock on a seat
+ * that is not, the resolve-when-all-have-acted test and the seat-private payload
+ * all read it, so there is no second spelling of the rule to drift from this one.
  */
-function oracleHoldersIn(seats: Seat[], firings: AbilityFiring[], round: number): Seat[] {
-  return seats.filter(
-    (s) => s.player && firedIn(firings, round, s.seatKey).some((f) => f.id === ORACLE),
-  );
+function entitlementsIn(
+  seats: Seat[],
+  firings: AbilityFiring[],
+  round: number,
+  acted: ReadonlySet<string>,
+): Map<string, Entitlement> {
+  const out = new Map<string, Entitlement>();
+  for (const seat of seats) {
+    if (!seat.player) continue;
+    const reveals = firedIn(firings, round, seat.seatKey)
+      .filter((f) => informsItsHolder(f.id))
+      .map((f) => ({ helperId: f.id, namedMove: f.target ?? null }));
+    // "Acts against" is the opposing seat: every targeting ability reaches across
+    // the table, and a future card that fired publicly at its *own* board would
+    // want a third value on `reveal` rather than a special case here.
+    const incoming = seats
+      .filter((s) => s.seatKey !== seat.seatKey)
+      .flatMap((other) => firedIn(firings, round, other.seatKey))
+      .filter((f) => firesInPublic(f.id))
+      .map((f) => ({ helperId: f.id, target: f.target ?? null }));
+    if (reveals.length === 0 && incoming.length === 0) continue;
+    out.set(seat.seatKey, { round, reveals, incoming, acted: acted.has(seat.seatKey) });
+  }
+  return out;
 }
 
 /**
@@ -1088,28 +1168,26 @@ function chargesByPlayerId(
 }
 
 /**
- * Oracle's reveal, keyed by the one player entitled to see it.
+ * Each seat's claim on the sub-phase, keyed by the one player entitled to see it.
  *
  * Empty unless the sub-phase is actually running: outside it there is nothing to
- * decide, and once the round resolves the named move becomes public through
- * `abilityFirings` like every other spent ability. Reading the move back from
+ * decide, and once the round resolves a named move becomes public through
+ * `abilityFirings` like every other spent ability. Reading a named move back from
  * the firing row rather than re-drawing it is the whole safety property — see
  * `nameAbilityFiringTarget`.
  */
-function oracleByPlayerId(
+function entitlementByPlayerId(
   match: Match,
   seats: Seat[],
   firings: AbilityFiring[],
-): Record<string, OracleReveal> {
-  if (match.phase !== 'oracle') return {};
-  const out: Record<string, OracleReveal> = {};
+  acted: readonly string[],
+): Record<string, Entitlement> {
+  if (match.phase !== REACT) return {};
+  const out: Record<string, Entitlement> = {};
+  const entitlements = entitlementsIn(seats, firings, match.currentRound, new Set(acted));
   for (const seat of seats) {
-    if (!seat.player) continue;
-    const oracle = firedIn(firings, match.currentRound, seat.seatKey).find(
-      (f) => f.id === ORACLE,
-    );
-    if (!oracle) continue;
-    out[seat.player.id] = { round: match.currentRound, namedMove: oracle.target ?? null };
+    const entitlement = seat.player && entitlements.get(seat.seatKey);
+    if (seat.player && entitlement) out[seat.player.id] = entitlement;
   }
   return out;
 }
@@ -1166,17 +1244,12 @@ function namedMovesFor(
       }
       return { target, source };
     }
-    // Oracle names a move, but the *server* names it, and not until both players
-    // have locked in — the whole point is a move the opponent did not play, which
-    // is unknowable while they can still change it. A target from the client is
-    // refused rather than trusted; `nameAbilityFiringTarget` fills the column in.
-    case ORACLE: {
-      if (target != null) throw new ValidationError(`'${helperId}' takes no target`);
-      noSource();
-      return { target: null, source: null };
-    }
-    // Sacrifice and Freeze act on the round itself, not on a move. Anything an
-    // ability has no use for is refused rather than stored and ignored.
+    // Sacrifice and Freeze act on the round itself, not on a move — and Oracle
+    // names one, but the *server* names it, and not until both players have locked
+    // in: the whole point is a move the opponent did not play, which is unknowable
+    // while they can still change it. All three refuse a target from the client
+    // rather than storing one and ignoring it; `nameAbilityFiringTarget` fills
+    // Oracle's column in later.
     default: {
       if (target != null) throw new ValidationError(`'${helperId}' takes no target`);
       noSource();
@@ -1185,20 +1258,6 @@ function namedMovesFor(
   }
 }
 
-
-/**
- * Firings from rounds that have already resolved.
- *
- * An ability spent in the round being played is withheld from every viewer, because
- * Quarantine names the move it fears and an opponent who could read that would
- * simply play something else. The same commit-then-reveal property JQ-150 protects
- * for Oracle, and the reason the filter is here rather than in the client: a state
- * payload the client chooses not to render is still a payload anyone can read.
- */
-function resolvedFirings(firings: AbilityFiring[], results: RoundResult[]): AbilityFiring[] {
-  const resolved = new Set(results.map((r) => r.round));
-  return firings.filter((f) => resolved.has(f.round));
-}
 
 /** How many resolved rounds this seat has lost. */
 function lossesFor(results: RoundResult[], seat: Seat, opponent: Seat): number {

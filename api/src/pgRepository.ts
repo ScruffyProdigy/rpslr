@@ -428,11 +428,12 @@ export class PgGameRepository implements GameRepository {
         [input.matchId, input.seatId, input.round, input.helperId, input.target, input.source],
       );
     } catch (err) {
-      // The unique index is the authority on one firing per seat per round; a
+      // The unique index is the authority on one firing per *slot* per round; a
       // double-tap racing through two connections lands here rather than spending
-      // a charge twice.
+      // a charge twice. The in-process check cannot do this job — both connections
+      // pass it, and only one insert survives.
       if ((err as { code?: string }).code === '23505') {
-        throw new ConflictError('this seat already fired an ability this round');
+        throw new ConflictError(`this seat already fired '${input.helperId}' this round`);
       }
       throw err;
     }
@@ -442,15 +443,19 @@ export class PgGameRepository implements GameRepository {
     matchId: string;
     seatId: string;
     round: number;
+    helperId: string;
     target: Move | null;
   }): Promise<boolean> {
     // `AND target IS NULL` is the whole point: it makes the draw a
     // write-once, so two readers racing into the sub-phase cannot name two
     // different moves and hand the holder the opponent's move by elimination.
+    // `helper_id` joined it in JQ-238: a seat may fire two abilities in one round,
+    // and without it this would name whichever of them the planner reached first.
     const res = await this.pool.query(
-      `UPDATE ability_firings SET target = $4
-        WHERE match_id = $1 AND round = $2 AND seat_id = $3 AND target IS NULL`,
-      [input.matchId, input.round, input.seatId, input.target],
+      `UPDATE ability_firings SET target = $5
+        WHERE match_id = $1 AND round = $2 AND seat_id = $3 AND helper_id = $4
+          AND target IS NULL`,
+      [input.matchId, input.round, input.seatId, input.helperId, input.target],
     );
     return (res.rowCount ?? 0) > 0;
   }
@@ -472,6 +477,33 @@ export class PgGameRepository implements GameRepository {
         source: row.source ?? null,
       }),
     );
+  }
+
+  async recordSubPhaseAction(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+  }): Promise<void> {
+    // `ON CONFLICT DO NOTHING` rather than a check-then-insert: re-picking twice
+    // inside one window is one act, and two connections racing must not turn a
+    // second re-pick into a duplicate-key error the player sees.
+    await this.pool.query(
+      `INSERT INTO sub_phase_actions (match_id, seat_id, round)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (match_id, round, seat_id) DO NOTHING`,
+      [input.matchId, input.seatId, input.round],
+    );
+  }
+
+  async listSubPhaseActions(matchId: string, round: number): Promise<string[]> {
+    const res = await this.pool.query(
+      `SELECT s.seat_key
+         FROM sub_phase_actions a JOIN seats s ON s.id = a.seat_id
+        WHERE a.match_id = $1 AND a.round = $2
+        ORDER BY s.position ASC`,
+      [matchId, round],
+    );
+    return res.rows.map((row) => row.seat_key as string);
   }
 
   async listResults(matchId: string): Promise<RoundResult[]> {

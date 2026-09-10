@@ -67,6 +67,7 @@ export class MemoryGameRepository implements GameRepository {
   private moves: MoveRow[] = [];
   private results = new Map<string, RoundResult[]>();
   private abilityFirings: AbilityFiringRow[] = [];
+  private subPhaseActions: { matchId: string; seatId: string; round: number }[] = [];
 
   async createMatch(input: CreateMatchInput): Promise<Match> {
     const id = randomUUID();
@@ -316,10 +317,16 @@ export class MemoryGameRepository implements GameRepository {
     target: Move | null;
     source: Move | null;
   }): Promise<void> {
+    // Mirrors the Postgres unique index, helper id included: a seat holding two
+    // charged abilities may fire both in one round, but neither of them twice.
     const clash = this.abilityFirings.find(
-      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+      (f) =>
+        f.matchId === input.matchId &&
+        f.round === input.round &&
+        f.seatId === input.seatId &&
+        f.helperId === input.helperId,
     );
-    if (clash) throw new ConflictError('this seat already fired an ability this round');
+    if (clash) throw new ConflictError(`this seat already fired '${input.helperId}' this round`);
     this.abilityFirings.push({ ...input });
   }
 
@@ -327,10 +334,15 @@ export class MemoryGameRepository implements GameRepository {
     matchId: string;
     seatId: string;
     round: number;
+    helperId: string;
     target: Move | null;
   }): Promise<boolean> {
     const firing = this.abilityFirings.find(
-      (f) => f.matchId === input.matchId && f.round === input.round && f.seatId === input.seatId,
+      (f) =>
+        f.matchId === input.matchId &&
+        f.round === input.round &&
+        f.seatId === input.seatId &&
+        f.helperId === input.helperId,
     );
     // No firing, or one already named: either way this call did not write the
     // target, and a caller that lost the race must read the stored move back
@@ -354,6 +366,28 @@ export class MemoryGameRepository implements GameRepository {
         target: f.target,
         source: f.source,
       }));
+  }
+
+  async recordSubPhaseAction(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+  }): Promise<void> {
+    // Idempotent, matching the table's primary key: re-picking twice inside one
+    // window is one act, not two, and must not make the seat look absent either.
+    const already = this.subPhaseActions.some(
+      (a) => a.matchId === input.matchId && a.round === input.round && a.seatId === input.seatId,
+    );
+    if (!already) this.subPhaseActions.push({ ...input });
+  }
+
+  async listSubPhaseActions(matchId: string, round: number): Promise<string[]> {
+    const seatKeyById = new Map(
+      this.seats.filter((s) => s.matchId === matchId).map((s) => [s.id, s.seatKey]),
+    );
+    return this.subPhaseActions
+      .filter((a) => a.matchId === matchId && a.round === round)
+      .map((a) => seatKeyById.get(a.seatId) ?? a.seatId);
   }
 
   async close(): Promise<void> {

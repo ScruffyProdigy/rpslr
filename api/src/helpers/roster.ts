@@ -47,16 +47,47 @@ export function isAbility(load: Load): load is AbilityLoad {
 export const MARK_COST: Record<Tier, number> = { Major: 2, Minor: 1, Trinket: 0 };
 
 /**
+ * Whether the opponent is told a firing happened at the moment it happens.
+ *
+ * Both exist because they play differently and both are fun. A `secret` firing is
+ * withheld until the round resolves; a `public` one is announced as it is fired,
+ * which hands the seat it acts against something to answer.
+ *
+ * Only two of the six are secret out of necessity — Quarantine ("*if they play
+ * it*") and Sacrifice (the wasted move is the cost). Rust, Thief and Freeze apply
+ * whatever the opponent plays, so they would work identically in public. That they
+ * are all secret today is a fact about this file, not about the engine.
+ *
+ * Not the same axis as whether a firing needs a mid-round sub-phase. Oracle is
+ * `secret` — its named move is hidden from the opponent until the round resolves —
+ * and still opens one, because it reveals to its own *holder*. See
+ * `helpers/reveals.ts`, which is where that other question is answered.
+ */
+export type Reveal = 'secret' | 'public';
+
+/**
+ * How a helper spends itself, and who sees it do so. The two move together: an
+ * ability must declare a `reveal`, and a passive has no firing to disclose.
+ *
+ * A union rather than an optional field, so both halves are the type's to enforce.
+ * A card that fires without saying whether it does so in secret fails `tsc`, which
+ * is the point — putting "secretly" in a blurb is a documentation convention, and
+ * documentation drifts.
+ */
+type Spend =
+  | { load: { kind: 'passive' }; reveal?: never }
+  | { load: AbilityLoad; reveal: Reveal };
+
+/**
  * Only a Major may carry a charge, and only a bound tier has a move. Both rules
  * live in the type, so a miswritten card fails `tsc` rather than waiting for a
  * runtime assertion that someone has to remember to write.
  */
-export interface HelperDef<T extends Tier = Tier> {
+export type HelperDef<T extends Tier = Tier> = {
   id: string;
   name: string;
   tier: T;
   boundMove: T extends 'Trinket' ? null : Move;
-  load: T extends 'Major' ? Load : { kind: 'passive' };
   /**
    * Player-facing copy; served as `description` in the queue-options roster.
    *
@@ -66,7 +97,7 @@ export interface HelperDef<T extends Tier = Tier> {
    * expected to move, and the prose is the copy that goes stale in silence.
    */
   blurb: string;
-}
+} & (T extends 'Major' ? Spend : { load: { kind: 'passive' }; reveal?: never });
 
 const MAJORS = [
   { id: 'good-old-rock', name: 'Good Old Rock', tier: 'Major', boundMove: 'rock',
@@ -75,27 +106,42 @@ const MAJORS = [
     load: PASSIVE, blurb: 'Your Lizard also beats Scissors, all match.' },
   { id: 'ferrus', name: 'Ferrus', tier: 'Major', boundMove: 'robot',
     load: PASSIVE, blurb: 'When you play Robot, the move they played takes an extra mark.' },
+  // Secret out of necessity: "if they play it" is only a threat while they cannot
+  // read the guess. An opponent who could would simply play something else.
   { id: 'quarantine', name: 'Quarantine', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 3 },
-    blurb: 'Name a move. If they play it, it takes 2 extra marks.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly name a move. If they play it, it takes 2 extra marks.' },
+  // `secret` on this axis and still sub-phased on the other: the move it names is
+  // hidden from the opponent until the round resolves, and the window it opens is
+  // for its own holder. The two questions are separate — see `Reveal`.
+  //
+  // The blurb no longer promises how the round ends. Once anyone else may re-pick
+  // (JQ-239) the opponent can move *onto* the named move, so the guarantee is real
+  // as of lock-in and not at resolution.
   { id: 'oracle', name: 'Oracle', tier: 'Major', boundMove: 'paper',
-    load: { kind: 'ability', opening: 0, recharge: 3 },
-    blurb: 'Learn one live move they did not play, then re-pick.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly learn one live move they had not chosen, then re-pick.' },
   // The four below carry their marks but no effect yet — Task 1.6 implements those.
   // Sacrifice opens on 3 so it cannot fire before round 4: its early line is
   // degenerate rather than merely weak, which is the only reason to gate a card.
+  // Secret out of necessity too, for the opposite reason to Quarantine: the cost is
+  // that they waste a move on a round already decided, which they would not if told.
   { id: 'sacrifice', name: 'Sacrifice', tier: 'Major', boundMove: 'rock',
-    load: { kind: 'ability', opening: 3, recharge: 3 },
-    blurb: 'Declare the round a draw before picking, and clear all your marks.' },
+    load: { kind: 'ability', opening: 3, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly declare the round a draw before picking, and clear all your marks.' },
+  // Rust, Thief and Freeze all apply whatever the opponent plays, so they would work
+  // identically in public. They are secret by convention rather than by function;
+  // making one public is a balance decision per card, not a change to this field's
+  // meaning.
   { id: 'rust', name: 'Rust', tier: 'Major', boundMove: 'scissors',
-    load: { kind: 'ability', opening: 0, recharge: 3 },
-    blurb: 'Add 2 marks to a move they currently have live.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly add 2 marks to a move they currently have live.' },
   { id: 'thief', name: 'Thief', tier: 'Major', boundMove: 'lizard',
-    load: { kind: 'ability', opening: 0, recharge: 3 },
-    blurb: 'Move one mark from one of your moves onto one of theirs.' },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: 'Secretly move one mark from one of your moves onto one of theirs.' },
   { id: 'freeze', name: 'Freeze', tier: 'Major', boundMove: 'robot',
-    load: { kind: 'ability', opening: 0, recharge: 3 },
-    blurb: "Their marks don't decrement this round." },
+    load: { kind: 'ability', opening: 0, recharge: 3 }, reveal: 'secret',
+    blurb: "Secretly stop their marks decrementing this round." },
   // A Major because cancelling their first win is worth ~+15.6pp — first-to-3
   // against first-to-4 is a six-round race you take with three wins, 42/64. A tier
   // step is only worth ~3pp, so this is the defensible price rather than the right
@@ -160,4 +206,18 @@ export function getHelper(id: string): HelperDef | undefined {
 
 export function isHelperId(id: string): id is HelperId {
   return getHelper(id) !== undefined;
+}
+
+/**
+ * Whether a firing is announced as it happens rather than held until the round
+ * resolves.
+ *
+ * Takes an id because its caller has a recorded firing rather than a card, and
+ * answers `false` for anything it cannot place — a passive, or an id no longer on
+ * the roster. Withholding is the safe default: disclosing a firing that should have
+ * been secret cannot be taken back, and a firing withheld still surfaces when the
+ * round resolves.
+ */
+export function firesInPublic(helperId: string): boolean {
+  return getHelper(helperId)?.reveal === 'public';
 }
