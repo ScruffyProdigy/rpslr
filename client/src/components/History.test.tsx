@@ -118,3 +118,50 @@ describe('<History> compact strip (JQ 3.4)', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+/**
+ * AC #4: after a round resolves, the board says which abilities fired and what
+ * they did, for both seats. History is where that account lives — see JQ-221's
+ * design note on why it is here rather than on the reveal card.
+ */
+describe('History — the round account (JQ-221)', () => {
+  const firings = [
+    { round: 1, seatKey: 'a', helperId: 'rust', target: 'robot' as const, source: null },
+    { round: 1, seatKey: 'b', helperId: 'freeze', target: null, source: null },
+    { round: 3, seatKey: 'b', helperId: 'quarantine', target: 'scissors' as const, source: null },
+  ];
+
+  async function openAllRounds() {
+    const user = userEvent.setup();
+    await user.click(screen.getByText('All rounds'));
+  }
+
+  it('says nothing extra when no ability was spent', async () => {
+    renderHistory();
+    await openAllRounds();
+    expect(document.querySelectorAll('.history-row__firing')).toHaveLength(0);
+  });
+
+  it('attributes a firing to each seat, in the round it belongs to', async () => {
+    renderHistory({ firings });
+    await openAllRounds();
+
+    const rows = document.querySelectorAll('.history-row');
+    expect(within(rows[0] as HTMLElement).getByText(/Rust — you added 2 marks to their Robot/))
+      .toBeInTheDocument();
+    expect(within(rows[0] as HTMLElement).getByText(/Freeze — they stopped your marks/))
+      .toBeInTheDocument();
+    // Round 2 had none, and must not borrow round 1's or round 3's.
+    expect((rows[1] as HTMLElement).querySelectorAll('.history-row__firing')).toHaveLength(0);
+    expect(within(rows[2] as HTMLElement).getByText(/Quarantine — they named Scissors/))
+      .toBeInTheDocument();
+  });
+
+  /* Whose firing it was is a class as well as a word — the word is what carries it. */
+  it('marks your own firings apart from theirs', async () => {
+    renderHistory({ firings });
+    await openAllRounds();
+    expect(document.querySelectorAll('.history-row__firing--mine')).toHaveLength(1);
+    expect(document.querySelectorAll('.history-row__firing--theirs')).toHaveLength(2);
+  });
+});

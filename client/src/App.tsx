@@ -8,11 +8,13 @@ import {
   type Seat,
   type StatusResponse,
 } from './api';
+import { AbilityRail, type FiringChoice } from './components/AbilityRail';
 import { History } from './components/History';
 import { HowToPlay, HowToPlayDialog } from './components/HowToPlay';
 import { LobbyReturnButton } from './components/LobbyReturnButton';
 import { MatchEndCard } from './components/MatchEndCard';
 import { MovePicker } from './components/MovePicker';
+import { OraclePrompt } from './components/OraclePrompt';
 import { RoundTimer } from './components/RoundTimer';
 import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
@@ -209,6 +211,16 @@ function Game({
   const [reconnecting, setReconnecting] = useState(false);
   const [pendingMove, setPendingMove] = useState<Move | null>(null);
   const [lockedMove, setLockedMove] = useState<Move | null>(null);
+  /**
+   * Whether this seat has already spent a charge on the round being played.
+   *
+   * Local, because it cannot be read off the state: `abilityFirings` withholds
+   * the round in progress from every viewer, and `abilities` suppresses only the
+   * fired card's availability, while the repository's rule is one firing per seat
+   * per round across all of them. Lost on reload, which costs a refused firing and
+   * an error line rather than a double spend — the constraint is the authority.
+   */
+  const [firedThisRound, setFiredThisRound] = useState(false);
   const socketRef = useRef<MatchSocket | null>(null);
   const claimedRef = useRef(false);
 
@@ -292,6 +304,7 @@ function Game({
   useEffect(() => {
     setLockedMove(null);
     setPendingMove(null);
+    setFiredThisRound(false);
   }, [currentRound]);
 
   const submittedKey = state?.submittedPlayerIds?.join(',') ?? '';
@@ -354,8 +367,16 @@ function Game({
 
   async function play(move: Move) {
     if (!myPlayerId || !state || !ref) return;
-    if (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove) return;
+    // The double-commit guard has to stay for the pick phase, so Oracle's re-pick
+    // is an explicit exception rather than a loosening of it: during the sub-phase
+    // a holder's move is *replaced*, and re-sending the one they had is how they
+    // say "keep it".
+    const repicking = isOracleRepick(state);
+    if (!repicking && (lockedMove || state.currentRoundMoves[myPlayerId] || pendingMove)) return;
     setError(null);
+    // Otherwise the picker would keep showing the pick being replaced: the locked
+    // move wins over the pending one when the board decides what you chose.
+    if (repicking) setLockedMove(null);
     setPendingMove(move);
     const round = state.match.currentRound;
     const sent = socketRef.current?.sendMove(myPlayerId, move, round);
@@ -369,6 +390,31 @@ function Game({
     } catch (err) {
       setPendingMove(null);
       if (!isLateMoveConflict((err as Error).message)) setError((err as Error).message);
+    }
+  }
+
+  /**
+   * Spend a charge on the round being played.
+   *
+   * Socket first with the REST route as fallback, exactly as `play` does — either
+   * path publishes to the opponent through the hub. Optimistic only in the one
+   * respect that matters for a second tap: the rail closes immediately, so the
+   * one-per-round rule is not left to a round-trip to enforce.
+   */
+  async function fire(choice: FiringChoice) {
+    if (!myPlayerId || !state || !ref) return;
+    if (firedThisRound) return;
+    setError(null);
+    setFiredThisRound(true);
+    const round = state.match.currentRound;
+    const sent = socketRef.current?.sendFire(myPlayerId, choice, round);
+    if (sent) return;
+    try {
+      setState(await api.fireAbility(ref, myPlayerId, { ...choice, round }));
+    } catch (err) {
+      // The charge was not spent, so the card has to come back.
+      setFiredThisRound(false);
+      setError((err as Error).message);
     }
   }
 
@@ -400,7 +446,9 @@ function Game({
         connected={connected}
         error={error}
         myChosenMove={myChosenMove}
+        firedThisRound={firedThisRound}
         onPlay={play}
+        onFire={fire}
       />
     </>
   );
@@ -511,6 +559,50 @@ function isLateMoveConflict(message: string): boolean {
   );
 }
 
+/**
+ * Whether Oracle's sub-phase is running *for this viewer*.
+ *
+ * Both halves are load-bearing. `oracle` is seat-private, so its presence is what
+ * separates the holder — who may re-pick — from the opponent, whose move
+ * `submitMove` refuses ("your move is locked while the round resolves"). The round
+ * check is why `OracleReveal` carries a round: a reveal that outlived its
+ * sub-phase must not reopen the next round's pick.
+ */
+function isOracleRepick(state: MatchState): boolean {
+  return (
+    state.match.phase === 'oracle' &&
+    state.oracle != null &&
+    state.oracle.round === state.match.currentRound
+  );
+}
+
+/**
+ * Why the round will not take a firing right now, or null when it will.
+ *
+ * Each reason is one the player can act on — wait, reconnect, watch the round
+ * out — which is why they are not collapsed into a single disabled flag. The
+ * Oracle case is not cosmetic: `fireAbility` refuses during the sub-phase ("the
+ * round is already resolving"), so the rail must not offer what the server will
+ * refuse, and must not blame the network for it.
+ */
+function firingUnavailable({
+  connected,
+  allSeated,
+  revealingNow,
+  match,
+}: {
+  connected: boolean;
+  allSeated: boolean;
+  revealingNow: boolean;
+  match: MatchState['match'];
+}): string | null {
+  if (!connected) return 'Reconnecting — you can fire once the board is back.';
+  if (!allSeated) return 'Waiting for your opponent.';
+  if (match.phase === 'oracle') return 'The round is resolving.';
+  if (revealingNow) return 'Wait for the round to finish.';
+  return null;
+}
+
 export function Board({
   myPlayerId,
   mySeatKey,
@@ -518,7 +610,9 @@ export function Board({
   connected,
   error,
   myChosenMove,
+  firedThisRound,
   onPlay,
+  onFire,
 }: {
   myPlayerId: string;
   mySeatKey: string;
@@ -526,7 +620,10 @@ export function Board({
   connected: boolean;
   error: string | null;
   myChosenMove: Move | null;
+  /** This seat has already spent a charge on the round being played. */
+  firedThisRound?: boolean;
   onPlay: (move: Move) => void;
+  onFire?: (choice: FiringChoice) => void;
 }) {
   const { reveal, skip } = useRoundReveal(state?.results ?? NO_RESULTS);
   const roundDeadline = useRoundDeadline(state);
@@ -551,6 +648,10 @@ export function Board({
   const showRules = !finished && allSeated && match.currentRound <= 1;
   const myDelays = mySeat?.delays ?? {};
   const oppDelays = oppSeat?.delays ?? {};
+  // The holder may replace their pick; the opponent's stays locked while the
+  // round resolves, so the picker must not offer them a tap the server refuses.
+  const repicking = isOracleRepick(state);
+  const resolvingWithoutMe = match.phase === 'oracle' && !repicking;
   // Your last two picks, most recent first: explains exactly why each of your
   // moves is on cooldown, without inferring it from the mark count.
   const myRecentMoves = results
@@ -656,14 +757,21 @@ export function Board({
                 Opponent has locked in — pick your move!
               </p>
             )}
+            {resolvingWithoutMe && (
+              <p className="hint" role="status">
+                Both locked in — the round is resolving.
+              </p>
+            )}
           </div>
           <MovePicker
             myDelays={myDelays}
             oppDelays={oppDelays}
             myChosenMove={myChosenMove}
-            lockedIn={youMovedThisRound}
+            lockedIn={youMovedThisRound && !repicking}
             opponentLockedIn={opponentLockedIn}
-            disabled={!connected || !allSeated || youMovedThisRound || revealingNow}
+            disabled={
+              !connected || !allSeated || (youMovedThisRound && !repicking) || revealingNow
+            }
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             myOpeningDelays={myOpeningDelays}
@@ -689,11 +797,32 @@ export function Board({
               {error}
             </p>
           )}
+          {/* Below the pentagon, both of them. The board-status slot above it is
+              sized for a one-liner, and the tap surface must not move under a
+              thumb mid-decision — which is exactly when these appear. */}
+          <OraclePrompt
+            reveal={state.oracle}
+            round={match.currentRound}
+            myMove={state.currentRoundMoves[myPlayerId] ?? null}
+            onKeep={onPlay}
+          />
+          {onFire && !finished && (
+            <AbilityRail
+              loadout={mySeat?.loadout ?? null}
+              abilities={state.abilities}
+              myMarks={myDelays}
+              oppMarks={oppDelays}
+              firedThisRound={Boolean(firedThisRound)}
+              unavailable={firingUnavailable({ connected, allSeated, revealingNow, match })}
+              onFire={onFire}
+            />
+          )}
         </div>
       )}
 
       <History
         results={results}
+        firings={state.abilityFirings}
         mySeatKey={mySeatKey}
         myPlayerId={myPlayerId}
         you={you}
