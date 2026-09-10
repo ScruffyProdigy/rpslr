@@ -479,6 +479,33 @@ export class PgGameRepository implements GameRepository {
     );
   }
 
+  async recordSubPhaseAction(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+  }): Promise<void> {
+    // `ON CONFLICT DO NOTHING` rather than a check-then-insert: re-picking twice
+    // inside one window is one act, and two connections racing must not turn a
+    // second re-pick into a duplicate-key error the player sees.
+    await this.pool.query(
+      `INSERT INTO sub_phase_actions (match_id, seat_id, round)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (match_id, round, seat_id) DO NOTHING`,
+      [input.matchId, input.seatId, input.round],
+    );
+  }
+
+  async listSubPhaseActions(matchId: string, round: number): Promise<string[]> {
+    const res = await this.pool.query(
+      `SELECT s.seat_key
+         FROM sub_phase_actions a JOIN seats s ON s.id = a.seat_id
+        WHERE a.match_id = $1 AND a.round = $2
+        ORDER BY s.position ASC`,
+      [matchId, round],
+    );
+    return res.rows.map((row) => row.seat_key as string);
+  }
+
   async listResults(matchId: string): Promise<RoundResult[]> {
     const res = await this.pool.query(
       `SELECT round, outcome, moves, auto_picked

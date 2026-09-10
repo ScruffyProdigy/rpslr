@@ -139,6 +139,21 @@ export interface GameRepository {
   }): Promise<boolean>;
   /** Every firing in the match, in round order. Callers decide what to disclose. */
   listAbilityFirings(matchId: string): Promise<AbilityFiring[]>;
+  /**
+   * Write down that a seat has used this round's sub-phase.
+   *
+   * The round resolves once *every* entitled seat has acted, and that cannot be
+   * derived: a seat that re-picks the move it already had looks exactly like one
+   * that has not answered. Idempotent, because re-picking twice inside one window
+   * is still one act.
+   */
+  recordSubPhaseAction(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+  }): Promise<void>;
+  /** The seat keys that have acted in one round's sub-phase. */
+  listSubPhaseActions(matchId: string, round: number): Promise<string[]>;
   close(): Promise<void>;
 }
 

@@ -11,7 +11,7 @@
  * diff names the exact move sequence, or `rulesFor(null, …)` stopped being the
  * rules this game already had — which is the whole back-compatibility strategy.
  *
- * The `duel` snapshot has been re-captured three times, every time for a
+ * The `duel` snapshot has been re-captured four times, every time for a
  * `MatchState` shape change and never for a rules change:
  *
  *   - JQ-148: `MatchState` gained `abilityFirings`, and a seat gained `loadout` and
@@ -21,9 +21,13 @@
  *   - JQ-150: `MatchState` gained `oracle`, the mid-round reveal. Six insertions —
  *     one null per captured snapshot, since `duel` holds no Oracle to reveal
  *     anything — and no deletions.
+ *   - JQ-239: that field became `entitlement` when the sub-phase stopped being
+ *     Oracle-shaped. Six renames of a null, and nothing else in the file moved —
+ *     the one recapture that is a pure rename rather than an addition.
  *
- * "No deletions" is the whole argument in all three cases: not one recorded value moved,
- * so the new field is additive by proof rather than by assertion. The test below
+ * "Nothing else moved" is the whole argument in all four cases: not one recorded
+ * value changed, so the shape change is inert by proof rather than by assertion.
+ * The test below
  * pins all four fields at their duel values so a shape change cannot be a rules
  * change wearing a new field's clothes. `opening`, `outcomes` and `engineTable` are
  * untouched from the original capture, and they are where the guarantee really sits.

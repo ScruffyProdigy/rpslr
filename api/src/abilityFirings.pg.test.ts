@@ -1,5 +1,5 @@
 /**
- * The double-spend guard, against a real Postgres.
+ * The double-spend guard and the sub-phase marker, against a real Postgres.
  *
  * The in-process check in `service.ts` cannot be the authority here: two taps
  * racing through two connections both pass it, and only the unique index decides
@@ -112,6 +112,20 @@ describe.skipIf(!databaseUrl)('JQ-238 one firing per ability slot per round', ()
     await expect(
       repo.recordAbilityFiring(base(4, 'rust', () => otherSeatId)),
     ).resolves.toBeUndefined();
+  });
+
+  it('writes down that a seat acted in the sub-phase, idempotently', async () => {
+    // JQ-239: a seat that re-picks the move it already had is indistinguishable
+    // from one that has not answered, so acting is written down rather than
+    // derived — and re-picking twice inside one window is still one act.
+    await repo.recordSubPhaseAction({ matchId, seatId, round: 7 });
+    await repo.recordSubPhaseAction({ matchId, seatId, round: 7 });
+    expect(await repo.listSubPhaseActions(matchId, 7)).toEqual(['1']);
+
+    await repo.recordSubPhaseAction({ matchId, seatId: otherSeatId, round: 7 });
+    expect(await repo.listSubPhaseActions(matchId, 7)).toEqual(['1', '2']);
+    // Keyed per round, so a later window starts empty.
+    expect(await repo.listSubPhaseActions(matchId, 8)).toEqual([]);
   });
 
   it('names the firing it was asked for, once, and leaves its sibling alone', async () => {

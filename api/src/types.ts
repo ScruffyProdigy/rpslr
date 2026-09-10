@@ -96,18 +96,58 @@ export interface RoundResult {
 }
 
 /**
- * Oracle's reveal, for the one seat that paid for it.
+ * What one ability revealed to its own holder, mid-round.
  *
- * Only ever populated for the holder, and only while the sub-phase is running.
- * `namedMove` is a move the opponent did **not** play — never the one they did,
- * which is what keeps commit-then-reveal intact. Null when the opponent played
- * their only live move: there was nothing they did not play to name.
+ * Only ever populated for that holder, and only while the sub-phase is running.
+ * Oracle's `namedMove` is a move the opponent did **not** play — never the one
+ * they did, which is what keeps commit-then-reveal intact. Null when there was
+ * nothing to name: for Oracle, when the opponent played their only live move.
  */
-export interface OracleReveal {
-  /** The round this reveal belongs to, so a stale one cannot be rendered. */
-  round: number;
-  /** A live move the opponent did not play, or null when there was none. */
+export interface MidRoundReveal {
+  /** The ability that paid for it. */
+  helperId: string;
+  /** The move it named, or null when there was none to name. */
   namedMove: Move | null;
+}
+
+/**
+ * A public firing aimed at this seat in the round being played.
+ *
+ * Carries what the firing discloses and no more. Whether it *landed* is not here,
+ * because that would turn on the opponent's committed move — and a seat told "it
+ * missed" would be told, by elimination, something about their own board that the
+ * firer has not paid for. Withholding also makes hit and miss indistinguishable,
+ * which is what keeps the absence of a window from being information (see
+ * `entitlement`).
+ */
+export interface IncomingFiring {
+  helperId: string;
+  /** The move the firing named, for the abilities that name one. */
+  target: Move | null;
+}
+
+/**
+ * Why one seat may act in the round's sub-phase, and what it was told.
+ *
+ * The class is *information that reaches a player after their commitment and
+ * before the round resolves* — the one gap in a round with no window in it. Two
+ * ways in: an ability revealed something to its own holder (Oracle), or a public
+ * firing acted against them.
+ *
+ * Entitlement deliberately does not depend on a public firing having *hit*. If it
+ * did, not getting a window would tell the firer that it missed — the absence of a
+ * sub-phase would become information, in exactly the way a phase transition
+ * already leaks lock-in timing past Poker Face.
+ */
+export interface Entitlement {
+  /** The round this belongs to, so a stale one cannot be rendered. */
+  round: number;
+  /** What this seat's own abilities told it. Empty when it was only fired upon. */
+  reveals: MidRoundReveal[];
+  /** Public firings acting against this seat this round, whether or not they landed. */
+  incoming: IncomingFiring[];
+  /** Whether this seat has already used the window. */
+  acted: boolean;
 }
 
 export interface MatchState {
@@ -121,8 +161,9 @@ export interface MatchState {
   /** Winning seat_key once decided, or 'draw'/null. */
   matchWinnerSeatKey: string | null;
   /**
-   * Abilities spent in rounds that have already resolved. An in-progress round's
-   * firing is deliberately absent — see `AbilityFiring.target`.
+   * The firings every viewer may see: everything from a resolved round, plus the
+   * in-progress round's `public` ones. A `secret` firing in the round being played
+   * is deliberately absent — see `AbilityFiring.target` and `helpers/disclosure.ts`.
    */
   abilityFirings: AbilityFiring[];
   /**
@@ -136,15 +177,17 @@ export interface MatchState {
    */
   abilities: AbilityMap;
   /**
-   * Oracle's mid-round reveal while `match.phase` is `oracle`, or null.
+   * This seat's claim on the mid-round sub-phase while `match.phase` is `react`,
+   * or null when it has none.
    *
-   * Seat-private for the same reason `abilities` is, and more sharply: the set of
-   * moves the server is willing to name is the complement of the move the
-   * opponent played. An opponent who could read this would learn nothing, but a
-   * holder who could provoke a *second* draw would learn everything — which is
-   * why the named move is written down once rather than re-rolled per read.
+   * Seat-private for the same reason `abilities` is, and more sharply where a
+   * reveal is involved: the set of moves the server is willing to name is the
+   * complement of the move the opponent played. An opponent who could read this
+   * would learn nothing, but a holder who could provoke a *second* draw would
+   * learn everything — which is why a named move is written down once rather than
+   * re-rolled per read.
    */
-  oracle: OracleReveal | null;
+  entitlement: Entitlement | null;
   /**
    * The server's clock when this snapshot was built, ISO. The client renders
    * `match.phaseDeadline` as an offset from this rather than trusting its own
@@ -177,10 +220,11 @@ export interface AbilityFiring {
   seatKey: string;
   helperId: string;
   /**
-   * The move the ability named, for the ones that name a move. Quarantine's is
-   * withheld until the round resolves — naming it is a hedge against what the
-   * opponent is about to play, and an opponent who could read it would simply play
-   * something else.
+   * The move the ability named, for the ones that name a move. A `secret` firing's
+   * is withheld until the round resolves — Quarantine's naming is a hedge against
+   * what the opponent is about to play, and an opponent who could read it would
+   * simply play something else. A `public` firing's is disclosed as it is fired,
+   * which is what gives the seat it acts against something to answer.
    */
   target: Move | null;
   /**

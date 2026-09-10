@@ -305,7 +305,7 @@ describe('WebSocket ability firings', () => {
 });
 
 /**
- * Oracle's sub-phase over the wire (JQ-150).
+ * The mid-round sub-phase over the wire (JQ-150, generalised by JQ-239).
  *
  * The design rests on one claim: the opponent's committed move never leaves the
  * server before the round resolves. Asserting it against the socket payload
@@ -345,19 +345,30 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
 
     const hers = await waitFor(
       aliceWs,
-      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'oracle',
+      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'react',
     );
     const state = hers.state as {
-      oracle: { round: number; namedMove: string } | null;
+      entitlement: {
+        round: number;
+        reveals: { helperId: string; namedMove: string }[];
+        incoming: unknown[];
+        acted: boolean;
+      } | null;
       currentRoundMoves: Record<string, string>;
       abilityFirings: unknown[];
       results: unknown[];
     };
 
     // She is told a move he did *not* play, and it is a move he could have.
-    expect(state.oracle!.round).toBe(1);
-    expect(state.oracle!.namedMove).not.toBe('lizard');
-    expect(['rock', 'paper', 'robot']).toContain(state.oracle!.namedMove);
+    expect(state.entitlement!.round).toBe(1);
+    expect(state.entitlement!.acted).toBe(false);
+    // Her claim on the window is her own reveal; nothing was fired publicly at her.
+    expect(state.entitlement!.incoming).toEqual([]);
+    expect(state.entitlement!.reveals).toHaveLength(1);
+    const named = state.entitlement!.reveals[0];
+    expect(named.helperId).toBe('oracle');
+    expect(named.namedMove).not.toBe('lizard');
+    expect(['rock', 'paper', 'robot']).toContain(named.namedMove);
     // Her own pick comes back so she can decide whether to keep it; his does not.
     expect(state.currentRoundMoves).toEqual({ [alice]: 'rock' });
     expect(state.abilityFirings).toEqual([]);
@@ -367,14 +378,15 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
     // as a value, so there is no reading of it that hands her his move.
     const values = Object.values(state.currentRoundMoves);
     expect(values).not.toContain('lizard');
-    expect(JSON.stringify(state.oracle)).not.toContain('lizard');
+    expect(JSON.stringify(state.entitlement)).not.toContain('lizard');
 
-    // Bob's own socket is told nothing about the reveal.
+    // Bob's own socket is told nothing about the reveal — and, since Oracle is a
+    // secret firing, is given no claim on the window either.
     const his = await waitFor(
       bobWs,
-      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'oracle',
+      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'react',
     );
-    expect((his.state as { oracle: unknown }).oracle).toBeNull();
+    expect((his.state as { entitlement: unknown }).entitlement).toBeNull();
     expect((his.state as { abilityFirings: unknown[] }).abilityFirings).toEqual([]);
 
     aliceWs.close();
@@ -404,7 +416,7 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
     expect(firings[0].helperId).toBe('oracle');
     // The move it named — a move Bob did not play — is now public to both.
     expect(firings[0].target).not.toBe('rock');
-    expect((resolved.state as { oracle: unknown }).oracle).toBeNull();
+    expect((resolved.state as { entitlement: unknown }).entitlement).toBeNull();
 
     bobWs.close();
   });
