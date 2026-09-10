@@ -40,7 +40,6 @@ export function AbilityRail({
   abilities,
   myMarks,
   oppMarks,
-  firedThisRound,
   unavailable,
   onFire,
 }: {
@@ -51,8 +50,6 @@ export function AbilityRail({
   /** Marks as they stand entering this round — what the server validates against. */
   myMarks: Record<string, number>;
   oppMarks: Record<string, number>;
-  /** One firing per seat per round is the repository's rule; this is the local read of it. */
-  firedThisRound: boolean;
   /**
    * Why the round will not accept a firing right now, or null when it will.
    *
@@ -82,7 +79,6 @@ export function AbilityRail({
           key={ability.id}
           ability={ability}
           marks={marks}
-          firedThisRound={firedThisRound}
           unavailable={unavailable}
           firing={firing?.id === ability.id ? firing.named : null}
           onStart={() => setFiring({ id: ability.id, named: {} })}
@@ -108,24 +104,26 @@ export function AbilityRail({
 }
 
 /** Why the fire button is unavailable, in the player's words, or null if it isn't. */
-function blockedBecause(
-  ability: HeldAbility,
-  firedThisRound: boolean,
-  unavailable: string | null,
-): string | null {
+function blockedBecause(ability: HeldAbility, unavailable: string | null): string | null {
   // The round's own reason comes first: it is the one the player can act on, and
   // a charge's state is beside the point when nothing can be sent at all.
   if (unavailable) return unavailable;
   if (ability.charge.marks === null) return 'Spent for the match.';
   if (ability.charge.marks > 0) return 'Still recharging.';
-  if (firedThisRound) return 'You have already fired an ability this round.';
+  // Charged, and unavailable anyway: this ability already fired this round.
+  //
+  // Read off the server's own map rather than tracked locally, and per ability
+  // rather than per seat — JQ-238 made the rule one firing per *slot*, so a seat
+  // that brought two charge helpers may fire both. `chargesNow` suppresses only
+  // the fired card's availability, which is exactly that rule expressed as data,
+  // and it survives a reload where local state would not.
+  if (!ability.charge.available) return `You have already fired ${ability.name} this round.`;
   return null;
 }
 
 function AbilityCard({
   ability,
   marks,
-  firedThisRound,
   unavailable,
   firing,
   onStart,
@@ -135,7 +133,6 @@ function AbilityCard({
 }: {
   ability: HeldAbility;
   marks: MarksBySide;
-  firedThisRound: boolean;
   unavailable: string | null;
   /** The moves named so far, or null when this card is not being fired. */
   firing: Partial<FiringChoice> | null;
@@ -145,7 +142,7 @@ function AbilityCard({
   onConfirm: () => void;
 }) {
   const charge = chargeReading(ability.charge);
-  const blocked = blockedBecause(ability, firedThisRound, unavailable);
+  const blocked = blockedBecause(ability, unavailable);
   const steps = targetSteps(ability.id);
   // The first step not yet answered. Undefined once every step has a move, which
   // is what puts the card on its confirm step.

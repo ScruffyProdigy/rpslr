@@ -68,7 +68,7 @@ describe('heldAbilities (JQ-221)', () => {
     expect(held).toHaveLength(1);
     expect(held[0].id).toBe('rust');
     expect(held[0].name).toBe('Rust');
-    expect(held[0].blurb).toBe('Add 2 marks to a move they currently have live.');
+    expect(held[0].blurb).toBe('Secretly add 2 marks to a move they currently have live.');
     expect(held[0].charge).toEqual({ marks: 0, available: true });
   });
 

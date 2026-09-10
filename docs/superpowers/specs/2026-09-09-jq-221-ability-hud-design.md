@@ -4,7 +4,9 @@ Linear: [JQ-221](https://linear.app/joinquest/issue/JQ-221/in-game-ability-hud-s
 Depends on: JQ-220 (a firing's path from the player to the round) — merged, PR #14.
 Builds on: JQ-215 (playable-but-marked) — merged, PR #19. JQ-207 (the client reads
 the server's rules) — merged, PR #15.
-Absorbs: JQ-150's client half — see "Oracle arrives without a prompt" below.
+Absorbs: JQ-150's client half — see "The sub-phase arrives without a prompt" below.
+Rebased onto: JQ-235 / JQ-238 / JQ-239 (PR #23), which landed on main mid-review
+and moved three things this design rested on. The amendments are marked below.
 
 ## Problem
 
@@ -71,11 +73,20 @@ null` is deliberately not `Infinity` server-side precisely so a client comparing
 `marks > 0` cannot read it as available — the client honours that by branching on
 `marks === null` first, before any arithmetic.
 
-A card may also read Ready but be unfirable for the round: you have already fired
-this round, the match is over, the socket is down, or the Oracle sub-phase is
+A card may also read Ready but be unfirable for the round: *this* card has already
+fired, the socket is down, the opponent has not arrived, or the sub-phase is
 running (`fireAbility` refuses during it — "the round is already resolving").
 Those are round conditions rather than charge conditions, so they disable the
 button and say why in its hint, and leave the charge word alone.
+
+**Amended by JQ-238.** The rule was one firing per *seat* per round, which this
+design tracked in local client state because nothing on the wire carried it.
+JQ-238 made it one per *ability slot*, so a seat that brought two charge helpers
+may fire both — and that rule is already on the wire: `chargesNow` suppresses
+`available` for the fired card alone. So the local flag is gone, and a card reading
+`marks: 0, available: false` is the server saying "this one already fired this
+round". Better than the flag it replaces, which was lost on reload and would have
+wrongly blocked the second card.
 
 ### Targeting is a step sequence inside the card, not a mode on the pentagon
 
@@ -120,7 +131,7 @@ named, the card shows what is about to happen and two buttons — **Fire** and
 there is; once Fire is pressed the charge is gone whether the ability lands or
 not, and the confirm line says so in those words.
 
-### Oracle arrives without a prompt, and this ticket builds it
+### The sub-phase arrives without a prompt, and this ticket builds it
 
 JQ-150 is closed, and its merge touched `client/src/api.ts` for types and no
 other client file. There is no re-pick prompt. `api.ts:22` says the prompt
@@ -128,6 +139,19 @@ other client file. There is no re-pick prompt. `api.ts:22` says the prompt
 non-goal; the code is right and the ticket is stale. Without it Oracle is the one
 card that can be fired and then does nothing visible, which is worse than a card
 that cannot be fired at all.
+
+**Amended by JQ-239.** The window is no longer Oracle's. The phase is `react`,
+and `MatchState.oracle` became `MatchState.entitlement`, which carries *why* a
+seat may act: `reveals` (what its own abilities told it — a list, since a loadout
+may hold two informing cards) and `incoming` (public firings acted against it).
+It also carries `acted`, the server's record of having answered — which matters
+because a seat that re-picked the move it already had is indistinguishable from
+one that has not answered, so it cannot be inferred. The prompt renders all three,
+and closes once `acted`.
+
+No card is `public` today, so `incoming` is empty in play. It is rendered anyway:
+the entitlement carries it, and a window that opened with nothing in it would be
+worse than one that explains itself.
 
 The protocol needs nothing new. During the sub-phase the holder re-picks by
 sending an ordinary `move`, which `submitMove` routes to `replaceMove` and
@@ -137,13 +161,16 @@ pick on time.
 
 So the prompt is:
 
-- Shown when `match.phase === 'oracle'` and `state.oracle.round ===
-  match.currentRound` — the round guard is why `OracleReveal` carries a round.
-- Says the named move — "They did not play **Paper**" — or, when `namedMove` is
-  null, that they played their only live move and there is nothing to name.
-- Re-opens the pentagon for the holder, with a **Keep <Move>** button that
-  re-sends the current pick.
-- For the *non*-holder, the picker stays locked and the status slot says the
+- Shown when `match.phase === 'react'` and `state.entitlement.round ===
+  match.currentRound` — the round guard is why `Entitlement` carries a round.
+- Says what each reveal named — "Oracle — they did not play **Paper**" — or, when
+  `namedMove` is null, that they played their only live move and there was nothing
+  to name. Says what each incoming public firing named, and never whether it
+  landed: that turns on the move you committed, and "it missed" would hand you
+  something about your own board the firer never paid for.
+- Re-opens the pentagon for an entitled seat, with a **Keep <Move>** button that
+  re-sends the current pick. Closes once `acted`.
+- For an *unentitled* seat, the picker stays locked and the status slot says the
   round is resolving. `submitMove` refuses them anyway ("your move is locked
   while the round resolves"); the board should not offer what the server refuses.
 
@@ -153,14 +180,17 @@ clock already renders as a shorter clock.
 `App.play` currently returns early on `lockedMove || currentRoundMoves[me] ||
 pendingMove`. That guard is what stops a double-commit and it has to stay for the
 pick phase, so the re-pick is an explicit exception rather than a loosening: when
-the sub-phase is running and this seat holds the reveal, the guard is skipped and
-the local pick state is cleared so the board follows the new choice.
+the sub-phase is running and this seat is entitled and has not yet acted, the
+guard is skipped and the local pick state is cleared so the board follows the new
+choice.
 
 ### The round account lives in History
 
 AC #4 wants the board to say, after a round resolves, which abilities fired and
-what they did, for both seats. `abilityFirings` is exactly that and is withheld
-until the round resolves, which is the same moment `results` grows.
+what they did, for both seats. `abilityFirings` is exactly that. Since JQ-235 it also carries the in-progress
+round's `public` firings, but History lists resolved rounds and filters each row's
+firings by its round, so a firing with no result row behind it simply has nowhere
+to land — which is the behaviour that was wanted anyway.
 
 `History` already lists resolved rounds for both seats, is durable — you can look
 back three rounds later, which a reveal card cannot offer — and needs no new
@@ -187,12 +217,12 @@ New:
   resolved firing. No React, no fetch.
 - `client/src/components/AbilityRail.tsx` — the rail, its cards, and the
   idle → target → confirm walk.
-- `client/src/components/OraclePrompt.tsx` — the sub-phase panel.
+- `client/src/components/SubPhasePrompt.tsx` — the sub-phase panel.
 
 Changed:
 
 - `client/src/api.ts` — `MatchState` gains `abilities: AbilityMap` and
-  `oracle: OracleReveal | null`, plus `api.fireAbility`.
+  `entitlement: Entitlement | null`, plus `api.fireAbility`.
 - `client/src/ws.ts` — `sendFire`.
 - `client/src/App.tsx` — rail and prompt placement, the re-pick exception.
 - `client/src/components/History.tsx` — firing lines.
@@ -203,10 +233,13 @@ Changed:
 - `abilities.test.ts` — legality against `namedMovesFor`'s rules for all six
   cards, the three charge readings including `marks: null`, and the firing prose.
 - `AbilityRail.test.tsx` — the rail is absent on an empty map (the duel case);
-  each charge state renders its word; an illegal chip cannot be clicked; Thief
-  walks two steps; Cancel sends nothing; Fire sends once with the named moves.
-- `OraclePrompt.test.tsx` — the named move and the null case; Keep re-sends the
-  current pick; a stale round renders nothing.
+  each charge state renders its word; a fired card blocks while its slot-mate
+  stays firable (JQ-238); an illegal chip cannot be clicked; Thief walks two steps;
+  Cancel sends nothing; Fire sends once with the named moves.
+- `SubPhasePrompt.test.tsx` — every reveal rather than the first; the null case;
+  an incoming public firing, and that it never says whether it landed; Keep
+  re-sends the current pick; `acted` closes the window; a stale round renders
+  nothing.
 - `Board.test.tsx` — a duel board is unchanged, and the rail does not appear.
 - The standing guard suites cover the rest: `designSystem` (tokens, no emoji),
   `boardFit` (tap targets at 360px and 320px, no overflow), `motionSafety`

@@ -17,7 +17,6 @@ function renderRail(
     abilities?: AbilityMap;
     myMarks?: Record<string, number>;
     oppMarks?: Record<string, number>;
-    firedThisRound?: boolean;
     unavailable?: string | null;
     onFire?: ReturnType<typeof vi.fn>;
   } = {},
@@ -31,7 +30,6 @@ function renderRail(
       abilities={over.abilities ?? { rust: { marks: 0, available: true } }}
       myMarks={over.myMarks ?? CLEAR}
       oppMarks={over.oppMarks ?? { ...CLEAR, scissors: 2 }}
-      firedThisRound={over.firedThisRound ?? false}
       unavailable={over.unavailable ?? null}
       onFire={onFire}
     />,
@@ -62,7 +60,7 @@ describe('AbilityRail — presence (JQ-221)', () => {
 
   it('names the card and its blurb from the roster', () => {
     renderRail();
-    expect(within(card('Rust')).getByText('Add 2 marks to a move they currently have live.'))
+    expect(within(card('Rust')).getByText('Secretly add 2 marks to a move they currently have live.'))
       .toBeInTheDocument();
   });
 });
@@ -90,13 +88,29 @@ describe('AbilityRail — charge state (JQ-221)', () => {
     expect(within(card('Rust')).getByRole('button', { name: /fire rust/i })).toBeDisabled();
   });
 
-  it('keeps the charge word but blocks the button once you have fired this round', () => {
-    renderRail({ firedThisRound: true });
+  /*
+   * Charged but unavailable is the server saying "this one already fired this
+   * round". Per ability, not per seat: JQ-238 made the rule one firing per slot,
+   * so the *other* card stays firable — which the next test holds.
+   */
+  it('keeps the charge word but blocks the button once this ability has fired', () => {
+    renderRail({ abilities: { rust: { marks: 0, available: false } } });
     expect(within(card('Rust')).getByText('Ready')).toBeInTheDocument();
     const button = within(card('Rust')).getByRole('button', { name: /fire rust/i });
     expect(button).toBeDisabled();
-    expect(within(card('Rust')).getByText(/already fired an ability this round/i))
-      .toBeInTheDocument();
+    expect(within(card('Rust')).getByText(/already fired Rust this round/i)).toBeInTheDocument();
+  });
+
+  it('leaves the other slot firable when one of two abilities has fired (JQ-238)', () => {
+    renderRail({
+      loadout: ['rust', 'thief'] as unknown as Loadout,
+      abilities: {
+        rust: { marks: 0, available: false },
+        thief: { marks: 0, available: true },
+      },
+    });
+    expect(within(card('Rust')).getByRole('button', { name: /fire rust/i })).toBeDisabled();
+    expect(within(card('Thief')).getByRole('button', { name: /fire thief/i })).toBeEnabled();
   });
 });
 

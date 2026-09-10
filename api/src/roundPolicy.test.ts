@@ -47,6 +47,16 @@ describe('allowanceMs', () => {
     const later = [2, 3, 4, 5, 9].map((r) => p.allowanceMs('pick', r));
     expect(new Set(later).size).toBe(1);
   });
+
+  it('gives the sub-phase a shorter, round-independent allowance', () => {
+    // One narrow decision, taken with whatever opened the window already in hand,
+    // and everyone not entitled is locked in and waiting through every second of
+    // it. Neither of the pick allowances' two adjustments applies here — there is
+    // no first-round reading to do and no reveal animation to sit through.
+    const p = policyForMode('duel-helpers');
+    for (const round of [1, 2, 5, 9]) expect(p.allowanceMs('react', round)).toBe(12_000);
+    expect(p.allowanceMs('react', 2)).toBeLessThan(p.allowanceMs('pick', 2));
+  });
 });
 
 describe('deadlineFor', () => {

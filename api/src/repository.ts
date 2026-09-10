@@ -96,10 +96,11 @@ export interface GameRepository {
   }): Promise<void>;
   listResults(matchId: string): Promise<RoundResult[]>;
   /**
-   * Record an ability a seat spent this round. At most one per seat per round — an
-   * ability sits on its own slot on the cooldown track, so there is only one to
-   * spend. Re-recording the same round is a conflict, not an overwrite: a spent
-   * charge is not a decision anyone gets to take back.
+   * Record an ability a seat spent this round. At most one per *slot* per round —
+   * each ability sits on its own slot on the cooldown track, with its own opening
+   * and its own recharge, so a loadout holding two charge cards has two to spend
+   * (JQ-238). Re-recording the same ability in the same round is a conflict, not an
+   * overwrite: a spent charge is not a decision anyone gets to take back.
    */
   recordAbilityFiring(input: {
     matchId: string;
@@ -128,10 +129,31 @@ export interface GameRepository {
     matchId: string;
     seatId: string;
     round: number;
+    /**
+     * Which of the seat's firings to name. A seat may hold two charged abilities
+     * and fire both in one round (JQ-238), so (match, round, seat) no longer
+     * identifies a row — without this the draw could land on the wrong firing.
+     */
+    helperId: string;
     target: Move | null;
   }): Promise<boolean>;
   /** Every firing in the match, in round order. Callers decide what to disclose. */
   listAbilityFirings(matchId: string): Promise<AbilityFiring[]>;
+  /**
+   * Write down that a seat has used this round's sub-phase.
+   *
+   * The round resolves once *every* entitled seat has acted, and that cannot be
+   * derived: a seat that re-picks the move it already had looks exactly like one
+   * that has not answered. Idempotent, because re-picking twice inside one window
+   * is still one act.
+   */
+  recordSubPhaseAction(input: {
+    matchId: string;
+    seatId: string;
+    round: number;
+  }): Promise<void>;
+  /** The seat keys that have acted in one round's sub-phase. */
+  listSubPhaseActions(matchId: string, round: number): Promise<string[]>;
   close(): Promise<void>;
 }
 

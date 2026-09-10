@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELPERS, MARK_COST, getHelper, isAbility } from './roster.js';
+import { HELPERS, MARK_COST, firesInPublic, getHelper, isAbility } from './roster.js';
 
 describe('helper roster', () => {
   it('holds 21 helpers at the current tier counts', () => {
@@ -67,6 +67,45 @@ describe('helper roster', () => {
       freeze: '0/3',
       sacrifice: '3/3',
     });
+  });
+
+  it('says of every ability whether it fires in secret or in public', () => {
+    for (const h of HELPERS) {
+      if (isAbility(h.load)) expect(h.reveal, h.id).toMatch(/^(secret|public)$/);
+      // A passive has no firing to disclose, so it declares nothing. The type
+      // already refuses one that tries; this is the runtime half of that rule.
+      else expect(h.reveal, h.id).toBeUndefined();
+    }
+  });
+
+  it('classifies all six abilities secret, so no card changes behaviour yet', () => {
+    // Making one public is a balance decision per card, deliberately not taken
+    // here — see JQ-235's non-goals. When one is, this test is the one to move.
+    const abilities = HELPERS.filter((h) => isAbility(h.load));
+    expect(abilities.map((h) => h.reveal)).toEqual(abilities.map(() => 'secret'));
+    expect(HELPERS.filter((h) => firesInPublic(h.id))).toEqual([]);
+  });
+
+  it('makes the blurb agree with the field, so card text cannot lie about it', () => {
+    // The whole reason the distinction is a field: a blurb saying "secretly" while
+    // the code discloses the firing is worse than either, and nothing but this test
+    // stands between the two.
+    for (const h of HELPERS) {
+      if (!isAbility(h.load)) continue;
+      expect(/secretly/i.test(h.blurb), `${h.id}: ${h.blurb}`).toBe(h.reveal === 'secret');
+    }
+  });
+
+  it('calls a passive neither secret nor public, since it never fires', () => {
+    for (const h of HELPERS) {
+      if (isAbility(h.load)) continue;
+      expect(firesInPublic(h.id), h.id).toBe(false);
+      expect(/secretly/i.test(h.blurb), h.id).toBe(false);
+    }
+  });
+
+  it('withholds rather than discloses an id it cannot place', () => {
+    expect(firesInPublic('nonesuch')).toBe(false);
   });
 
   it('looks a helper up by id', () => {

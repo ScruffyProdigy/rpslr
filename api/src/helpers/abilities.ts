@@ -93,7 +93,7 @@ export function abilityMarks(
  * per round and then charges that round's recharge, and the round being played has
  * earned neither: its decrement lands when it resolves. But a charge already spent
  * in it must not read `available`, or a client would offer a card the repository's
- * one-firing-per-round constraint is about to refuse. Suppressing availability says
+ * one-firing-per-slot-per-round constraint is about to refuse. Suppressing availability says
  * exactly that much and leaves the arithmetic alone.
  */
 export function chargesNow(

@@ -1,4 +1,4 @@
-import type { AbilityFiring, OracleReveal } from '@game/types';
+import type { AbilityFiring, Entitlement } from '@game/types';
 import type { AbilityMap } from '@game/helpers/abilities';
 import type { Loadout } from '@game/helpers/loadout';
 import { getEnv } from './env';
@@ -14,14 +14,17 @@ export type { Move };
 
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
 /**
- * A timed segment of a match. `oracle` is the mid-round sub-phase a charge-holder
- * pays for: both players are locked in, and the holder is deciding whether to
- * re-pick. Nothing here branches on it yet — the countdown reads the deadline
- * rather than the phase, so a sub-phase renders as a shorter clock — but the
- * server can send it, and a type that says otherwise is a lie waiting to be
- * believed. The prompt itself is the ability HUD's (JQ-221) — see `OraclePrompt`.
+ * A timed segment of a match. `react` is the mid-round sub-phase: both players are
+ * locked in, and anyone entitled to it — an ability revealed something to them, or
+ * a public firing acted against them — is deciding whether to re-pick. It was
+ * `oracle` while Oracle was its only way in (JQ-150); JQ-239 generalised it.
+ *
+ * Nothing here branches on it yet — the countdown reads the deadline rather than
+ * the phase, so a sub-phase renders as a shorter clock — but the server can send
+ * it, and a type that says otherwise is a lie waiting to be believed. The prompt
+ * itself is the ability HUD's (JQ-221) — see `SubPhasePrompt`.
  */
-export type Phase = 'pick' | 'oracle';
+export type Phase = 'pick' | 'react';
 /** How a match ended; everything but 'played' comes from the idle policy. */
 export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
 
@@ -100,9 +103,10 @@ export interface MatchState {
   currentRoundMoves: Record<string, Move>;
   matchWinnerSeatKey: string | null;
   /**
-   * Abilities spent in rounds that have already resolved. The round in progress is
-   * withheld server-side, because naming a move with Quarantine is a hedge an
-   * opponent who could read it would simply play around.
+   * The firings the server discloses: everything from a resolved round, plus the
+   * round in progress's `public` ones. A `secret` firing in the round in progress
+   * is withheld server-side, because naming a move with Quarantine is a hedge an
+   * opponent who could read it would simply play around (JQ-235).
    */
   abilityFirings: AbilityFiring[];
   /**
@@ -120,10 +124,14 @@ export interface MatchState {
    */
   abilities: AbilityMap;
   /**
-   * Oracle's mid-round reveal while `match.phase` is `oracle`, or null. Carries
-   * its own round so a reveal that outlived its sub-phase cannot be rendered.
+   * This seat's claim on the mid-round sub-phase while `match.phase` is `react`,
+   * or null when it has none.
+   *
+   * Seat-private like `abilities`. Carries its own round so a claim that outlived
+   * its sub-phase cannot be rendered, and `acted` so a seat that has already used
+   * its window is not offered it twice.
    */
-  oracle: OracleReveal | null;
+  entitlement: Entitlement | null;
   /**
    * The server's clock when this snapshot was built. The countdown is rendered
    * as an offset from this, never from the device clock, which may be far off.

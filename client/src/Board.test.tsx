@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Board } from './App';
+import type { Entitlement } from '@game/types';
 import type { MatchState, Move, RoundResult, Seat } from './api';
 
 const MY_SEAT = 'a';
@@ -97,7 +98,7 @@ function state(over: {
     abilityFirings: [],
     // No seat in these fixtures holds a charge, which is the duel case.
     abilities: {},
-    oracle: null,
+    entitlement: null,
     matchWinnerSeatKey: finished ? MY_SEAT : null,
   };
 }
@@ -547,16 +548,17 @@ describe('<Board> ability rail (JQ-221)', () => {
   });
 
   /*
-   * `fireAbility` refuses during Oracle's sub-phase — "the round is already
-   * resolving" — so the board must not offer what the server will refuse.
+   * `fireAbility` refuses during the sub-phase — "the round is already resolving",
+   * non-cascading so a window cannot open another — so the board must not offer
+   * what the server will refuse.
    */
-  it('blocks firing while the Oracle sub-phase is running, and blames the round', () => {
+  it('blocks firing while the sub-phase is running, and blames the round', () => {
     const s = withAbility(state({ submitted: [MY_PLAYER, OPP_PLAYER] }), 'rust', 0);
     render(
       <Board
         myPlayerId={MY_PLAYER}
         mySeatKey={MY_SEAT}
-        state={{ ...s, match: { ...s.match, phase: 'oracle' } }}
+        state={{ ...s, match: { ...s.match, phase: 'react' } }}
         connected
         error={null}
         myChosenMove="rock"
@@ -571,31 +573,53 @@ describe('<Board> ability rail (JQ-221)', () => {
   });
 });
 
-describe('<Board> Oracle sub-phase (JQ-221)', () => {
-  function oracleState(over: { reveal?: { round: number; namedMove: Move | null } | null } = {}) {
+describe('<Board> mid-round sub-phase (JQ-221)', () => {
+  function reactState(over: { entitlement?: Entitlement | null } = {}) {
     const s = state({ submitted: [MY_PLAYER, OPP_PLAYER] });
     return {
       ...s,
-      match: { ...s.match, phase: 'oracle' as const },
+      match: { ...s.match, phase: 'react' as const },
       currentRoundMoves: { [MY_PLAYER]: 'rock' as Move },
-      oracle: 'reveal' in over ? (over.reveal ?? null) : { round: 1, namedMove: 'paper' as Move },
+      entitlement:
+        'entitlement' in over
+          ? (over.entitlement ?? null)
+          : {
+              round: 1,
+              reveals: [{ helperId: 'oracle', namedMove: 'paper' as Move }],
+              incoming: [],
+              acted: false,
+            },
     };
   }
 
-  it('re-opens the pentagon for the holder, who may replace their pick', () => {
-    renderBoard(oracleState(), 'rock');
+  it('re-opens the pentagon for an entitled seat, which may replace its pick', () => {
+    renderBoard(reactState(), 'rock');
     expect(screen.getByText(/they did not play/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Lizard/ })).toBeEnabled();
   });
 
   /*
-   * The opponent's move is locked while the round resolves — `submitMove` says so
-   * — so their board says the round is resolving rather than offering a tap.
+   * A seat with no entitlement is locked while the round resolves — `submitMove`
+   * says exactly that — so its board says so rather than offering a tap.
    */
-  it('keeps the non-holder locked out, and says why', () => {
-    renderBoard(oracleState({ reveal: null }), 'rock');
+  it('keeps an unentitled seat locked out, and says why', () => {
+    renderBoard(reactState({ entitlement: null }), 'rock');
     expect(screen.queryByText(/they did not play/i)).not.toBeInTheDocument();
     expect(screen.getByText(/the round is resolving/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
+  });
+
+  /*
+   * `acted` is the server's record of having answered, and it closes the window:
+   * a second send would be refused, so the board stops offering one.
+   */
+  it('locks the pentagon again once this seat has used its window', () => {
+    const s = reactState();
+    renderBoard(
+      { ...s, entitlement: { ...s.entitlement!, acted: true } },
+      'rock',
+    );
+    expect(screen.getByText(/your answer is in/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
   });
 });
