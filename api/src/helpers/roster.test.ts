@@ -165,7 +165,11 @@ describe('helper roster', () => {
       // unannounced it is only collected on the ~1/3 who walk into it — where the
       // public one is dodged and priced on the option it removes instead. Visibility
       // sets the price and the price sets the cadence; that is the whole pair.
-      tripwire: '0/3',
+      // Opening 1 is the pair's gate, not a price: at 0/3 it would coincide with
+      // Quarantine on round 1, and this pair compounds — the public card shrinks
+      // their live set, which lifts the secret one's hit rate. Over seven rounds both
+      // openings fire exactly twice, so the gate costs nothing.
+      tripwire: '1/3',
     });
   });
 
