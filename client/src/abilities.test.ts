@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AbilityFiring } from '@game/types';
 import type { Loadout } from '@game/helpers/loadout';
+import { getHelper } from '@game/helpers/roster';
 import {
   chargeReading,
   describeFiring,
@@ -9,7 +10,7 @@ import {
   targetSteps,
 } from './abilities';
 
-/** A loadout is any two distinct helpers; only a Major can carry a charge. */
+/** A loadout is any two distinct helpers; only a Trinket cannot carry a charge. */
 function loadoutWith(majorId: string): Loadout {
   return [majorId, 'echo-chamber'] as unknown as Loadout;
 }
@@ -68,7 +69,10 @@ describe('heldAbilities (JQ-221)', () => {
     expect(held).toHaveLength(1);
     expect(held[0].id).toBe('rust');
     expect(held[0].name).toBe('Rust');
-    expect(held[0].blurb).toBe('Secretly add 2 marks to a move they currently have live.');
+    // Read from the roster rather than repeated here, which is what this test is
+    // named for: a literal would be the second copy it exists to rule out, and it
+    // went stale the first time a blurb was repriced (JQ-209 rewrote Rust's).
+    expect(held[0].blurb).toBe(getHelper('rust')!.blurb);
     expect(held[0].charge).toEqual({ marks: 0, available: true });
   });
 

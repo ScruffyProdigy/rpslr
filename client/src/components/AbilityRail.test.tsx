@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { AbilityMap } from '@game/helpers/abilities';
 import type { Loadout } from '@game/helpers/loadout';
+import { getHelper } from '@game/helpers/roster';
 import { AbilityRail } from './AbilityRail';
 
 const CLEAR = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
@@ -60,7 +61,8 @@ describe('AbilityRail — presence (JQ-221)', () => {
 
   it('names the card and its blurb from the roster', () => {
     renderRail();
-    expect(within(card('Rust')).getByText('Secretly add 2 marks to a move they currently have live.'))
+    // From the roster, not repeated here — see the note in abilities.test.ts.
+    expect(within(card('Rust')).getByText(getHelper('rust')!.blurb))
       .toBeInTheDocument();
   });
 });
