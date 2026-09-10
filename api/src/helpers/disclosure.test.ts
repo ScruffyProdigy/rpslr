@@ -3,11 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 /**
  * The roster is faked here, and only here.
  *
- * Every card on the real roster is `secret` today (JQ-235 changes no card's
- * behaviour), so the public branch has no card to exercise it. Testing it against a
- * stand-in is the difference between "this works" and "this compiles" — the branch
- * exists precisely so that the next card to go public needs no service change, and
- * an untested branch would not deliver that.
+ * It was faked because every card was `secret` and the public branch had nothing to
+ * exercise it. That reason expired with JQ-209 — Freeze fires in public now — and
+ * the fake is kept anyway, for a better reason than the original.
+ *
+ * `town-crier` is not a card and never will be. Binding these cases to a real one
+ * would make this file's subject the roster rather than `disclosedFirings`, so it
+ * would go red the next time a card's `reveal` is repriced — which is exactly the
+ * churn JQ-209 spent its time on elsewhere. The branch exists so that the next card
+ * to go public needs no service change; a synthetic stand-in is what keeps that
+ * claim under test whatever the roster happens to hold.
+ *
+ * `subPhase.test.ts` fakes one for the same reason and says so there.
  */
 vi.mock('./roster.js', () => ({
   firesInPublic: (id: string) => id === 'town-crier',
