@@ -41,14 +41,16 @@ has to arrive deliberately:
 | Quarantine | public firing, at the seat it names | opening 0, recharge 3 |
 | Freeze | public firing | once per match |
 
-A pause costs `REACT_MS` = 12s, against a pick allowance of 45s in round 1 and
-23.2s after it.
+A pause costs `REACT_MS` = 12s, against a pick allowance of 60s in round 1 and
+23.2s after it. (Round 1 was 45s when this was first drafted; #33 raised it while
+the ticket was open. The share below moved by less than a point, which is the
+useful thing to know about it — the budget is not sensitive to that dial.)
 
 **Played greedily — fire the moment the charge is up — a recharge-3 card buys a
 pause every third round.** Two seats firing on the same cadence collide on the same
 rounds, and one sub-phase per round means the collision is free. So greedy play
 across the whole table costs `ceil(N/3)` pauses in an N-round match: two in a
-typical five-round match, about 24s on ~138s of thinking time.
+typical five-round match, about 24s on ~153s of thinking time.
 
 **The ceiling is much worse and nobody has reason to play it.** Four charge slots at
 recharge 3 produce 4/3 pauses per round if deliberately staggered, which the
@@ -64,7 +66,7 @@ paying in tempo for the privilege of slowing the game down.
 That number is chosen to sit exactly where greedy play already lands, which is the
 point: the common line should not be the one that breaks pacing, and a budget that
 the ordinary way of playing already exceeds is a budget nobody will keep. It leaves
-a five-round match with two pauses and ~15% more wall clock, which reads as two
+a five-round match with two pauses and ~16% more wall clock, which reads as two
 beats in a match rather than as a stop-start rhythm.
 
 The measurement is `v_sub_phase_budget.paused_round_share`, per match. The trigger
