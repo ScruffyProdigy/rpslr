@@ -1,5 +1,10 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { rulesForSeats, type SeatLoadout } from '@game/replayBoard';
+import {
+  playedRoundsFrom,
+  rulesForSeats,
+  type SeatLoadout,
+} from '@game/replayBoard';
+import { replayMatch, type MarkEvent } from '@game/game';
 import {
   api,
   type Move,
@@ -24,7 +29,7 @@ import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { buildReplayUrl, buildStoryImageUrl, replayRef } from './lib/replayLink';
-import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
+import { holdsFreeze, opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -648,9 +653,49 @@ export function Board({
     .reverse()
     .map((r) => r.moves[myPlayerId])
     .filter((m): m is Move => Boolean(m));
+  // Both seats' rules, so the board can draw the graph each of them is actually
+  // playing and say why a mark is where it is. `rulesForSeats` is the server's own
+  // compiler, not a mirror of it — see the note at the top of replayBoard.ts.
+  //
+  // It throws on a loadout whose two helpers bind the same move with no stored
+  // roll, which is a match that cannot be reconstructed at all. The live board has
+  // the server's own `delays` to fall back on, so it degrades to the shared graph
+  // rather than taking the screen down (`reconstructionBlockedReason` is what the
+  // replay page shows instead, where there is no live state to fall back to).
+  //
+  // Computed plainly rather than memoised: this sits after the loading early
+  // return, so a hook here would be a conditional one — and a match is a handful
+  // of rounds, which is why `boardsThroughMatch` re-walks every prefix without
+  // anyone minding.
+  const [myRules, oppRules] = (() => {
+    try {
+      return rulesForSeats(mySeat ?? NO_LOADOUT, oppSeat ?? NO_LOADOUT);
+    } catch {
+      return rulesForSeats(NO_LOADOUT, NO_LOADOUT);
+    }
+  })();
   // The marks your loadout opened on, so a cooldown with no pick behind it is
   // only blamed on the opening where this match actually had one (JQ-207).
-  const myOpeningDelays = rulesForSeats(mySeat ?? NO_LOADOUT, NO_LOADOUT)[0].initialDelays;
+  const myOpeningDelays = myRules.initialDelays;
+  // Why each of your marks is there. Replayed from the same record the server
+  // replays — the moves, the firings and the two loadouts — so the board explains
+  // the board the server actually dealt rather than one it inferred (JQ-151).
+  const myLedger = ((): MarkEvent[] => {
+    // A duel has nothing to explain that the last two picks do not already, so it
+    // keeps the wording it has rather than paying for a walk to reach it.
+    if (!mySeat || !oppSeat || !mySeat.loadout) return [];
+    const mine = { ...mySeat, playerId: myPlayerId };
+    const theirs = { ...oppSeat, playerId: oppSeat.player?.id ?? '' };
+    try {
+      const played = playedRoundsFrom(results, state.abilityFirings ?? [], mine, theirs);
+      return replayMatch(played, myRules, oppRules).events.filter((e) => e.side === 'a');
+    } catch {
+      return [];
+    }
+  })();
+  // Numbers on their marks only where the numbers carry information: see the
+  // `showOppCooldownCounts` note in MovePicker.
+  const helpersInPlay = Boolean(mySeat?.loadout || oppSeat?.loadout);
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -672,7 +717,10 @@ export function Board({
   const revealPicks = reveal ? opponentMoveFromResult(reveal.result.moves, myPlayerId) : null;
   const winningEdge =
     reveal?.phase === 'outro' && revealPicks?.myMove && revealPicks.oppMove
-      ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove)
+      ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove, {
+          mine: myRules.beats,
+          theirs: oppRules.beats,
+        })
       : null;
 
   if (finished && !revealingNow) {
@@ -764,6 +812,11 @@ export function Board({
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             myOpeningDelays={myOpeningDelays}
+            myBeats={myRules.beats}
+            oppBeats={oppRules.beats}
+            myLedger={myLedger}
+            showOppCooldownCounts={helpersInPlay}
+            oppCanFreeze={holdsFreeze(oppSeat?.loadout ?? null)}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}

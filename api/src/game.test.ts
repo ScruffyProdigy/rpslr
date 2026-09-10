@@ -172,7 +172,9 @@ describe('replayMatch', () => {
     const vindictive: PlayerRules = {
       ...BASE_RULES,
       adjustAfterRound: ({ opponent, outcome }) =>
-        outcome === 'loss' ? { own: {}, opponent: { [opponent]: 1 } } : { own: {}, opponent: {} },
+        outcome === 'loss'
+          ? { own: [], opponent: [{ move: opponent, amount: 1, helperId: 'vindictive' }] }
+          : { own: [], opponent: [] },
     };
     const rounds = [{ a: 'paper' as const, b: 'scissors' as const }];
     const { b } = replayMatch(rounds, vindictive, BASE_RULES);
