@@ -485,7 +485,11 @@ describe('<ReplayPage> under the cooldown floor', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(floorState());
     render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    // Auto-play starts from an effect a commit *after* the match renders, so the
+    // transport still reads Play when 'Ana' appears — wait for Pause itself
+    // (JQ-213). These two were the last places in the file still doing it the old
+    // way, and CI caught them where a faster local run did not.
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     for (let n = 2; n <= 6; n++) {
       await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
@@ -502,7 +506,11 @@ describe('<ReplayPage> under the cooldown floor', () => {
     vi.spyOn(api, 'getState').mockResolvedValue(floorState());
     const { container } = render(<ReplayPage matchRef="ext-1" />);
     await screen.findByText('Ana');
-    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    // Auto-play starts from an effect a commit *after* the match renders, so the
+    // transport still reads Play when 'Ana' appears — wait for Pause itself
+    // (JQ-213). These two were the last places in the file still doing it the old
+    // way, and CI caught them where a faster local run did not.
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
 
     for (let n = 2; n <= 6; n++) {
       await userEvent.click(screen.getByRole('button', { name: 'Next round' }));
