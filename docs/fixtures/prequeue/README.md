@@ -30,9 +30,19 @@ that drifts. It already did once, when JQ-209 moved the tier split.
 
 ## The roster fixture is generated
 
-`queue-options.duel-helpers.json` is generated from `api/src/helpers/roster.ts`.
-**Do not hand-edit it.** Regenerate when the roster moves; the byte-for-byte test in
+`queue-options.duel-helpers.json` is generated from `api/src/helpers/roster.ts`:
+
+```
+cd api && npm run golden:queue-options
+```
+
+**Do not hand-edit it.** Regenerate when the roster moves — a card added, renamed,
+repriced or cut — and say which in the commit message; the byte-for-byte test in
 JQ-148 is what keeps the two honest.
+
+Until JQ-237 this section named no generator, so "regenerate" meant editing 21
+entries by hand. It showed: the file had picked up a trailing blank line none of its
+eight neighbours has, which the generator has now normalised away.
 
 ## Running them
 

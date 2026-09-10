@@ -52,6 +52,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Types were checked by nothing until JQ-237: `tsconfig.json` excludes tests,
+      # and `npm run build` was never a CI step. The roster's tier rules are enforced
+      # in the type system, so they need a gate that actually runs.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Run migrations
         run: npm run migrate
 

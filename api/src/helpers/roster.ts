@@ -79,9 +79,19 @@ type Spend =
   | { load: AbilityLoad; reveal: Reveal };
 
 /**
- * Only a Major may carry a charge, and only a bound tier has a move. Both rules
- * live in the type, so a miswritten card fails `tsc` rather than waiting for a
- * runtime assertion that someone has to remember to write.
+ * Only a bound tier has a move, and only a bound tier may carry a charge. Both
+ * rules live in the type, so a miswritten card fails `tsc` rather than waiting for
+ * a runtime assertion that someone has to remember to write.
+ *
+ * JQ-237 moved the second one. It used to read "only a Major", which conflated
+ * price with load and left an ability worth about a tier step less than a Major
+ * with nowhere to live. Tier still sets the price — `MARK_COST` is untouched — and
+ * load now sets itself, so a Minor may buy a cheaper opening and still fire.
+ *
+ * A Trinket stays passive-only, and that is the rule doing work now: it has no
+ * bound move and costs nothing, so a charge on one would be an ability for free.
+ * Keeping one tier reliably load-free is also what lets the draft always answer a
+ * player who wants nothing to remember.
  */
 export type HelperDef<T extends Tier = Tier> = {
   id: string;
@@ -97,7 +107,7 @@ export type HelperDef<T extends Tier = Tier> = {
    * expected to move, and the prose is the copy that goes stale in silence.
    */
   blurb: string;
-} & (T extends 'Major' ? Spend : { load: { kind: 'passive' }; reveal?: never });
+} & (T extends 'Trinket' ? { load: { kind: 'passive' }; reveal?: never } : Spend);
 
 const MAJORS = [
   { id: 'good-old-rock', name: 'Good Old Rock', tier: 'Major', boundMove: 'rock',
