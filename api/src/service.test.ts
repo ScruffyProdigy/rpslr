@@ -1494,7 +1494,7 @@ describe('GameService — Oracle', () => {
     const { code, alice, bob } = await oracleMatch();
     await service.fireAbility(code, alice, { helperId: 'oracle' });
     await service.submitMove(code, alice, 'rock');
-    now += 45_000;
+    now += 60_000;
 
     const state = await service.getState(code, alice);
     expect(state.match.phase).toBe('pick');
