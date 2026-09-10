@@ -38,8 +38,8 @@ export function SubPhasePrompt({
   if (!entitlement || entitlement.round !== round) return null;
 
   return (
-    <section className="oracle-prompt" role="status" aria-label="Your window">
-      <h3 className="oracle-prompt__title">Something changed</h3>
+    <section className="subphase-prompt" role="status" aria-label="Your window">
+      <h3 className="subphase-prompt__title">Something changed</h3>
       {entitlement.reveals.map((reveal) => (
         <RevealLine key={reveal.helperId} reveal={reveal} />
       ))}
@@ -50,16 +50,16 @@ export function SubPhasePrompt({
         // Acting is written down server-side rather than inferred, because a seat
         // that re-picked the move it already had is indistinguishable from one that
         // has not answered. The board says the same thing back.
-        <p className="oracle-prompt__ask">
+        <p className="subphase-prompt__ask">
           Your answer is in — waiting for the round to resolve.
         </p>
       ) : (
         <>
-          <p className="oracle-prompt__ask">
+          <p className="subphase-prompt__ask">
             Pick again, or keep what you have. If the clock runs out, your pick stands.
           </p>
           {myMove && (
-            <button type="button" className="oracle-prompt__keep" onClick={() => onKeep(myMove)}>
+            <button type="button" className="subphase-prompt__keep" onClick={() => onKeep(myMove)}>
               Keep {MOVE_META[myMove].label}
             </button>
           )}
@@ -76,16 +76,16 @@ function RevealLine({ reveal }: { reveal: MidRoundReveal }) {
     // Null when there was nothing to name — for Oracle, the opponent played their
     // only live move. The charge was spent to be told that, so it is still said.
     return (
-      <p className="oracle-prompt__reveal">
+      <p className="subphase-prompt__reveal">
         <strong>{name}</strong> — they played their only live move, so there is
         nothing they did not play.
       </p>
     );
   }
   return (
-    <p className="oracle-prompt__reveal">
+    <p className="subphase-prompt__reveal">
       <strong>{name}</strong> — they did not play{' '}
-      <span className="oracle-prompt__move">
+      <span className="subphase-prompt__move">
         <MoveIcon move={reveal.namedMove} />
         <strong>{MOVE_META[reveal.namedMove].label}</strong>
       </span>
@@ -103,12 +103,12 @@ function RevealLine({ reveal }: { reveal: MidRoundReveal }) {
 function IncomingLine({ firing }: { firing: IncomingFiring }) {
   const name = getHelper(firing.helperId)?.name ?? firing.helperId;
   return (
-    <p className="oracle-prompt__reveal">
+    <p className="subphase-prompt__reveal">
       <strong>{name}</strong> — they fired it at you
       {firing.target ? (
         <>
           {', naming '}
-          <span className="oracle-prompt__move">
+          <span className="subphase-prompt__move">
             <MoveIcon move={firing.target} />
             <strong>{MOVE_META[firing.target].label}</strong>
           </span>

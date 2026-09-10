@@ -2720,36 +2720,37 @@ input:focus-visible {
   color: var(--surface-0);
 }
 
-/* Oracle's sub-phase (JQ-221, finishing JQ-150's client half). Sits below the
-   pentagon with the rail, and for the same reason: it appears mid-decision. */
-.oracle-prompt {
+/* The mid-round sub-phase (JQ-221, finishing JQ-150's client half; generalised
+   past Oracle by JQ-239). Sits below the pentagon with the rail, and for the same
+   reason: it appears mid-decision. */
+.subphase-prompt {
   margin-top: 10px;
   padding: 10px;
   border: 1px solid var(--info);
   border-radius: 10px;
   background: var(--surface-3);
 }
-.oracle-prompt__title {
+.subphase-prompt__title {
   margin: 0 0 4px;
   font-family: var(--font-display);
   font-size: 0.9rem;
   color: var(--info);
 }
-.oracle-prompt__reveal {
+.subphase-prompt__reveal {
   margin: 0;
   font-size: 0.9rem;
 }
-.oracle-prompt__move {
+.subphase-prompt__move {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.oracle-prompt__ask {
+.subphase-prompt__ask {
   margin: 6px 0 0;
   font-size: 0.78rem;
   color: var(--muted);
 }
-.oracle-prompt__keep {
+.subphase-prompt__keep {
   min-height: 44px;
   margin-top: 8px;
   padding-inline: 12px;
