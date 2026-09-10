@@ -85,7 +85,10 @@ export default function App() {
         if (s.match.externalMatchId) setExternalMatchId(s.match.externalMatchId);
       })
       .catch(() => {});
-  }, [lobbyLink.matchId]);
+    // Runs once. `lobbyLink` is module scope — read from `window.location.search`
+    // at import — so `lobbyLink.matchId` cannot change between renders, and naming
+    // it here claimed a reactivity it never had.
+  }, []);
 
   return (
     <div className="app">
