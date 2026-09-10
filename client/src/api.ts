@@ -26,7 +26,13 @@ export type MatchStatus = 'waiting' | 'playing' | 'finished';
  */
 export type Phase = 'pick' | 'react';
 /** How a match ended; everything but 'played' comes from the idle policy. */
-export type MatchEndReason = 'played' | 'forfeit-strikes' | 'forfeit-disconnect' | 'abandoned';
+/** Mirrors the API's `MatchEndReason`; `draw` is the round cap reached level. */
+export type MatchEndReason =
+  | 'played'
+  | 'forfeit-strikes'
+  | 'forfeit-disconnect'
+  | 'abandoned'
+  | 'draw';
 
 export interface LobbyPlayerProfile {
   displayName?: string;

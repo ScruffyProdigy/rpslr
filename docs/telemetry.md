@@ -33,7 +33,16 @@ views are the only things that apply it:
 - **Mirrors are excluded.** Both seats bringing the same two helpers says nothing
   about the loadout. `v_match_telemetry.is_mirror` still flags them.
 - **Only `end_reason = 'played'` counts.** A win by disconnect is a fact about a
-  network.
+  network, and a match that reached the round cap level (`end_reason = 'draw'`)
+  has no winner to attribute.
+
+  **This is a trap worth reading twice for draw-seeking loadouts.** A loadout
+  that plays for the cap does not appear in the win-rate views as *losing* — it
+  does not appear at all, and absent reads as fine. The win-rate views are the
+  first place anyone looks, and they are the wrong place to look for this.
+  `rounds` and `draws` on `v_match_telemetry` are what price draw-seeking, and
+  they cover every finished match regardless of `end_reason`, which is why the
+  exclusion is applied in `counts_for_balance` and not at the source.
 
 `v_helper_pick_rate` deliberately applies neither: a helper picked into a mirror was
 still picked, and popularity is what that view measures. Pick rates are per

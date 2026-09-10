@@ -32,6 +32,15 @@ export function winsNeeded(bestOf: number): number {
   return Math.floor(bestOf / 2) + 1;
 }
 
+/**
+ * Rounds a match may run before score alone settles it (mirrors the server's
+ * `roundCap`). Draws score for neither player, so without this a match of
+ * nothing but draws would never end.
+ */
+export function roundCap(bestOf: number): number {
+  return bestOf * 2;
+}
+
 /** Spoken form of a cooldown, e.g. "on cooldown, 2 turns". */
 export function cooldownPhrase(turns: number): string {
   return `on cooldown, ${turns} turn${turns === 1 ? '' : 's'}`;

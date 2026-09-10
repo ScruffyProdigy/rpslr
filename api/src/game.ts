@@ -448,3 +448,36 @@ export function matchWinner(
 export function winsNeeded(bestOf: number): number {
   return Math.floor(bestOf / 2) + 1;
 }
+
+/**
+ * The most rounds a match may run before it is settled on score alone.
+ *
+ * Draws score nothing, so the win threshold alone bounds nothing: two players
+ * mirroring each other draw forever, and helpers mode pays them to (Sacrifice
+ * wants round 4+, Oracle wants the stakes high, Copycat discounts the draw).
+ * Twice the nominal length leaves room for a genuinely long fight — a best-of-5
+ * gets 5 rounds of slack over its 5 decisive ones — while still terminating.
+ */
+export function roundCap(bestOf: number): number {
+  return bestOf * 2;
+}
+
+/**
+ * Whether the match is over, and how, after `roundsPlayed` completed rounds.
+ *
+ * The threshold is checked first, so nothing about a normal match changes. Only
+ * a match that reaches the cap undecided is settled by comparison, and only one
+ * that reaches it level is a `draw` — the single case with no winning seat.
+ */
+export function matchOutcome(
+  scoreA: number,
+  scoreB: number,
+  bestOf: number,
+  roundsPlayed: number,
+): RoundOutcome | null {
+  const decided = matchWinner(scoreA, scoreB, winsNeeded(bestOf));
+  if (decided) return decided;
+  if (roundsPlayed < roundCap(bestOf)) return null;
+  if (scoreA === scoreB) return 'draw';
+  return scoreA > scoreB ? 'a' : 'b';
+}

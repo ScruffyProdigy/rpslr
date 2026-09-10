@@ -48,14 +48,26 @@ function label(move: Move): string {
  * A match that ended without anyone reaching the target — a forfeit, an
  * abandoned match — leaves a leader rather than a winner, so reaching the
  * target is what "wins the match" is keyed on, not being the last frame.
+ *
+ * The round cap is the one case where the last frame does have to be read:
+ * there the leader wins on score alone, and level is a result rather than a
+ * score to be continued. Both are recognised by `endReason` on the final
+ * frame, which keeps a forfeit winner a leader as before.
  */
 function scoreLine(frame: ReplayFrame, replay: Replay): string {
   const { a, b } = { a: frame.a.score, b: frame.b.score };
+  const isFinal = replay.frames[replay.frames.length - 1]?.round === frame.round;
+  if (isFinal && replay.endReason === 'draw') return `The match ends level at ${a}${EN}${b}.`;
   if (a === b) return a === 0 ? 'No score yet.' : `Level at ${a}${EN}${b}.`;
   const aLeads = a > b;
-  const name = aLeads ? replay.a.identity.name : replay.b.identity.name;
+  const leader = aLeads ? replay.a : replay.b;
+  const name = leader.identity.name;
   const [hi, lo] = aLeads ? [a, b] : [b, a];
-  if (hi >= winsNeeded(replay.bestOf)) return `${name} wins the match ${hi}${EN}${lo}.`;
+  const wonOnCap =
+    isFinal && replay.endReason === 'played' && replay.winnerSeatKey === leader.seatKey;
+  if (hi >= winsNeeded(replay.bestOf) || wonOnCap) {
+    return `${name} wins the match ${hi}${EN}${lo}.`;
+  }
   return `${name} leads ${hi}${EN}${lo}.`;
 }
 

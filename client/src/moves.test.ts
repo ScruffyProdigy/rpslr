@@ -13,6 +13,7 @@ import {
   cooldownCause,
   threatsTo,
   winningEdgeOf,
+  roundCap,
   winsNeeded,
   isPlayable,
   isForcedPick,
@@ -43,6 +44,11 @@ describe('winsNeeded', () => {
     expect(winsNeeded(3)).toBe(2);
     expect(winsNeeded(5)).toBe(3);
     expect(winsNeeded(7)).toBe(4);
+  });
+
+  it('caps a match at twice its nominal length', () => {
+    expect(roundCap(3)).toBe(6);
+    expect(roundCap(5)).toBe(10);
   });
 });
 

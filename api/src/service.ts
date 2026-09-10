@@ -18,7 +18,7 @@ import {
   availableMoves,
   computeDelays,
   isMove,
-  matchWinner,
+  matchOutcome,
   resolveRound,
   winsNeeded,
   type DelayMap,
@@ -801,11 +801,23 @@ export class GameService {
     };
     await this.repo.saveRoundResult({ matchId, result, scores });
 
-    const decided = matchWinner(scores[playerA.id], scores[playerB.id], winsNeeded(bestOf));
+    // `priorResults` is every round before this one, so this round makes
+    // `+ 1` — a count of completed rounds rather than the round *number*,
+    // which the two callers index differently.
+    const decided = matchOutcome(
+      scores[playerA.id],
+      scores[playerB.id],
+      bestOf,
+      priorResults.length + 1,
+    );
     await this.repo.setMatchProgress(matchId, round + 1, decided ? 'finished' : 'playing');
     if (decided) {
-      const winnerSeatKey = decided === 'a' ? seatA.seatKey : seatB.seatKey;
-      await this.repo.endMatch(matchId, winnerSeatKey, 'played');
+      // A capped draw has no winning seat. Lobby already accepts that shape —
+      // `abandoned` reports COMPLETED with no winner — so nothing downstream
+      // needs a new case, only a distinguishable reason for telemetry.
+      const winnerSeatKey =
+        decided === 'draw' ? null : decided === 'a' ? seatA.seatKey : seatB.seatKey;
+      await this.repo.endMatch(matchId, winnerSeatKey, decided === 'draw' ? 'draw' : 'played');
       this.presence?.forget(matchId);
       void this.notifyLobbyMatchComplete(matchId, winnerSeatKey, seats);
     } else {

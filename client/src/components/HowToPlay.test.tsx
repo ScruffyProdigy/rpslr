@@ -17,6 +17,11 @@ describe('<HowToPlay>', () => {
     expect(screen.getByRole('heading', { name: 'First to 4' })).toBeInTheDocument();
     expect(screen.getByText(/Win 4 rounds/)).toBeInTheDocument();
   });
+
+  it('tells the player where a match of nothing but draws stops', () => {
+    render(<HowToPlay bestOf={5} />);
+    expect(screen.getByText(/10 rounds/)).toBeInTheDocument();
+  });
 });
 
 describe('<HowToPlayDialog>', () => {

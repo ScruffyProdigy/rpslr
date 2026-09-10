@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryGameRepository } from './memoryRepository.js';
 import { BannedPlayerError, GameService, ValidationError } from './service.js';
 import { ConflictError, NotFoundError, ReservationError } from './repository.js';
@@ -57,6 +57,43 @@ describe('GameService — standalone duel loop', () => {
     const state = await service.submitMove(code, challengerId, 'rock');
     expect(state.results[0].outcome).toBe('draw');
     expect(state.seats.every((s) => (s.player?.score ?? 0) === 0)).toBe(true);
+  });
+
+  it('ends a match of nothing but draws at the round cap', async () => {
+    // best-of-3 caps at 6. Mirrored picks draw every round and leave both
+    // players on identical cooldowns, so the cycle stays legal indefinitely —
+    // which is exactly the match that used to run forever.
+    const { code, hostId, challengerId } = await setupMatch(3);
+    const cycle: Move[] = ['rock', 'paper', 'scissors'];
+    let state = await service.getState(code);
+    for (let i = 0; i < 6; i++) {
+      const move = cycle[i % cycle.length];
+      await service.submitMove(code, hostId, move);
+      state = await service.submitMove(code, challengerId, move);
+    }
+    expect(state.results).toHaveLength(6);
+    expect(state.results.every((r) => r.outcome === 'draw')).toBe(true);
+    expect(state.match.status).toBe('finished');
+    expect(state.matchWinnerSeatKey).toBeNull();
+    expect(state.match.endReason).toBe('draw');
+  });
+
+  it('awards a capped match to whoever is ahead on score', async () => {
+    const { code, hostId, challengerId } = await setupMatch(3);
+    const cycle: Move[] = ['rock', 'paper', 'scissors'];
+    let state = await service.getState(code);
+    for (let i = 0; i < 5; i++) {
+      const move = cycle[i % cycle.length];
+      await service.submitMove(code, hostId, move);
+      state = await service.submitMove(code, challengerId, move);
+    }
+    // Round 6 is the cap. One win short of the best-of-3 threshold still takes
+    // the match, because there is no round 7 to take it in.
+    await service.submitMove(code, hostId, 'scissors');
+    state = await service.submitMove(code, challengerId, 'lizard');
+    expect(state.match.status).toBe('finished');
+    expect(state.matchWinnerSeatKey).toBe('1');
+    expect(state.match.endReason).toBe('played');
   });
 
   it('rejects an unknown move', async () => {
@@ -184,6 +221,51 @@ describe('GameService — Lobby push (option 2)', () => {
     await expect(
       svc.claimSeat(code, { seatKey: '2', name: 'Mallory', lobbyUserId: 'u_mallory' }),
     ).rejects.toBeInstanceOf(ReservationError);
+  });
+
+  it('reports a capped draw to Lobby as a completed match with no winner', async () => {
+    // The one terminating case with no winning seat. Lobby's lifecycle mutation
+    // already takes an empty winner list (that is how `abandoned` reports), so
+    // this pins that a declared draw travels the same road rather than sending
+    // Lobby a winner it does not have.
+    const calls: string[] = [];
+    const fetchMock = vi.fn(async (_url: string, init?: { body?: string }) => {
+      if (init?.body) calls.push(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { reportMatchResult: true } }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const svc = service();
+      const state = await svc.ensureMatchFromAssignment({
+        ...provision,
+        assignment: { ...provision.assignment, bestOf: 3 },
+      });
+      const code = state.match.code;
+      const alice = await svc.claimSeat(code, { seatKey: '1', name: 'Alice', lobbyUserId: 'u_alice' });
+      const bob = await svc.claimSeat(code, { seatKey: '2', name: 'Bob', lobbyUserId: 'u_bob' });
+
+      const cycle: Move[] = ['rock', 'paper', 'scissors'];
+      let played = await svc.getState(code);
+      for (let i = 0; i < 6; i++) {
+        const move = cycle[i % cycle.length];
+        await svc.submitMove(code, alice.you.playerId, move);
+        played = await svc.submitMove(code, bob.you.playerId, move);
+      }
+      expect(played.match.endReason).toBe('draw');
+
+      await vi.waitFor(() => {
+        expect(calls.some((b) => b.includes('reportMatchResult'))).toBe(true);
+      });
+      const report = JSON.parse(calls.find((b) => b.includes('reportMatchResult'))!);
+      expect(report.variables.status).toBe('COMPLETED');
+      expect(report.variables.winnerLobbyUserIds).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('claim is idempotent for the same Lobby user', async () => {
@@ -328,6 +410,33 @@ describe('GameService — duel-helpers loadouts', () => {
     await expect(
       service.createStandaloneMatch({ gameMode: 'duel-helpers', hostName: 'Alice' }),
     ).rejects.toMatchObject({ seatKey: '1' });
+  });
+
+  it('caps a duel-helpers match too — the gap is in the base game', async () => {
+    // Two purely informational Trinkets, so nothing here changes how a mirror
+    // resolves; the only thing under test is that helpers mode reaches the cap.
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['poker-face', 'old-habits'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['poker-face', 'old-habits'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const hostId = created.you.playerId;
+    const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    const cycle: Move[] = ['rock', 'paper', 'scissors'];
+    let state = await service.getState(code);
+    for (let i = 0; i < 6; i++) {
+      const move = cycle[i % cycle.length];
+      await service.submitMove(code, hostId, move);
+      state = await service.submitMove(code, joined.you.playerId, move);
+    }
+    expect(state.match.status).toBe('finished');
+    expect(state.matchWinnerSeatKey).toBeNull();
+    expect(state.match.endReason).toBe('draw');
   });
 
   it('leaves a duel seat with no loadout at all', async () => {
