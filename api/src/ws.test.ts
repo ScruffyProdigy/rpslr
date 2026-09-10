@@ -393,6 +393,59 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
     bobWs.close();
   });
 
+  it("never puts one entitled seat's re-pick on the other's socket", async () => {
+    // Two Oracles facing each other is a legal pairing, and JQ-239 makes it the
+    // general case: everyone entitled decides at the same moment. Simultaneity is
+    // the balance mechanism — a read that could be updated by watching the other
+    // seat move would be exactly the certainty the window exists to prevent — so
+    // it is asserted on the bytes that leave the server, not on the projection
+    // that produces them.
+    const created = await service.createStandaloneMatch({
+      gameMode: 'duel-helpers',
+      hostName: 'Alice',
+      bestOf: 3,
+      seats: [
+        { seatKey: '1', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'poker-face'] }] },
+        { seatKey: '2', options: [{ groupKey: 'helpers', optionIds: ['oracle', 'watchful'] }] },
+      ],
+    });
+    const code = created.state.match.code;
+    const alice = created.you.playerId;
+    const bob = (await service.claimSeat(code, { seatKey: '2', name: 'Bob' })).you.playerId;
+
+    const bobWs = await open();
+    send(bobWs, { type: 'subscribe', ref: code, playerId: bob });
+    await waitFor(bobWs, (m) => m.type === 'state');
+
+    await service.fireAbility(code, alice, { helperId: 'oracle' });
+    await service.fireAbility(code, bob, { helperId: 'oracle' });
+    await service.submitMove(code, alice, 'rock');
+    const opened = waitFor(
+      bobWs,
+      (m) => (m.state as { match: { phase: string } })?.match?.phase === 'react',
+    );
+    await service.submitMove(code, bob, 'rock');
+    const before = (await opened).state as Record<string, unknown>;
+
+    // Alice moves off rock. The waiter is registered first, because the publish is
+    // synchronous with her commit.
+    const next = waitFor(bobWs, (m) => m.type === 'state');
+    await service.submitMove(code, alice, 'robot');
+    const after = (await next).state as Record<string, unknown>;
+
+    // Nothing he can read has moved. Compared against his own earlier payload
+    // rather than scanned for the string 'robot': his reveal names a live move she
+    // did not play, drawn against her *original* pick, so it may legitimately be
+    // the very move she has just switched to — that staleness is the point.
+    expect(after.currentRoundMoves).toEqual({ [bob]: 'rock' });
+    expect(after.results).toEqual([]);
+    expect(after.entitlement).toEqual(before.entitlement);
+    expect((after.entitlement as { acted: boolean }).acted).toBe(false);
+    expect(after.abilityFirings).toEqual([]);
+
+    bobWs.close();
+  });
+
   it('tells both sockets what Oracle named, once the round has resolved', async () => {
     const { code, alice, bob } = await oracleMatch();
 
