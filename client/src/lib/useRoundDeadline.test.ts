@@ -41,6 +41,9 @@ function state(over: {
     currentRoundMoves: {},
     matchWinnerSeatKey: null,
     abilityFirings: [],
+    // No seat in these fixtures holds a charge, which is the duel case.
+    abilities: {},
+    entitlement: null,
     serverNow: new Date(serverNow).toISOString(),
   };
 }

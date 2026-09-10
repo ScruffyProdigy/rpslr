@@ -9,9 +9,18 @@ import { getWebSocketUrl } from './env';
 type StateHandler = (state: MatchState) => void;
 type ErrorHandler = (message: string) => void;
 
+/** What a firing names, per ability. Validated server-side; see `namedMovesFor`. */
+export interface FiringInput {
+  helperId: string;
+  target?: Move | null;
+  source?: Move | null;
+}
+
 export interface MatchSocket {
   /** Returns false if the socket is not connected (caller should use REST fallback). */
   sendMove: (playerId: string, move: Move, round: number) => boolean;
+  /** Same contract as `sendMove`: false means fall back to REST. */
+  sendFire: (playerId: string, firing: FiringInput, round: number) => boolean;
   close: () => void;
 }
 
@@ -75,6 +84,26 @@ export function connectMatchSocket(
         // Naming the round keeps a move that arrives after its round resolved
         // from landing on the next one.
         ws.send(JSON.stringify({ type: 'move', playerId, move, round }));
+        return true;
+      }
+      return false;
+    },
+    sendFire(playerId: string, firing: FiringInput, round: number) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        // Its own message rather than a field on `move`: a firing may precede the
+        // pick it hedges against, and Oracle has to fire, reveal, and only then be
+        // picked against. `round` refuses one that arrives after its round
+        // resolved, exactly as a move's does.
+        ws.send(
+          JSON.stringify({
+            type: 'fire',
+            playerId,
+            helperId: firing.helperId,
+            target: firing.target ?? undefined,
+            source: firing.source ?? undefined,
+            round,
+          }),
+        );
         return true;
       }
       return false;

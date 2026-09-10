@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Board } from './App';
+import type { Entitlement } from '@game/types';
 import type { MatchState, Move, RoundResult, Seat } from './api';
 
 const MY_SEAT = 'a';
@@ -95,6 +96,9 @@ function state(over: {
     currentRoundMoves: {},
     serverNow: new Date(now).toISOString(),
     abilityFirings: [],
+    // No seat in these fixtures holds a charge, which is the duel case.
+    abilities: {},
+    entitlement: null,
     matchWinnerSeatKey: finished ? MY_SEAT : null,
   };
 }
@@ -483,5 +487,139 @@ describe('<Board> reserved opponent (JQ 3.5)', () => {
   it('says the reserved opponent is on their way', () => {
     renderBoard(state({ bothSeated: false }));
     expect(screen.getByText(/on their way/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * JQ-221's AC #7: the duel board renders exactly as today. `duel` brings the
+ * null loadout, so no seat holds a charge, so there must be no rail — not an
+ * empty one, which is still a box the layout has to place.
+ */
+describe('<Board> ability rail (JQ-221)', () => {
+  /** A seat holding one ability, which is what a helpers loadout can bring. */
+  function withAbility(s: MatchState, helperId: string, marks: number | null): MatchState {
+    const seats = s.seats.map((seat) =>
+      seat.seatKey === MY_SEAT
+        ? { ...seat, loadout: [helperId, 'echo-chamber'] as unknown as Seat['loadout'] }
+        : seat,
+    );
+    return {
+      ...s,
+      seats,
+      abilities: { [helperId]: { marks, available: marks === 0 } },
+    };
+  }
+
+  it('draws no rail on a duel board', () => {
+    renderBoard(state());
+    expect(screen.queryByRole('region', { name: /your abilities/i })).not.toBeInTheDocument();
+  });
+
+  it('draws no rail when the board is given no fire handler', () => {
+    render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={withAbility(state(), 'rust', 0)}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('region', { name: /your abilities/i })).not.toBeInTheDocument();
+  });
+
+  it('draws the rail for a seat that holds a charge', () => {
+    render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={withAbility(state(), 'rust', 0)}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+        onFire={() => {}}
+      />,
+    );
+    expect(screen.getByRole('region', { name: /your abilities/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /rust — ready/i })).toBeInTheDocument();
+  });
+
+  /*
+   * `fireAbility` refuses during the sub-phase — "the round is already resolving",
+   * non-cascading so a window cannot open another — so the board must not offer
+   * what the server will refuse.
+   */
+  it('blocks firing while the sub-phase is running, and blames the round', () => {
+    const s = withAbility(state({ submitted: [MY_PLAYER, OPP_PLAYER] }), 'rust', 0);
+    render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={{ ...s, match: { ...s.match, phase: 'react' } }}
+        connected
+        error={null}
+        myChosenMove="rock"
+        onPlay={() => {}}
+        onFire={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /fire rust/i })).toBeDisabled();
+    // Not "reconnecting": `fireAbility` refuses because the round is resolving,
+    // and a player told to check their connection would be chasing nothing.
+    expect(screen.getByText('The round is resolving.')).toBeInTheDocument();
+  });
+});
+
+describe('<Board> mid-round sub-phase (JQ-221)', () => {
+  function reactState(over: { entitlement?: Entitlement | null } = {}) {
+    const s = state({ submitted: [MY_PLAYER, OPP_PLAYER] });
+    return {
+      ...s,
+      match: { ...s.match, phase: 'react' as const },
+      currentRoundMoves: { [MY_PLAYER]: 'rock' as Move },
+      entitlement:
+        'entitlement' in over
+          ? (over.entitlement ?? null)
+          : {
+              round: 1,
+              reveals: [{ helperId: 'oracle', namedMove: 'paper' as Move }],
+              incoming: [],
+              acted: false,
+            },
+    };
+  }
+
+  it('re-opens the pentagon for an entitled seat, which may replace its pick', () => {
+    renderBoard(reactState(), 'rock');
+    expect(screen.getByText(/they did not play/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toBeEnabled();
+  });
+
+  /*
+   * A seat with no entitlement is locked while the round resolves — `submitMove`
+   * says exactly that — so its board says so rather than offering a tap.
+   */
+  it('keeps an unentitled seat locked out, and says why', () => {
+    renderBoard(reactState({ entitlement: null }), 'rock');
+    expect(screen.queryByText(/they did not play/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/the round is resolving/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
+  });
+
+  /*
+   * `acted` is the server's record of having answered, and it closes the window:
+   * a second send would be refused, so the board stops offering one.
+   */
+  it('locks the pentagon again once this seat has used its window', () => {
+    const s = reactState();
+    renderBoard(
+      { ...s, entitlement: { ...s.entitlement!, acted: true } },
+      'rock',
+    );
+    expect(screen.getByText(/your answer is in/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
   });
 });

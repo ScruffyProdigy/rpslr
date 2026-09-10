@@ -2562,3 +2562,228 @@ input:focus-visible {
   justify-content: center;
   margin: 22px 0 0;
 }
+
+/* --- The ability rail (JQ-221) -------------------------------------------
+   Your own cards, below the pentagon. Below, because the pentagon is the tap
+   surface for the whole round and a card expanding into a target row above it
+   would shift the board under the player's thumb.
+
+   Three charge states, and every one of them says a word — `.ability-card__
+   charge` is the signal, and the border and tint below only repeat it. JQ-195's
+   rule is that no state on this board rides on colour alone, and three cards
+   differing by tint would break it. The border weights are a second
+   non-colour channel: solid is ready, dashed is not. */
+.ability-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ability-card {
+  /* 128px, not 150: at 360px the board's content box is ~302px, and two cards
+     plus the gap have to fit inside it or they stack — which doubles the rail's
+     height on the narrowest screen the board promises to work on. */
+  flex: 1 1 128px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+.ability-card--ready {
+  border-color: var(--line-4);
+  background: var(--surface-4);
+}
+.ability-card--recharging,
+.ability-card--spent {
+  border-style: dashed;
+}
+.ability-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.ability-card__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+.ability-card__charge {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.ability-card__charge--ready {
+  color: var(--ok);
+}
+.ability-card__charge--recharging {
+  color: var(--muted);
+}
+.ability-card__charge--spent {
+  color: var(--muted-2);
+}
+.ability-card__blurb {
+  margin: 0;
+  /* The card is the only place a player is told what the ability does, so the
+     blurb stays. It is sized to cost the rail as little height as it can while
+     staying readable. */
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.ability-card__fire,
+.ability-confirm__go,
+.ability-card__cancel {
+  /* 44px is the floor a thumb needs; the pentagon's own 56px is the board's
+     larger promise (JQ-108) and these sit outside it. */
+  min-height: 44px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.ability-card__fire {
+  border: 1px solid var(--line-3);
+  background: var(--surface-5);
+  color: var(--text);
+}
+.ability-card__fire:disabled {
+  border-style: dashed;
+  color: var(--muted-2);
+  cursor: not-allowed;
+}
+.ability-card__blocked {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted-2);
+}
+.ability-target__prompt,
+.ability-confirm__what {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+.ability-target__moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
+.ability-target__move {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding-inline: 8px;
+  border: 1px solid var(--line-3);
+  border-radius: 8px;
+  background: var(--surface-4);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+/* An illegal target is dashed and dimmed as well as unclickable, and carries
+   its reason in an `aria-describedby` span — refusable *and* explicable. */
+.ability-target__move:disabled {
+  border-style: dashed;
+  color: var(--muted-2);
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.ability-card__cancel {
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--muted);
+}
+.ability-confirm__final {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--warn);
+}
+.ability-confirm__actions {
+  display: flex;
+  gap: 6px;
+}
+.ability-confirm__go {
+  flex: 1 1 auto;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--surface-0);
+}
+
+/* The mid-round sub-phase (JQ-221, finishing JQ-150's client half; generalised
+   past Oracle by JQ-239). Sits below the pentagon with the rail, and for the same
+   reason: it appears mid-decision. */
+.subphase-prompt {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--info);
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+.subphase-prompt__title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--info);
+}
+.subphase-prompt__reveal {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.subphase-prompt__move {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.subphase-prompt__ask {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.subphase-prompt__keep {
+  min-height: 44px;
+  margin-top: 8px;
+  padding-inline: 12px;
+  border: 1px solid var(--line-3);
+  border-radius: 8px;
+  background: var(--surface-5);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* The round account. Whose firing it was is said in the words ("you"/"they");
+   the rule below only reinforces it with the seat colours the board has used
+   since Phase 3. */
+.history-row__firings {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.history-row__firing {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  padding-left: 8px;
+  border-left: 2px solid var(--line-2);
+  color: var(--muted);
+}
+.history-row__firing--mine {
+  border-left-color: var(--you);
+}
+.history-row__firing--theirs {
+  border-left-color: var(--opp);
+}
