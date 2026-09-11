@@ -34,13 +34,15 @@ function finishedState(overrides: Partial<MatchState['match']> = {}): MatchState
         lobbyProfile: { displayName: 'Ana', avatarUrl: 'https://lobby.test/ana.png' },
         player: { id: 'p1', name: 'Ana', lobbyUserId: 'u1', score: 3, profile: null, expiryStrikes: 0 },
         delays: {},
+        loadout: null, loadoutRoll: null,
       },
       {
         id: 's2', matchId: 'm1', seatKey: '2', teamKey: null, role: null, position: 1,
         reservedForLobbyUser: null,
-        lobbyProfile: { displayName: 'Ben', avatarUrl: null },
+        lobbyProfile: { displayName: 'Ben' },
         player: { id: 'p2', name: 'Ben', lobbyUserId: 'u2', score: 1, profile: null, expiryStrikes: 0 },
         delays: {},
+        loadout: null, loadoutRoll: null,
       },
     ],
     results: [
@@ -52,6 +54,10 @@ function finishedState(overrides: Partial<MatchState['match']> = {}): MatchState
     submittedPlayerIds: [],
     currentRoundMoves: {},
     matchWinnerSeatKey: '1',
+    // A `duel` match: no loadouts, so nothing to fire, hold or be entitled to.
+    abilityFirings: [],
+    abilities: {},
+    entitlement: null,
     serverNow: '2026-09-07T00:10:00.000Z',
   };
 }
@@ -175,7 +181,7 @@ describe('the deciding round', () => {
   });
 
   it('is absent from a forfeit, where the last round decided nothing', () => {
-    const state = finishedState({ endReason: 'forfeit' });
+    const state = finishedState({ endReason: 'forfeit-strikes' });
     expect(buildCardModel(state, { ref: 'ext-1' }).showdown).toBeNull();
   });
 

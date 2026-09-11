@@ -12,6 +12,7 @@ const model: CardModel = {
     { seatKey: '1', name: 'Ana', score: 3, role: 'you', avatarUrl: 'https://lobby.test/ana.png', avatarDataUri: null, initial: 'A', winner: true },
     { seatKey: '2', name: 'Ben', score: 1, role: 'opp', avatarUrl: null, avatarDataUri: null, initial: 'B', winner: false },
   ],
+  showdown: null, shortCode: null,
 };
 
 describe('fetchAvatarDataUri', () => {

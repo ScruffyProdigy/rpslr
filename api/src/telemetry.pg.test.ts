@@ -105,6 +105,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'scissors',
+      source: null,
     });
     await service.submitMove(a.state.match.code, a.you.playerId, 'rock');
     await service.submitMove(a.state.match.code, aJoin.you.playerId, 'scissors');
@@ -127,6 +128,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       round: 1,
       helperId: 'quarantine',
       target: 'paper',
+      source: null,
     });
     await service.submitMove(b.state.match.code, b.you.playerId, 'rock');
     await service.submitMove(b.state.match.code, bJoin.you.playerId, 'lizard');
