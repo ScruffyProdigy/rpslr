@@ -770,28 +770,54 @@ describe('<Board> loadouts (JQ-149)', () => {
 });
 
 /**
- * The opponent's opening, on the pentagon (JQ-149).
+ * The opponent's opening, on the pentagon.
  *
- * The badge used to say only that a move was down. Every duel opens on the same
- * two marks, so that was the whole story; a loadout decides how deep each of the
- * opponent's moves starts, and "down" and "down 2" are different boards to plan
- * against — most sharply in round 1, which is the round this ticket is about.
+ * JQ-151 built the badge and owns how it draws — `MovePicker.test.tsx` covers
+ * that, including the duel case where a count would restate what the history
+ * strip already says. What is left for here is the wiring JQ-149 depends on: the
+ * board deciding *when* the counts are on, which neither that suite (it is handed
+ * the flag) nor this ticket's own reveal tests exercise.
+ *
+ * It matters to JQ-149 because the reveal's promise is that both openings are
+ * legible before the first pick, and half of that promise is drawn by this badge
+ * rather than by the sheet.
  */
-describe('<Board> opponent cooldown depth (JQ-149)', () => {
-  it('draws the depth on the badge, not just the fact of a mark', () => {
-    const { container } = renderBoard(state({ oppDelays: { robot: 2, paper: 1 } }));
-    const badges = Array.from(
-      container.querySelectorAll('.opp-cooldown-mark:not(.opp-cooldown-mark--legend)'),
-    ).map((el) => el.textContent?.trim());
-    expect(badges).toEqual(['1', '2']);
+describe('<Board> opponent cooldown counts (JQ-149 / JQ-151)', () => {
+  const counted = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('.opp-cooldown-mark--counted'));
+
+  it('turns the counts on once either seat has brought a loadout', () => {
+    const s = {
+      ...state({ oppDelays: { robot: 2, paper: 1 } }),
+      seats: state().seats.map((seat) => ({
+        ...seat,
+        loadout: ['ferrus', 'echo-chamber'] as unknown as Seat['loadout'],
+        delays: seat.seatKey === MY_SEAT ? {} : { robot: 2, paper: 1 },
+      })),
+    };
+    const { container } = render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    // Both marks, and the legend badge that teaches them.
+    expect(counted(container).map((el) => el.textContent?.trim())).toEqual(['1', '2', 'N']);
   });
 
-  it('teaches the badge in the legend as a number, the way the your-side pill is', () => {
+  it('leaves a duel board exactly as it was — no counts, and none promised', () => {
     const { container } = renderBoard(state({ oppDelays: { robot: 2 } }));
-    expect(container.querySelector('.opp-cooldown-mark--legend')).toHaveTextContent('N');
+    expect(counted(container)).toEqual([]);
+    // The legend must not teach a number the board never draws.
+    expect(container.querySelector('.opp-cooldown-mark--legend')?.textContent?.trim()).toBe('');
   });
 
-  it('still says it in words on the move itself, which is what is announced', () => {
+  it('still says the depth in words on the move itself, which is what is announced', () => {
     renderBoard(state({ oppDelays: { robot: 2 } }));
     expect(
       screen.getByRole('button', { name: /Robot, opponent cooldown, 2 turns/ }),

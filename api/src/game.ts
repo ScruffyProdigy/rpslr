@@ -91,10 +91,53 @@ export interface OutcomeContext {
   lossesSoFar: number;
 }
 
+/**
+ * One mark movement, and the card that caused it.
+ *
+ * `helperId` is what makes the board explicable. A move is on cooldown for one of
+ * a dozen reasons in a helpers match, and only three of them are "you played it" —
+ * so a mark that arrives without saying where it came from is a mark the board can
+ * only guess about, and guessing is how "You played Rock last round" ends up
+ * printed over a Quarantine (JQ-151).
+ *
+ * `amount` is signed: Thief and Flywheel take marks off.
+ */
+export interface AttributedMark {
+  move: Move;
+  amount: number;
+  /** The helper responsible. A plain string for the same reason `Firing.id` is. */
+  helperId: string;
+}
+
 /** Marks a round adds beyond the chosen-move cost, on either side of the table. */
 export interface MarkAdjustment {
-  own: Partial<Record<Move, number>>;
-  opponent: Partial<Record<Move, number>>;
+  own: readonly AttributedMark[];
+  opponent: readonly AttributedMark[];
+}
+
+/** Why a mark landed, for the board's "why is this on cooldown?" line. */
+export type MarkCause =
+  | { kind: 'opening' }
+  | { kind: 'choice' }
+  | { kind: 'sacrifice' }
+  /** A helper, and whether its owner was this seat or the one across the table. */
+  | { kind: 'helper'; helperId: string; mine: boolean };
+
+/**
+ * One entry in the ledger: marks landing on one seat's board, and why.
+ *
+ * Recorded per round so the board can say *when* as well as why, and signed so a
+ * removal reads as one. Decay is deliberately absent — it happens to every move
+ * every round and explains nothing about a particular one.
+ */
+export interface MarkEvent {
+  /** 0-based, matching `roundIndex` everywhere else in this engine. */
+  round: number;
+  /** Whose board the mark landed on. */
+  side: 'a' | 'b';
+  move: Move;
+  amount: number;
+  cause: MarkCause;
 }
 
 /**
@@ -169,7 +212,7 @@ export interface FiringEffect {
 
 export const NO_FIRING_EFFECT: FiringEffect = {
   freezesOpponentDecay: false,
-  marks: { own: {}, opponent: {} },
+  marks: { own: [], opponent: [] },
 };
 
 /**
@@ -204,7 +247,10 @@ export const NO_DISCLOSURE: Disclosure = {
   showsOpponentNextCooldowns: false,
 };
 
-const NO_ADJUSTMENT: MarkAdjustment = { own: {}, opponent: {} };
+const NO_ADJUSTMENT: MarkAdjustment = { own: [], opponent: [] };
+
+/** The one cause with nothing to parameterise: you played the move. */
+const CHOICE: MarkCause = { kind: 'choice' };
 
 /**
  * The rules a seat plays by with no helpers at all — which is to say, the rules
@@ -266,11 +312,31 @@ export function replayMatch(
   rounds: PlayedRound[],
   rulesA: PlayerRules,
   rulesB: PlayerRules,
-): { a: DelayMap; b: DelayMap } {
+): { a: DelayMap; b: DelayMap; events: MarkEvent[] } {
   const a: DelayMap = { ...rulesA.initialDelays };
   const b: DelayMap = { ...rulesB.initialDelays };
   let lossesA = 0;
   let lossesB = 0;
+  // Every mark that lands, and what put it there. Built alongside the arithmetic
+  // rather than derived from it afterwards: the same +2 on Rock means "you played
+  // it", "they Quarantined it" or "Rust deepened it" depending only on which line
+  // below added it, and that is knowable here and nowhere else.
+  const events: MarkEvent[] = [];
+  /** Opening marks explain a cooldown nobody has touched yet, so they are round -1. */
+  for (const side of ['a', 'b'] as const) {
+    const rules = side === 'a' ? rulesA : rulesB;
+    for (const m of MOVES) {
+      if (rules.initialDelays[m] > 0) {
+        events.push({
+          round: -1,
+          side,
+          move: m,
+          amount: rules.initialDelays[m],
+          cause: { kind: 'opening' },
+        });
+      }
+    }
+  }
 
   rounds.forEach((round, roundIndex) => {
     const { outcomeA, outcomeB } = resolveRound(round, rulesA, rulesB, {
@@ -305,36 +371,72 @@ export function replayMatch(
     // they enter the next round with four moves live rather than five. Clearing at
     // the end of the round instead would hand back the tempo too, making a Major
     // that costs nothing to fire and yields the strongest board in the game.
-    if (rulesA.declaresDraw(round.firedA ?? [])) for (const m of MOVES) a[m] = 0;
-    if (rulesB.declaresDraw(round.firedB ?? [])) for (const m of MOVES) b[m] = 0;
+    const wiped = (side: 'a' | 'b', marks: DelayMap) => {
+      for (const m of MOVES) {
+        if (marks[m] > 0) {
+          events.push({
+            round: roundIndex,
+            side,
+            move: m,
+            amount: -marks[m],
+            cause: { kind: 'sacrifice' },
+          });
+        }
+        marks[m] = 0;
+      }
+    };
+    if (rulesA.declaresDraw(round.firedA ?? [])) wiped('a', a);
+    if (rulesB.declaresDraw(round.firedB ?? [])) wiped('b', b);
 
-    a[round.a] += rulesA.delayOnChoice({ move: round.a, outcome: outcomeA, roundIndex });
-    b[round.b] += rulesB.delayOnChoice({ move: round.b, outcome: outcomeB, roundIndex });
+    const costA = rulesA.delayOnChoice({ move: round.a, outcome: outcomeA, roundIndex });
+    const costB = rulesB.delayOnChoice({ move: round.b, outcome: outcomeB, roundIndex });
+    a[round.a] += costA;
+    b[round.b] += costB;
+    events.push({ round: roundIndex, side: 'a', move: round.a, amount: costA, cause: CHOICE });
+    events.push({ round: roundIndex, side: 'b', move: round.b, amount: costB, cause: CHOICE });
 
     const ctxA = { own: round.a, opponent: round.b, roundIndex, lossesSoFar: lossesA };
     const ctxB = { own: round.b, opponent: round.a, roundIndex, lossesSoFar: lossesB };
     const adjA = rulesA.adjustAfterRound({ ...ctxA, outcome: outcomeA });
     const adjB = rulesB.adjustAfterRound({ ...ctxB, outcome: outcomeB });
-    for (const [m, n] of Object.entries(adjA.own)) a[m as Move] += n ?? 0;
-    for (const [m, n] of Object.entries(adjA.opponent)) b[m as Move] += n ?? 0;
-    for (const [m, n] of Object.entries(adjB.own)) b[m as Move] += n ?? 0;
-    for (const [m, n] of Object.entries(adjB.opponent)) a[m as Move] += n ?? 0;
-    // Floored, unlike the passive adjustments above: Thief is the first effect that
-    // subtracts, and a mark it names entering the round may already have decremented
-    // away by the time the adjustment lands.
-    const add = (marks: DelayMap, m: Move, n: number) => {
-      marks[m] = Math.max(0, marks[m] + n);
+    // Floored, unlike the passive adjustments used to be: Thief is the first effect
+    // that subtracts, and a mark it names entering the round may already have
+    // decremented away by the time the adjustment lands. `floor` says which of the
+    // two rules applies, and the ledger records what was actually asked for either
+    // way — a mark the floor swallowed still explains why nothing moved.
+    const apply = (
+      marks: DelayMap,
+      side: 'a' | 'b',
+      entries: readonly AttributedMark[],
+      /** Whose cards these are, from the point of view of the seat they land on. */
+      mine: boolean,
+      floor: boolean,
+    ) => {
+      for (const { move, amount, helperId } of entries) {
+        marks[move] = floor ? Math.max(0, marks[move] + amount) : marks[move] + amount;
+        events.push({
+          round: roundIndex,
+          side,
+          move,
+          amount,
+          cause: { kind: 'helper', helperId, mine },
+        });
+      }
     };
-    for (const [m, n] of Object.entries(firedA.marks.own)) add(a, m as Move, n ?? 0);
-    for (const [m, n] of Object.entries(firedA.marks.opponent)) add(b, m as Move, n ?? 0);
-    for (const [m, n] of Object.entries(firedB.marks.own)) add(b, m as Move, n ?? 0);
-    for (const [m, n] of Object.entries(firedB.marks.opponent)) add(a, m as Move, n ?? 0);
+    apply(a, 'a', adjA.own, true, false);
+    apply(b, 'b', adjA.opponent, false, false);
+    apply(b, 'b', adjB.own, true, false);
+    apply(a, 'a', adjB.opponent, false, false);
+    apply(a, 'a', firedA.marks.own, true, true);
+    apply(b, 'b', firedA.marks.opponent, false, true);
+    apply(b, 'b', firedB.marks.own, true, true);
+    apply(a, 'a', firedB.marks.opponent, false, true);
 
     if (outcomeA === 'loss') lossesA += 1;
     if (outcomeB === 'loss') lossesB += 1;
   });
 
-  return { a, b };
+  return { a, b, events };
 }
 
 /** True when `beats` grants an edge the shared graph does not, i.e. a helper added it. */

@@ -5,6 +5,7 @@ import {
   NotFoundError,
   ReservationError,
   type ClaimSeatInput,
+  type ClaimSeatResult,
   type CreateMatchInput,
   type GameRepository,
 } from './repository.js';
@@ -18,7 +19,6 @@ import type {
   MatchStatus,
   RoundResult,
   Seat,
-  SeatPlayer,
 } from './types.js';
 import type { Loadout } from './helpers/loadout.js';
 
@@ -201,7 +201,7 @@ export class PgGameRepository implements GameRepository {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   }
 
-  async claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }> {
+  async claimSeat(input: ClaimSeatInput): Promise<ClaimSeatResult> {
     return this.tx(async (client) => {
       // Idempotent: same Lobby user re-claiming returns their existing seat.
       if (input.lobbyUserId) {
@@ -223,6 +223,7 @@ export class PgGameRepository implements GameRepository {
               profile: seat.lobbyProfile,
               expiryStrikes: pr.expiry_strikes ?? 0,
             },
+            reclaimed: true,
           };
         }
       }
@@ -234,11 +235,15 @@ export class PgGameRepository implements GameRepository {
       if (seatRes.rowCount === 0) throw new NotFoundError('seat not found');
       const seatRow = seatRes.rows[0];
 
+      // Occupancy before reservation: the branch above already answered "you are
+      // the one sitting here", so anyone reaching this line with a player in the
+      // seat is a different player trying to take it — which is the conflict, and
+      // says so plainly, whether or not the seat also carries a reservation.
+      const taken = await client.query('SELECT 1 FROM players WHERE seat_id = $1', [seatRow.id]);
+      if (taken.rowCount) throw new ConflictError('seat already taken');
       if (seatRow.reserved_for_lobby_user && seatRow.reserved_for_lobby_user !== input.lobbyUserId) {
         throw new ReservationError('seat is reserved for another player');
       }
-      const taken = await client.query('SELECT 1 FROM players WHERE seat_id = $1', [seatRow.id]);
-      if (taken.rowCount) throw new ConflictError('seat already taken');
 
       const playerRes = await client.query(
         `INSERT INTO players (match_id, seat_id, name, lobby_user_id, score)
@@ -257,6 +262,7 @@ export class PgGameRepository implements GameRepository {
           profile: seat.lobbyProfile,
           expiryStrikes: pr.expiry_strikes ?? 0,
         },
+        reclaimed: false,
       };
     });
   }

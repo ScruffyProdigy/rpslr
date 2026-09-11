@@ -1,5 +1,10 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { rulesForSeats, type SeatLoadout } from '@game/replayBoard';
+import {
+  playedRoundsFrom,
+  rulesForSeats,
+  type SeatLoadout,
+} from '@game/replayBoard';
+import { replayMatch, type MarkEvent } from '@game/game';
 import {
   api,
   type Move,
@@ -28,7 +33,7 @@ import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { useLoadoutReveal } from './lib/useLoadoutReveal';
 import { buildReplayUrl, buildStoryImageUrl, replayRef } from './lib/replayLink';
-import { opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
+import { holdsFreeze, opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -230,6 +235,15 @@ function Game({
   const [lockedMove, setLockedMove] = useState<Move | null>(null);
   const socketRef = useRef<MatchSocket | null>(null);
   const claimedRef = useRef(false);
+  const resumedRef = useRef(false);
+  /**
+   * Recovery path 1 is in flight: no token in the URL, so we are asking the
+   * game whether this browser already holds a seat. Nothing is rendered while
+   * it settles — a returning player would otherwise see the standalone lobby
+   * flash past on the way to their own board, and a first-time visitor would
+   * see "Joining your match…" for a match that does not exist.
+   */
+  const [resuming, setResuming] = useState(!lobbyLink.token);
 
   const enterMatch = useCallback(
     (result: { state: MatchState; you: { playerId: string; seatKey: string } }) => {
@@ -256,6 +270,31 @@ function Game({
       .then(enterMatch)
       .catch((err) => setError(err.message))
       .finally(() => setBusy(false));
+  }, [enterMatch]);
+
+  /**
+   * Recovery path 1: pick our own seat back up from the game's own origin.
+   *
+   * A refresh, the back button, or a tab that crashed arrives with no `?token=`,
+   * and the game wrote down which seat this browser holds when it claimed. No
+   * Lobby request is involved, which is the point — this is the path that still
+   * works when Lobby is unreachable or the player's Lobby session is gone.
+   *
+   * A failure here is not an error worth showing: "nothing to resume" is the
+   * ordinary answer for anyone arriving for the first time.
+   *
+   * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+   */
+  useEffect(() => {
+    // The token path claims instead, and lands on the re-claim rule.
+    if (lobbyLink.token) return;
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    api
+      .resume()
+      .then(enterMatch)
+      .catch(() => {})
+      .finally(() => setResuming(false));
   }, [enterMatch]);
 
   // Live updates over WebSocket (replaces polling). Opens once we're in a match.
@@ -446,6 +485,9 @@ function Game({
   if (claiming) {
     return <ClaimScreen error={error} lobbyReturnUrl={lobbyReturnUrl} />;
   }
+
+  // One request long, and only before anything has been shown. See `resuming`.
+  if (resuming && phase === 'lobby') return null;
 
   if (phase === 'lobby') {
     return <Lobby busy={busy} error={error} onCreate={handleCreate} onJoin={handleJoin} />;
@@ -688,6 +730,10 @@ export function Board({
   const submitted =
     state.submittedPlayerIds ?? Object.keys(state.currentRoundMoves ?? {});
   const opponentLockedIn = submitted.some((id) => id !== myPlayerId);
+  // Their seat is held while they are away; the round is simply waiting on
+  // them. Not worth saying once they have locked in — the round is not waiting
+  // on a player whose move is already committed.
+  const opponentAway = oppSeat?.player?.connected === false && !opponentLockedIn;
   // Lobby players never see the create card, so round 1 is the only chance to
   // tell them the rules. Before the opponent arrives the how-to-play panels
   // say all of this and more, so the one-liner would only repeat them.
@@ -709,14 +755,55 @@ export function Board({
     .reverse()
     .map((r) => r.moves[myPlayerId])
     .filter((m): m is Move => Boolean(m));
+  // Both seats' rules, so the board can draw the graph each of them is actually
+  // playing and say why a mark is where it is. `rulesForSeats` is the server's own
+  // compiler, not a mirror of it — see the note at the top of replayBoard.ts.
+  //
+  // It throws on a loadout whose two helpers bind the same move with no stored
+  // roll, which is a match that cannot be reconstructed at all. The live board has
+  // the server's own `delays` to fall back on, so it degrades to the shared graph
+  // rather than taking the screen down (`reconstructionBlockedReason` is what the
+  // replay page shows instead, where there is no live state to fall back to).
+  //
+  // Computed plainly rather than memoised: this sits after the loading early
+  // return, so a hook here would be a conditional one — and a match is a handful
+  // of rounds, which is why `boardsThroughMatch` re-walks every prefix without
+  // anyone minding.
+  const [myRules, oppRules] = (() => {
+    try {
+      return rulesForSeats(mySeat ?? NO_LOADOUT, oppSeat ?? NO_LOADOUT);
+    } catch {
+      return rulesForSeats(NO_LOADOUT, NO_LOADOUT);
+    }
+  })();
   // The marks your loadout opened on, so a cooldown with no pick behind it is
   // only blamed on the opening where this match actually had one (JQ-207).
-  const myOpeningDelays = rulesForSeats(mySeat ?? NO_LOADOUT, NO_LOADOUT)[0].initialDelays;
-  // Both loadouts, as the sheet says them. Null on both sides in `duel`, which
-  // is what keeps every one of these surfaces off a duel board.
+  const myOpeningDelays = myRules.initialDelays;
+  // Why each of your marks is there. Replayed from the same record the server
+  // replays — the moves, the firings and the two loadouts — so the board explains
+  // the board the server actually dealt rather than one it inferred (JQ-151).
+  const myLedger = ((): MarkEvent[] => {
+    // A duel has nothing to explain that the last two picks do not already, so it
+    // keeps the wording it has rather than paying for a walk to reach it.
+    if (!mySeat || !oppSeat || !mySeat.loadout) return [];
+    const mine = { ...mySeat, playerId: myPlayerId };
+    const theirs = { ...oppSeat, playerId: oppSeat.player?.id ?? '' };
+    try {
+      const played = playedRoundsFrom(results, state.abilityFirings ?? [], mine, theirs);
+      return replayMatch(played, myRules, oppRules).events.filter((e) => e.side === 'a');
+    } catch {
+      return [];
+    }
+  })();
+  // Numbers on their marks only where the numbers carry information: see the
+  // `showOppCooldownCounts` note in MovePicker.
+  const helpersInPlay = Boolean(mySeat?.loadout || oppSeat?.loadout);
+  // Both loadouts, as the sheet says them (JQ-149). Null on both sides in
+  // `duel`, which is what keeps every one of these surfaces off a duel board —
+  // the same fact `helpersInPlay` above reads, kept as one predicate rather than
+  // two spellings of it.
   const myLoadout = seatLoadoutView(mySeat);
   const oppLoadout = seatLoadoutView(oppSeat);
-  const anyLoadout = Boolean(myLoadout || oppLoadout);
   const lobbyReturnUrl =
     match.lobbyReturnUrl != null
       ? buildLobbyReturnLink(match.lobbyReturnUrl, match.externalMatchId)
@@ -738,7 +825,10 @@ export function Board({
   const revealPicks = reveal ? opponentMoveFromResult(reveal.result.moves, myPlayerId) : null;
   const winningEdge =
     reveal?.phase === 'outro' && revealPicks?.myMove && revealPicks.oppMove
-      ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove)
+      ? winningEdgeOf(revealPicks.myMove, revealPicks.oppMove, {
+          mine: myRules.beats,
+          theirs: oppRules.beats,
+        })
       : null;
 
   if (finished && !revealingNow) {
@@ -787,7 +877,7 @@ export function Board({
         bestOf={match.bestOf}
         pulseSeatKey={reveal && reveal.result.outcome !== 'draw' ? reveal.result.outcome : null}
         deadline={allSeated && !revealingNow ? roundDeadline : null}
-        onInspectLoadouts={anyLoadout ? () => setChecking(true) : null}
+        onInspectLoadouts={helpersInPlay ? () => setChecking(true) : null}
       />
 
       {!allSeated && !revealingNow ? (
@@ -808,6 +898,11 @@ export function Board({
               surface, so anything that appears above it mid-decision would
               shift the board under the player's thumb. */}
           <div className="board-status">
+            {opponentAway && !revealingNow && (
+              <p className="hint" role="status">
+                Waiting for {opponent.name} to reconnect…
+              </p>
+            )}
             {!youMovedThisRound && opponentLockedIn && !revealingNow && (
               <p className="hint opponent-ready" role="status">
                 Opponent has locked in — pick your move!
@@ -842,6 +937,11 @@ export function Board({
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             myOpeningDelays={myOpeningDelays}
+            myBeats={myRules.beats}
+            oppBeats={oppRules.beats}
+            myLedger={myLedger}
+            showOppCooldownCounts={helpersInPlay}
+            oppCanFreeze={holdsFreeze(oppSeat?.loadout ?? null)}
             idleCaption={beforeRoundOne ? "Round 1 hasn't started" : undefined}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
@@ -1019,6 +1119,9 @@ function SeatCard({
   const reserved = Boolean(seat.reservedForLobbyUser);
   const waiting = !seated && reserved;
   const open = !seated && !reserved;
+  // Only an explicit `false` means away: a player on the REST path holds no
+  // socket, and drawing them as gone on that would be a lie about a live seat.
+  const away = seat.player?.connected === false;
   const wins = seat.player?.score ?? 0;
   const identity = seatIdentity(seat, open ? 'Open seat' : mine ? 'You' : 'Opponent');
   // Named in the button's label rather than drawn on the card: a screen reader
@@ -1054,6 +1157,9 @@ function SeatCard({
         </span>
         <span className="player-name">{identity.name}</span>
         {waiting && <span className="player-status">on their way</span>}
+        {/* Their seat is held, not forfeited — say so rather than leaving the
+            other player staring at a board that has silently stopped. */}
+        {away && !waiting && <span className="player-status">reconnecting…</span>}
         <WinProgress wins={wins} needed={needed} justWon={justWon} />
         {/* The whole card is the tap target, and it costs the layout nothing:
             it is absolutely positioned over a card that already exists, so no

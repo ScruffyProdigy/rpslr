@@ -6,7 +6,7 @@ import {
   type GameModeManifest,
 } from './gameModes.js';
 import { lobbyIssuersMatch } from './lobbyIssuer.js';
-import { reportMatchResult } from './lobbyClient.js';
+import { reportMatchResult, reportPlayerFinished } from './lobbyClient.js';
 import {
   claimSeatName,
   fetchLobbyProfilesForUserIds,
@@ -48,6 +48,7 @@ import {
   type ResolvedSelection,
 } from './preQueue.js';
 import type { MatchHub } from './matchHub.js';
+import type { SeatBinding } from './seatBinding.js';
 import type { PresenceTracker } from './presence.js';
 import {
   chooseAutoPick,
@@ -105,6 +106,14 @@ export class BannedPlayerError extends Error {
 export interface ClaimResult {
   state: MatchState;
   you: { playerId: string; seatKey: string; name: string };
+  /**
+   * True when this claim handed back a seat the player already held — a
+   * reconnect rather than a first sitting. The transport answers `200` for it
+   * and `201` for a first claim, and nothing about the match moved either way.
+   *
+   * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+   */
+  reclaimed: boolean;
 }
 
 export interface GameServiceOptions {
@@ -341,26 +350,65 @@ export class GameService {
     const match = await this.repo.getMatch(idOrCode);
     if (!match) throw new NotFoundError('match not found');
 
-    const { player } = await this.repo.claimSeat({
+    const { player, reclaimed } = await this.repo.claimSeat({
       matchId: match.id,
       seatKey: opts.seatKey,
       name: opts.name,
       lobbyUserId: opts.lobbyUserId ?? null,
     });
 
-    // Once every seat is filled, the match is ready to play.
+    // Once every seat is filled, the match is ready to play. A re-claim never
+    // reaches this: the seat it returned was already filled, so the match left
+    // `waiting` on the first claim and no clock is restarted under anyone.
     const seats = await this.repo.listSeats(match.id);
-    if (match.status === 'waiting' && seats.every((s) => s.player)) {
+    if (!reclaimed && match.status === 'waiting' && seats.every((s) => s.player)) {
       await this.repo.setMatchStatus(match.id, 'playing');
       // The clock starts when the match does, not when the first move arrives.
       await this.startPhase(match.id, match.gameMode, match.currentRound, openingPhase(seats));
     }
 
+    // Full authoritative state, not the deltas they missed — a returning player
+    // should never have to guess what happened while they were gone.
     const state = await this.publishState(match.id, player.id);
     const mySeat = state.seats.find((s) => s.player?.id === player.id)!;
     return {
       state,
       you: { playerId: player.id, seatKey: mySeat.seatKey, name: player.name },
+      reclaimed,
+    };
+  }
+
+  /**
+   * Recovery path 1: resume a player from the game's own browser→seat binding,
+   * with no Lobby round trip and no seat token.
+   *
+   * The binding names a seat; the match decides whether that seat is still
+   * theirs. Every field is checked against live state — the match exists, is
+   * not over, the seat still holds that player, and that player is still the
+   * Lobby user the binding names — so a stale or tampered cookie resumes
+   * nothing rather than seating someone in a match they left or never had.
+   *
+   * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+   */
+  async resumeFromBinding(binding: SeatBinding): Promise<ClaimResult | null> {
+    const match = await this.repo.getMatch(binding.externalMatchId);
+    if (!match) return null;
+    // A binding naming a seat in a finished match resumes nothing. The replay
+    // is how a player revisits a match that is over.
+    if (match.status === 'finished') return null;
+
+    const seats = await this.repo.listSeats(match.id);
+    const seat = seats.find((s) => s.seatKey === binding.seatKey);
+    const player = seat?.player;
+    if (!player) return null;
+    if (player.id !== binding.playerId) return null;
+    if (player.lobbyUserId !== binding.lobbyUserId) return null;
+
+    const state = await this.getState(match.id, player.id);
+    return {
+      state,
+      you: { playerId: player.id, seatKey: seat!.seatKey, name: player.name },
+      reclaimed: true,
     };
   }
 
@@ -404,6 +452,15 @@ export class GameService {
     const delays = delaysBySeat(results, seats, firings);
     for (const seat of seats) {
       seat.delays = delays[seat.seatKey];
+      // Who is actually here. The other seat needs this to say "waiting for
+      // them to reconnect" rather than leaving the match silently stalled.
+      //
+      // Left off entirely when nothing is tracking presence — a service built
+      // without a tracker knows nothing about who is connected, and a blanket
+      // `true` would be an assertion it has no grounds for.
+      if (this.presence && seat.player) {
+        seat.player.connected = this.presence.disconnectedSince(match.id, seat.player.id) === null;
+      }
     }
     return {
       shared: this.publicView({
@@ -894,13 +951,27 @@ export class GameService {
    */
   async markConnected(ref: string, playerId: string): Promise<void> {
     const match = await this.repo.getMatch(ref);
-    if (match) this.presence?.connect(match.id, playerId);
+    if (!match) return;
+    this.presence?.connect(match.id, playerId);
+    // Presence is part of the published state now, so a change to it is a state
+    // change: the opponent's board learns someone came back without waiting for
+    // its next poll.
+    await this.publishState(match.id);
   }
 
-  /** Counterpart to `markConnected`; starts this player's grace period. */
+  /**
+   * Counterpart to `markConnected`; starts this player's grace period.
+   *
+   * A dropped socket is *only* this. The seat is held, nothing is forfeited,
+   * and Lobby is told nothing — a player who closed a tab or lost wifi is still
+   * seated and still expected back. What ends the wait is the grace period
+   * expiring, in `forfeitMatch`.
+   */
   async markDisconnected(ref: string, playerId: string): Promise<void> {
     const match = await this.repo.getMatch(ref);
-    if (match) this.presence?.disconnect(match.id, playerId);
+    if (!match) return;
+    this.presence?.disconnect(match.id, playerId);
+    await this.publishState(match.id);
   }
 
   /** Put a phase on the clock. Rounds open on `pick`; the sub-phase is the other. */
@@ -1059,8 +1130,44 @@ export class GameService {
 
     await this.repo.endMatch(matchId, winner?.seatKey ?? null, endReason);
     this.presence?.forget(matchId);
+    // *This* is the moment a player is finished, not the moment their socket
+    // dropped: the grace period they were given has run out, so the wait has an
+    // end and Lobby is told what it was.
+    void this.notifyLobbyPlayersFinished(matchId, forfeited);
     void this.notifyLobbyMatchComplete(matchId, winner?.seatKey ?? null, seats);
     await this.publishState(matchId);
+  }
+
+  /**
+   * Report each forfeiting player to Lobby, with the reason that ended them.
+   *
+   * `DISCONNECT` is the one Lobby handles differently — it drops that player out
+   * of the match's rating inputs rather than rating them on an outcome they were
+   * not there for — so a grace-period expiry and a run of strikes are told apart
+   * here rather than collapsed into one reason.
+   *
+   * Best-effort and fire-and-forget, like every callback: a match that cannot
+   * reach Lobby still ends correctly for the people playing it.
+   */
+  private async notifyLobbyPlayersFinished(
+    matchId: string,
+    forfeited: { seat: Seat; action: { kind: string } }[],
+  ): Promise<void> {
+    const match = await this.repo.getMatch(matchId);
+    if (!match?.externalMatchId || !match.lobbyGraphqlUrl || !match.lobbyServiceToken) return;
+
+    for (const { seat, action } of forfeited) {
+      const lobbyUserId = seat.player?.lobbyUserId;
+      if (!lobbyUserId) continue;
+      const reason = (action as { reason?: 'strikes' | 'disconnect' }).reason;
+      await reportPlayerFinished(
+        match.lobbyGraphqlUrl,
+        match.lobbyServiceToken,
+        match.externalMatchId,
+        lobbyUserId,
+        reason === 'disconnect' ? 'DISCONNECT' : 'FORFEIT',
+      );
+    }
   }
 
   /** Best-effort callback so Lobby can clear matched queue rows. */

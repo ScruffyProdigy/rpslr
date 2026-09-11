@@ -24,7 +24,7 @@ import {
   MOVES,
   NO_DISCLOSURE,
   type Disclosure,
-  type MarkAdjustment,
+  type AttributedMark,
   type Move,
   type PlayerRules,
 } from '../game.js';
@@ -132,23 +132,29 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      */
     fireEffects({ firings, own, opponent, opponentDelays, ownDelays }) {
       const fired = (id: HelperId) => (has(id) ? firings.find((f) => f.id === id) : undefined);
-      const marks: MarkAdjustment = { own: {}, opponent: {} };
-      const markTheirs = (move: Move, n: number) => {
-        marks.opponent[move] = (marks.opponent[move] ?? 0) + n;
+      // Attributed, not merely counted: the board across the table has to be able
+      // to say *which* card put a mark there, and a merged total cannot (JQ-151).
+      const ownMarks: AttributedMark[] = [];
+      const theirMarks: AttributedMark[] = [];
+      const markTheirs = (move: Move, n: number, helperId: HelperId) => {
+        theirMarks.push({ move, amount: n, helperId });
+      };
+      const markOwn = (move: Move, n: number, helperId: HelperId) => {
+        ownMarks.push({ move, amount: n, helperId });
       };
 
       // Quarantine names a move before the round; it lands only if they play it.
       // The charge is spent either way, which `abilityMarks` handles by charging
       // every firing — so a miss costs the same as a hit, as the card says.
       const quarantine = fired('quarantine');
-      if (quarantine && quarantine.target === opponent) markTheirs(opponent, 2);
+      if (quarantine && quarantine.target === opponent) markTheirs(opponent, 2, 'quarantine');
 
       // The same guess kept quiet. Identical marks by design: `reveal` decides who is
       // told, never what a firing does, and the pair is meant to differ only there.
       // Being unannounced is why this one still lands at ~1/3 where Quarantine, which
       // says so, is dodged instead.
       const tripwire = fired('tripwire');
-      if (tripwire && tripwire.target === opponent) markTheirs(opponent, 2);
+      if (tripwire && tripwire.target === opponent) markTheirs(opponent, 2, 'tripwire');
 
       // Rust deepens a move already on cooldown, so a target they have clear is
       // not a legal firing. The caller rejects one; ignoring it here means a bad
@@ -157,24 +163,20 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       // One mark, not two, since JQ-209. Two was Quarantine's effect without
       // Quarantine's ~1/3 hit rate, which put it at ~26pp against a 9-10pp target.
       const rust = fired('rust');
-      if (rust?.target && opponentDelays[rust.target] > 0) markTheirs(rust.target, 1);
+      if (rust?.target && opponentDelays[rust.target] > 0) markTheirs(rust.target, 1, 'rust');
 
       // Thief moves a mark rather than adding one, so it needs a mark to move: a
       // source they have clear is not a legal firing and lands as nothing.
       const thief = fired('thief');
       if (thief?.source && thief.target && ownDelays[thief.source] > 0) {
-        marks.own[thief.source] = (marks.own[thief.source] ?? 0) - 1;
-        markTheirs(thief.target, 1);
+        markOwn(thief.source, -1, 'thief');
+        markTheirs(thief.target, 1, 'thief');
       }
-
-      const markOwn = (move: Move, n: number) => {
-        marks.own[move] = (marks.own[move] ?? 0) + n;
-      };
 
       // Flywheel takes a mark off everything already down. Marks floor at zero, so a
       // move on one mark simply clears; nothing here can go negative.
       if (fired('flywheel')) {
-        for (const move of MOVES) if (ownDelays[move] > 0) markOwn(move, -1);
+        for (const move of MOVES) if (ownDelays[move] > 0) markOwn(move, -1, 'flywheel');
       }
 
       // Feint moves this round's cost rather than cancelling it: the played move is
@@ -183,13 +185,13 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
       // Feint can never come out ahead on marks — only on which move is left live.
       const feint = fired('feint');
       if (feint?.target && feint.target !== own) {
-        markOwn(own, -2);
-        markOwn(feint.target, 2);
+        markOwn(own, -2, 'feint');
+        markOwn(feint.target, 2, 'feint');
       }
 
       return {
         freezesOpponentDecay: Boolean(fired('freeze')),
-        marks,
+        marks: { own: ownMarks, opponent: theirMarks },
       };
     },
 
@@ -232,27 +234,27 @@ export function rulesFor(loadout: Loadout | null, state: LoadoutState = {}): Pla
      * They stack: two cards that both mark the move that beat you add two marks.
      */
     adjustAfterRound(ctx) {
-      const adjustment: MarkAdjustment = { own: {}, opponent: {} };
       // Only `markTheirs` now. Second Wind was the one card here that put a mark on
       // its *own* owner, and JQ-236 retired it — so every remaining end-of-round
-      // adjustment reaches across, and `adjustment.own` is left empty by every path.
-      const markTheirs = (move: Move) => {
-        adjustment.opponent[move] = (adjustment.opponent[move] ?? 0) + 1;
+      // adjustment reaches across, and `own` is left empty by every path.
+      const opponent: AttributedMark[] = [];
+      const markTheirs = (move: Move, helperId: HelperId) => {
+        opponent.push({ move, amount: 1, helperId });
       };
-      if (has('ferrus') && ctx.own === 'robot') markTheirs(ctx.opponent);
+      if (has('ferrus') && ctx.own === 'robot') markTheirs(ctx.opponent, 'ferrus');
       // Their move only. Marking both was exactly zero: a mark taken on costs the
       // same 0.383 a mark handed out earns, and the cheap 0.156 rate is for shedding
       // one rather than taking one.
-      if (has('echo-chamber') && ctx.outcome === 'draw') markTheirs(ctx.opponent);
+      if (has('echo-chamber') && ctx.outcome === 'draw') markTheirs(ctx.opponent, 'echo-chamber');
       // Grudge skips the first loss and Small Mercy takes only the first, so the two
       // partition the losses rather than overlapping on them.
       if (has('grudge') && ctx.outcome === 'loss' && ctx.lossesSoFar >= 1) {
-        markTheirs(ctx.opponent);
+        markTheirs(ctx.opponent, 'grudge');
       }
       if (has('small-mercy') && ctx.outcome === 'loss' && ctx.lossesSoFar === 0) {
-        markTheirs(ctx.opponent);
+        markTheirs(ctx.opponent, 'small-mercy');
       }
-      return adjustment;
+      return { own: [], opponent };
     },
   };
 }

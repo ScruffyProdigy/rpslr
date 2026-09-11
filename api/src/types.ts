@@ -94,6 +94,19 @@ export interface SeatPlayer {
   profile: LobbyPlayerProfile | null;
   /** Consecutive rounds this player let expire; reset by any on-time move. */
   expiryStrikes: number;
+  /**
+   * Whether this player is holding a live socket right now.
+   *
+   * Only the published snapshot fills this in — the repository has no idea who
+   * is connected — which is why it is optional on the type and why the only
+   * value that means anything to a reader is an explicit `false`. Absent, or
+   * true, both mean "not known to be away": a player using the REST endpoints
+   * alone holds no socket and must not be drawn as gone.
+   *
+   * It exists so the *other* seat can be told the game is waiting on someone
+   * rather than sitting silently stalled.
+   */
+  connected?: boolean;
 }
 
 export interface RoundResult {

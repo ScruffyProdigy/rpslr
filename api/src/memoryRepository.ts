@@ -5,6 +5,7 @@ import {
   NotFoundError,
   ReservationError,
   type ClaimSeatInput,
+  type ClaimSeatResult,
   type CreateMatchInput,
   type GameRepository,
 } from './repository.js';
@@ -174,7 +175,7 @@ export class MemoryGameRepository implements GameRepository {
     };
   }
 
-  async claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }> {
+  async claimSeat(input: ClaimSeatInput): Promise<ClaimSeatResult> {
     // Idempotent: same Lobby user re-claiming returns their existing seat.
     if (input.lobbyUserId) {
       const existing = this.players.find(
@@ -183,7 +184,7 @@ export class MemoryGameRepository implements GameRepository {
       if (existing) {
         const seatRow = this.seats.find((s) => s.id === existing.seatId)!;
         const seat = this.toSeat(seatRow);
-        return { seat, player: this.toSeatPlayer(existing, seat.lobbyProfile) };
+        return { seat, player: this.toSeatPlayer(existing, seat.lobbyProfile), reclaimed: true };
       }
     }
 
@@ -192,11 +193,15 @@ export class MemoryGameRepository implements GameRepository {
     );
     if (!seat) throw new NotFoundError('seat not found');
 
-    if (seat.reservedForLobbyUser && seat.reservedForLobbyUser !== input.lobbyUserId) {
-      throw new ReservationError('seat is reserved for another player');
-    }
+    // Occupancy before reservation: the branch above already answered "you are
+    // the one sitting here", so anyone reaching this line with a player in the
+    // seat is a different player trying to take it — which is the conflict, and
+    // says so plainly, whether or not the seat also carries a reservation.
     if (this.players.some((p) => p.seatId === seat.id)) {
       throw new ConflictError('seat already taken');
+    }
+    if (seat.reservedForLobbyUser && seat.reservedForLobbyUser !== input.lobbyUserId) {
+      throw new ReservationError('seat is reserved for another player');
     }
 
     const player: PlayerRow = {
@@ -210,7 +215,11 @@ export class MemoryGameRepository implements GameRepository {
     };
     this.players.push(player);
     const claimedSeat = this.toSeat(seat);
-    return { seat: claimedSeat, player: this.toSeatPlayer(player, claimedSeat.lobbyProfile) };
+    return {
+      seat: claimedSeat,
+      player: this.toSeatPlayer(player, claimedSeat.lobbyProfile),
+      reclaimed: false,
+    };
   }
 
   async setMatchStatus(matchId: string, status: MatchStatus): Promise<void> {

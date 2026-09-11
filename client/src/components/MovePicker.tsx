@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DelayMap } from '@game/game';
+import type { DelayMap, MarkEvent } from '@game/game';
 import type { Move } from '../api';
 import {
   ARROW_INSET,
   BOARD,
   CIRCLE_EDGES,
   CIRCLE_ORDER,
+  addedEdgePath,
   boardPct,
   circleNodePos,
 } from '../lib/pentagon';
@@ -13,14 +14,18 @@ import { hasSeen, markSeen, type OneTimeNote } from '../lib/prefs';
 import { PLAYER_VOICE, type Voice } from '../lib/voice';
 import {
   MOVE_META,
+  SHARED_BEATS,
+  addedEdgesOf,
+  backInPhrase,
   beatsOf,
-  cooldownCause,
   cooldownPhrase,
+  cooldownReason,
   describeBeatsGraph,
   describeBeatsOf,
   isForcedPick,
   isPlayable,
   opponentCooldownPhrase,
+  type BeatsMap,
   type WinningEdge,
 } from '../moves';
 import MoveIcon from './MoveIcon';
@@ -60,6 +65,11 @@ export function MovePicker({
   winningEdge = null,
   voice = PLAYER_VOICE,
   oppName,
+  myBeats = SHARED_BEATS,
+  oppBeats = SHARED_BEATS,
+  myLedger = [],
+  showOppCooldownCounts = false,
+  oppCanFreeze = false,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -100,6 +110,27 @@ export function MovePicker({
   voice?: Voice;
   /** The other player's name, for a replay's legend. */
   oppName?: string;
+  /**
+   * The two graphs. Each side's own, because a helper may hand one of them an edge
+   * the other does not have, and both players have to be able to see both — a rule
+   * you are playing against is no use to you unrendered (JQ-151).
+   */
+  myBeats?: BeatsMap;
+  oppBeats?: BeatsMap;
+  /** Your own mark events, so a cooldown can name what actually caused it. */
+  myLedger?: readonly MarkEvent[];
+  /**
+   * Whether the opponent's marks carry their count.
+   *
+   * Off in `duel`, where the reachable states are only ever `(1, 2)` and a number
+   * would restate which of two moves they played most recently — something the
+   * history strip below the board already says in words. Helpers break that
+   * invariant, and once marks vary the count is the only way to read their board
+   * without re-simulating their loadout every round (JQ-151).
+   */
+  showOppCooldownCounts?: boolean;
+  /** Whether the opponent can stop your marks coming off, so nothing promises turns. */
+  oppCanFreeze?: boolean;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -207,7 +238,13 @@ export function MovePicker({
     else setPicked(move);
   }
 
-  const graphText = describeBeatsGraph(oppDelays, oppName);
+  const graphText = describeBeatsGraph(oppDelays, oppName, { mine: myBeats, theirs: oppBeats });
+  // Both sides' extra edges, each tagged with whose it is so the board can colour
+  // it. Empty in a duel, which is what keeps the ten-edge graph untouched there.
+  const addedEdges = [
+    ...addedEdgesOf(myBeats).map((e) => ({ ...e, role: 'you' as const })),
+    ...addedEdgesOf(oppBeats).map((e) => ({ ...e, role: 'opp' as const })),
+  ];
   const myMarked = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
@@ -330,6 +367,43 @@ export function MovePicker({
               />
             );
           })}
+          {/* The edges a loadout added, drawn last so they sit over the ten.
+              Curved, because an added edge is the reverse of one already there
+              and a straight one would land on top of an arrow pointing the other
+              way — see `addedEdgePath`. Role-coloured, so "whose rule is this?"
+              is answered without reading the legend. */}
+          {addedEdges.map(({ from, to, role }) => {
+            const won =
+              winningEdge?.added && winningEdge.from === from && winningEdge.to === to;
+            // The owner is the one who can play it, so an edge of theirs off a
+            // move they cannot play this round is as dead as any other.
+            const off = !won && role === 'opp' && !isPlayable(from, oppDelays);
+            const highlighted = role === 'you' && preview === from;
+            return (
+              <path
+                key={`added-${role}-${from}-${to}`}
+                data-added-from={from}
+                data-added-to={to}
+                data-role={role}
+                className={[
+                  'beat-arrow',
+                  'beat-arrow--added',
+                  `beat-arrow--added-${role}`,
+                  off ? 'beat-arrow--opp-off' : '',
+                  highlighted ? 'beat-arrow--preview' : '',
+                  won ? 'beat-arrow--won' : '',
+                  won ? `beat-arrow--won-${winningEdge.role}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                fill="none"
+                d={addedEdgePath(CIRCLE_ORDER.indexOf(from), CIRCLE_ORDER.indexOf(to))}
+                markerEnd={
+                  off ? 'url(#rps-arrow-off)' : `url(#rps-arrow-${role})`
+                }
+              />
+            );
+          })}
         </svg>
 
         {CIRCLE_ORDER.map((m, i) => {
@@ -345,12 +419,15 @@ export function MovePicker({
           const forced = isForcedPick(m, myDelays);
           const selected = myChosenMove === m;
           const previewed = preview === m;
-          const isTarget = preview != null && preview !== m && beatsOf(preview).includes(m);
+          // Your graph, not the shared one: previewing Lizard as a Chimera owner
+          // has to light Scissors too, or the caption and the board disagree.
+          const isTarget =
+            preview != null && preview !== m && beatsOf(preview, myBeats).includes(m);
           const label = [
             MOVE_META[m].label,
             forced ? 'marked but playable, costs you more' : '',
             blocked ? cooldownPhrase(myDelay) : '',
-            blocked ? cooldownCause(m, myRecentMoves, myOpeningDelays).toLowerCase() : '',
+            blocked ? cooldownReason(m, myRecentMoves, myOpeningDelays, myLedger).toLowerCase() : '',
             oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
           ]
             .filter(Boolean)
@@ -403,15 +480,14 @@ export function MovePicker({
                   </span>
                 ))}
               {oppDelay > 0 && (
-                /* The depth, not just the fact. Presence alone answered "can
-                   they play this?" and nothing else, which is enough while
-                   every opening is the same one — but a loadout decides how
-                   deep each opponent move starts, so "down" and "down 2" are
-                   different boards to plan against, and round 1 is exactly
-                   when the difference is largest (JQ-149). Decorative here:
-                   the button's own `aria-label` already carries the number. */
-                <span className="opp-cooldown-mark" aria-hidden="true">
-                  <UiIcon name="hourglass" /> {oppDelay}
+                <span
+                  className={`opp-cooldown-mark${
+                    showOppCooldownCounts ? ' opp-cooldown-mark--counted' : ''
+                  }`}
+                  aria-hidden="true"
+                >
+                  <UiIcon name="hourglass" />
+                  {showOppCooldownCounts && ` ${oppDelay}`}
                 </span>
               )}
             </button>
@@ -443,6 +519,9 @@ export function MovePicker({
               oppDelays={oppDelays}
               onCommit={commit}
               voice={voice}
+              myBeats={myBeats}
+              myLedger={myLedger}
+              oppCanFreeze={oppCanFreeze}
             />
           )}
         </div>
@@ -458,6 +537,11 @@ export function MovePicker({
           {graphText.edges.map((line) => (
             <li key={line}>{line}</li>
           ))}
+          {/* Said as extras, after the ten. The board draws them as curves; this
+              is the same claim for anyone who cannot see one. */}
+          {graphText.added.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
         </ul>
         <p>{graphText.opponent}</p>
       </section>
@@ -467,11 +551,30 @@ export function MovePicker({
           <UiIcon name="hourglass" /> N
         </span>{' '}
         {voice.you ? `${voice.you}'s cooldown` : 'your cooldown'} ·{' '}
-        <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
-          <UiIcon name="hourglass" /> N
+        {/* The legend teaches the badge the board is actually drawing, so the
+            count is gated on the same flag: a duel badge carries no number, and a
+            legend promising one would be teaching a mark that never appears. */}
+        <span
+          className={`opp-cooldown-mark opp-cooldown-mark--legend${
+            showOppCooldownCounts ? ' opp-cooldown-mark--counted' : ''
+          }`}
+          aria-hidden="true"
+        >
+          <UiIcon name="hourglass" />
+          {showOppCooldownCounts && ' N'}
         </span>{' '}
         {voice.you ? `${oppName ? `${oppName}'s` : 'their'} cooldown` : 'opponent cooldown'} (faded
         arrows = attacks they can&rsquo;t make)
+        {/* One entry, and only in a match that has one to explain. Phase 2 cut the
+            legend to two items and it is not growing back to four: a duel still
+            renders exactly the two above (JQ-151). */}
+        {addedEdges.length > 0 && (
+          <>
+            {' · '}
+            <span className="graph-legend__added" aria-hidden="true" />{' '}
+            curved = an extra rule
+          </>
+        )}
       </p>
 
       {/* Wherever the board can be tapped — a live match, or a replay being
@@ -517,6 +620,9 @@ function PickerCenter({
   oppDelays,
   onCommit,
   voice,
+  myBeats,
+  myLedger,
+  oppCanFreeze,
 }: {
   idleCaption?: string;
   preview: Move | null;
@@ -531,6 +637,10 @@ function PickerCenter({
   onCommit: (move: Move) => void;
   /** How to refer to the you-side: second person, or by name on a replay. */
   voice: Voice;
+  /** Your graph — every caption here is about a move of yours. */
+  myBeats: BeatsMap;
+  myLedger: readonly MarkEvent[];
+  oppCanFreeze: boolean;
 }) {
   // After lock-in the centre holds your pick — and the wait — so the page
   // below the board doesn't have to say anything.
@@ -541,7 +651,7 @@ function PickerCenter({
           <MoveIcon move={myChosenMove} className="picker-center__pick-icon" />{' '}
           {MOVE_META[myChosenMove].label}
         </span>
-        <p className="picker-center__caption">{describeBeatsOf(myChosenMove)}</p>
+        <p className="picker-center__caption">{describeBeatsOf(myChosenMove, myBeats)}</p>
         <p className="picker-center__waiting">
           {opponentLockedIn ? 'Revealing round…' : 'Waiting for opponent…'}
         </p>
@@ -569,7 +679,7 @@ function PickerCenter({
     const commitForced = !lockedIn && picked != null && preview === picked ? picked : null;
     return (
       <div className="picker-center picker-center--forced">
-        <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
+        <p className="picker-center__caption">{describeBeatsOf(shown, myBeats)}</p>
         <p className="picker-center__forced">
           Every move is marked — {MOVE_META[shown].label} is your cheapest. Playing it puts it
           further down.
@@ -587,10 +697,10 @@ function PickerCenter({
   if (!isPlayable(shown, myDelays)) {
     return (
       <div className="picker-center picker-center--why">
-        <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
+        <p className="picker-center__caption">{describeBeatsOf(shown, myBeats)}</p>
         <p className="picker-center__why">
-          {cooldownCause(shown, myRecentMoves, myOpeningDelays)} — back in {myDelay} turn
-          {myDelay === 1 ? '' : 's'}
+          {cooldownReason(shown, myRecentMoves, myOpeningDelays, myLedger)} —{' '}
+          {backInPhrase(myDelay, oppCanFreeze)}
         </p>
       </div>
     );
@@ -603,7 +713,7 @@ function PickerCenter({
 
   return (
     <div className="picker-center">
-      <p className="picker-center__caption">{describeBeatsOf(shown)}</p>
+      <p className="picker-center__caption">{describeBeatsOf(shown, myBeats)}</p>
       {/* "Opponent can't play X" is a playability claim, not a mark count —
           so it has to ask isPlayable, which knows about the floor, rather
           than merely reading oppDelay > 0. A fully-marked opponent's

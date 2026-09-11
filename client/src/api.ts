@@ -51,6 +51,15 @@ export interface SeatPlayer {
   profile: LobbyPlayerProfile | null;
   /** Consecutive rounds this player let expire; any on-time move clears it. */
   expiryStrikes: number;
+  /**
+   * Whether this player is holding a live socket right now.
+   *
+   * Only an explicit `false` means anything: absent (an older server, a REST-only
+   * player) has to read as present, or a seat gets drawn as gone on no evidence.
+   * The board uses it to say the match is waiting on someone rather than sitting
+   * silently stalled.
+   */
+  connected?: boolean;
 }
 
 export interface Seat {
@@ -152,6 +161,8 @@ export interface MatchState {
 export interface ClaimResult {
   state: MatchState;
   you: { playerId: string; seatKey: string; name: string };
+  /** True when this handed back a seat we already held — a reconnect. */
+  reclaimed?: boolean;
 }
 
 export interface StatusResponse {
@@ -168,7 +179,12 @@ function baseUrl(): string {
 async function request<T>(path: string, init?: RequestInit, token?: string | null): Promise<T> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${baseUrl()}${path}`, { headers, ...init });
+  // `include`, so the game's own seat-binding cookie is both stored on a claim
+  // and presented on a resume. The client and API are the same site in every
+  // environment — one host with `/api` in production, two localhost ports in
+  // dev — but they are different *origins* in dev, which is enough for the
+  // default `same-origin` to drop the cookie on the floor.
+  const res = await fetch(`${baseUrl()}${path}`, { headers, credentials: 'include', ...init });
   if (!res.ok) {
     let message = `request failed (${res.status})`;
     try {
@@ -200,6 +216,16 @@ export const api = {
   // Lobby-linked: claim the seat dictated by a signed Lobby token.
   claimSeatWithToken: (ref: string, token: string) =>
     request<ClaimResult>(`/api/v1/matches/${ref}/claim`, { method: 'POST', body: '{}' }, token),
+
+  /**
+   * Recovery path 1: pick our seat back up from the binding the game wrote on
+   * its own origin, with no token and no Lobby round trip. A refresh, the back
+   * button, or a tab that crashed lands here. 404 when there is nothing to
+   * resume, which is the ordinary case for a first visit.
+   *
+   * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+   */
+  resume: () => request<ClaimResult>('/api/v1/resume'),
 
   submitMove: (ref: string, playerId: string, move: Move, round: number) =>
     request<MatchState>(`/api/v1/matches/${ref}/move`, {

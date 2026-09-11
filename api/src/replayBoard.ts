@@ -157,7 +157,12 @@ export function boardsThroughMatch(
   rulesA: PlayerRules,
   rulesB: PlayerRules,
 ): Board[] {
-  return Array.from({ length: rounds.length + 1 }, (_, i) =>
-    replayMatch(rounds.slice(0, i), rulesA, rulesB),
-  );
+  return Array.from({ length: rounds.length + 1 }, (_, i) => {
+    // The marks only. `replayMatch` also returns the ledger of *why* each mark
+    // landed, and a board is a snapshot rather than a history — carrying the whole
+    // ledger on every one of them would be a copy per prefix, for a field no
+    // caller of this function reads. Whoever wants the ledger asks for it once.
+    const { a, b } = replayMatch(rounds.slice(0, i), rulesA, rulesB);
+    return { a, b };
+  });
 }
