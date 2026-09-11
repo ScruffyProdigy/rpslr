@@ -68,6 +68,7 @@ export class MemoryGameRepository implements GameRepository {
   private results = new Map<string, RoundResult[]>();
   private abilityFirings: AbilityFiringRow[] = [];
   private subPhaseActions: { matchId: string; seatId: string; round: number }[] = [];
+  private loadoutAcks: { matchId: string; seatId: string }[] = [];
 
   async createMatch(input: CreateMatchInput): Promise<Match> {
     const id = randomUUID();
@@ -387,6 +388,24 @@ export class MemoryGameRepository implements GameRepository {
     );
     return this.subPhaseActions
       .filter((a) => a.matchId === matchId && a.round === round)
+      .map((a) => seatKeyById.get(a.seatId) ?? a.seatId);
+  }
+
+  async recordLoadoutAck(input: { matchId: string; seatId: string }): Promise<void> {
+    // Idempotent, matching the table's primary key: saying "read it" twice is one
+    // statement, and the second must not look like a second seat.
+    const already = this.loadoutAcks.some(
+      (a) => a.matchId === input.matchId && a.seatId === input.seatId,
+    );
+    if (!already) this.loadoutAcks.push({ ...input });
+  }
+
+  async listLoadoutAcks(matchId: string): Promise<string[]> {
+    const seatKeyById = new Map(
+      this.seats.filter((s) => s.matchId === matchId).map((s) => [s.id, s.seatKey]),
+    );
+    return this.loadoutAcks
+      .filter((a) => a.matchId === matchId)
       .map((a) => seatKeyById.get(a.seatId) ?? a.seatId);
   }
 

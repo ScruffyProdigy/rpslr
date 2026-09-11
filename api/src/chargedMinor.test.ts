@@ -21,6 +21,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 const WHETSTONE = {
   id: 'whetstone',
@@ -149,6 +150,13 @@ describe('GameService — a Major and a charged Minor in one loadout', () => {
       ],
     });
     const joined = await service.claimSeat(created.state.match.code, { seatKey: '2', name: 'Bob' });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, created.state.match.code, [
+      created.you.playerId,
+      joined.you.playerId,
+    ]);
     return {
       code: created.state.match.code,
       alice: created.you.playerId,

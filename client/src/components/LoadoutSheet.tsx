@@ -37,9 +37,11 @@ export function LoadoutSheet({
 }: {
   open: boolean;
   /**
-   * `reveal` is the one that opened itself before round 1 and is on a clock;
-   * `check` is the player having asked. Only the heading and the button's word
-   * differ — a reveal is dismissed by agreeing to start, a check by closing.
+   * `reveal` is the one that opened itself before round 1 and is on the server's
+   * clock; `check` is the player having asked. Only the heading, the lead and the
+   * button's word differ — a reveal is dismissed by saying you have read it,
+   * which is a thing the other seat is waiting on, and a check by closing, which
+   * is not.
    */
   variant: 'reveal' | 'check';
   mine: SeatLoadoutView | null;
@@ -75,13 +77,18 @@ export function LoadoutSheet({
         <div className="htp-dialog__head">
           <h2 className="htp-dialog__title">{title}</h2>
           <button ref={autoFocusRef} type="button" className="htp-dialog__close" onClick={onClose}>
-            {variant === 'reveal' ? 'Start round 1' : 'Close'}
+            {/* Not "Start round 1", which one tap cannot do: the phase ends when
+                *both* seats have read it, or when its deadline runs out. A button
+                that named an outcome it does not control would read as broken to
+                whoever pressed it first. */}
+            {variant === 'reveal' ? "I'm ready" : 'Close'}
           </button>
         </div>
         {variant === 'reveal' && (
           <p className="loadout-sheet__lead">
             Both were chosen before the match was made, so neither of you could counter the
-            other. They are fixed for the whole match.
+            other. They are fixed for the whole match, and you can check them again any time
+            from either player&rsquo;s card. Round 1 starts once you have both read this.
           </p>
         )}
         <div className="loadout-sheet__sides">

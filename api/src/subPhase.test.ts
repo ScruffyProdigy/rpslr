@@ -25,6 +25,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 vi.mock('./helpers/roster.js', async () => {
   const actual = await vi.importActual<typeof import('./helpers/roster.js')>('./helpers/roster.js');
@@ -65,6 +66,13 @@ describe('the sub-phase, reached by a public firing rather than by a reveal', ()
       seatKey: '2',
       name: 'Bob',
     });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, created.state.match.code, [
+      created.you.playerId,
+      joined.you.playerId,
+    ]);
     return {
       code: created.state.match.code,
       alice: created.you.playerId,

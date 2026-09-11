@@ -57,6 +57,22 @@ describe('allowanceMs', () => {
     for (const round of [1, 2, 5, 9]) expect(p.allowanceMs('react', round)).toBe(12_000);
     expect(p.allowanceMs('react', 2)).toBeLessThan(p.allowanceMs('pick', 2));
   });
+
+  it('gives the loadout reveal a cap of its own, round-independent like the sub-phase', () => {
+    // 45s because reading four helper cards is slower than it looks — watched
+    // players took a good 30 seconds over the how-to-play panels, which are
+    // shorter and about a game they already know. It is a cap rather than a
+    // duration: the usual exit is both players saying they have read it.
+    expect(DUEL_POLICY.allowanceMs('loadouts', 1)).toBe(45_000);
+    expect(DUEL_POLICY.allowanceMs('loadouts', 4)).toBe(DUEL_POLICY.allowanceMs('loadouts', 1));
+  });
+
+  it('leaves round 1 its full allowance, which the reveal is no longer inside', () => {
+    // The other design on the table put the reveal in the first seconds of round
+    // 1, which would have meant reading time coming out of thinking time. This is
+    // the assertion that says it does not.
+    expect(DUEL_POLICY.allowanceMs('pick', 1)).toBe(60_000);
+  });
 });
 
 describe('deadlineFor', () => {

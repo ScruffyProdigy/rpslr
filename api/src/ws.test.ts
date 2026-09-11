@@ -8,6 +8,7 @@ import { MatchHub } from './matchHub.js';
 import { MemoryGameRepository } from './memoryRepository.js';
 import { GameService } from './service.js';
 import { attachWebsocketServer } from './ws.js';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 let server: Server;
 let service: GameService;
@@ -157,6 +158,9 @@ describe('an unresolved ability firing never reaches the socket', () => {
     const hostId = created.you.playerId;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
     const challengerId = joined.you.playerId;
+    // Past the loadout reveal, which a `duel-helpers` match now opens on: the
+    // client sends one ack per seat as each player dismisses the sheet (JQ-149).
+    await pastLoadoutReveal(service, code, [hostId, challengerId]);
 
     const state = await service.getState(code);
     await repo.recordAbilityFiring({
@@ -215,6 +219,9 @@ describe('WebSocket ability firings', () => {
     });
     const code = created.state.match.code;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    // Past the loadout reveal, which a `duel-helpers` match now opens on: the
+    // client sends one ack per seat as each player dismisses the sheet (JQ-149).
+    await pastLoadoutReveal(service, code, [created.you.playerId, joined.you.playerId]);
     return { code, alice: created.you.playerId, bob: joined.you.playerId };
   }
 
@@ -330,6 +337,9 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
     });
     const code = created.state.match.code;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    // Past the loadout reveal, which a `duel-helpers` match now opens on: the
+    // client sends one ack per seat as each player dismisses the sheet (JQ-149).
+    await pastLoadoutReveal(service, code, [created.you.playerId, joined.you.playerId]);
     return { code, alice: created.you.playerId, bob: joined.you.playerId };
   }
 
@@ -417,6 +427,9 @@ describe('Oracle reveals a move the opponent did not play, and nothing else', ()
     const code = created.state.match.code;
     const alice = created.you.playerId;
     const bob = (await service.claimSeat(code, { seatKey: '2', name: 'Bob' })).you.playerId;
+    // Past the loadout reveal, which a `duel-helpers` match now opens on: the
+    // client sends one ack per seat as each player dismisses the sheet (JQ-149).
+    await pastLoadoutReveal(service, code, [alice, bob]);
 
     const bobWs = await open();
     send(bobWs, { type: 'subscribe', ref: code, playerId: bob });

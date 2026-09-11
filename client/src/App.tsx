@@ -302,7 +302,7 @@ function Game({
     if (matchBestOf) onBestOf(matchBestOf);
   }, [matchBestOf, onBestOf]);
 
-  const loadoutReveal = useLoadoutReveal(state, myPlayerId);
+  const loadoutReveal = useLoadoutReveal(state);
 
   const everySeatFilled = Boolean(state?.seats.every((s) => s.player));
   useEffect(() => {
@@ -371,6 +371,26 @@ function Game({
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * "I have read the loadouts."
+   *
+   * Closes the sheet here at once and tells the server this seat is done. Round 1
+   * starts when the other seat says the same, or when the phase deadline runs
+   * out — so the local close and the server call are two different things and
+   * both are wanted: one gets this player their board back, the other is what
+   * eventually starts the round.
+   *
+   * Fire-and-forget on the failure path. The phase has a deadline behind it, so a
+   * dropped ack costs a wait rather than a stuck match, and an error banner over
+   * a reveal the player has just dismissed would be noise about nothing they can
+   * act on.
+   */
+  function readLoadouts() {
+    loadoutReveal.dismiss();
+    if (!myPlayerId || !ref) return;
+    api.acknowledgeLoadouts(ref, myPlayerId).then(setState).catch(() => {});
   }
 
   async function play(move: Move) {
@@ -453,7 +473,7 @@ function Game({
         onPlay={play}
         onFire={fire}
         revealLoadouts={loadoutReveal.open}
-        onDismissReveal={loadoutReveal.dismiss}
+        onDismissReveal={readLoadouts}
       />
     </>
   );
@@ -608,6 +628,10 @@ function firingUnavailable({
 }): string | null {
   if (!connected) return 'Reconnecting — you can fire once the board is back.';
   if (!allSeated) return 'Waiting for your opponent.';
+  // A charge is spent on a round, and round 1 has not started. `fireAbility`
+  // refuses one during the reveal, so the rail must not offer what the server
+  // will turn down — the same rule the sub-phase case below is here for.
+  if (match.phase === 'loadouts') return 'Round 1 has not started yet.';
   if (match.phase === 'react') return 'The round is resolving.';
   if (revealingNow) return 'Wait for the round to finish.';
   return null;
@@ -674,6 +698,10 @@ export function Board({
   // round resolves, so the picker must not offer them a tap the server refuses.
   const repicking = mayRepick(state);
   const resolvingWithoutMe = match.phase === 'react' && !repicking;
+  // The reveal's phase, whether or not this player still has the sheet open. The
+  // board is inert for all of it: `submitMove` refuses a move before round 1, so
+  // offering a tap would be offering something the server will turn down.
+  const beforeRoundOne = match.phase === 'loadouts';
   // Your last two picks, most recent first: explains exactly why each of your
   // moves is on cooldown, without inferring it from the mark count.
   const myRecentMoves = results
@@ -790,6 +818,13 @@ export function Board({
                 Both locked in — the round is resolving.
               </p>
             )}
+            {/* Only once the sheet is gone: while it is up it is saying this
+                already, and a hint underneath a modal is talking to nobody. */}
+            {beforeRoundOne && !revealLoadouts && (
+              <p className="hint" role="status">
+                Round 1 starts once you have both read the loadouts.
+              </p>
+            )}
           </div>
           <MovePicker
             myDelays={myDelays}
@@ -798,11 +833,16 @@ export function Board({
             lockedIn={youMovedThisRound && !repicking}
             opponentLockedIn={opponentLockedIn}
             disabled={
-              !connected || !allSeated || (youMovedThisRound && !repicking) || revealingNow
+              !connected ||
+              !allSeated ||
+              beforeRoundOne ||
+              (youMovedThisRound && !repicking) ||
+              revealingNow
             }
             round={match.currentRound}
             myRecentMoves={myRecentMoves}
             myOpeningDelays={myOpeningDelays}
+            idleCaption={beforeRoundOne ? "Round 1 hasn't started" : undefined}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}

@@ -104,10 +104,12 @@ describe('<LoadoutSheet> (JQ-149)', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('is skippable — the reveal dismisses to round 1', () => {
+  it('is skippable — and says what skipping actually does', () => {
+    // "Start round 1" would be a promise one tap cannot keep: the phase ends when
+    // both seats have read it, or when its deadline runs out.
     const onClose = vi.fn();
     sheet({ onClose });
-    fireEvent.click(screen.getByRole('button', { name: 'Start round 1' }));
+    fireEvent.click(screen.getByRole('button', { name: "I'm ready" }));
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -122,7 +124,7 @@ describe('<LoadoutSheet> (JQ-149)', () => {
   it('takes focus on open and hands Escape back to the caller', () => {
     const onClose = vi.fn();
     sheet({ onClose });
-    expect(screen.getByRole('button', { name: 'Start round 1' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: "I'm ready" })).toHaveFocus();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });

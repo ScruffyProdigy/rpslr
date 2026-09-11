@@ -495,6 +495,26 @@ export class PgGameRepository implements GameRepository {
     );
   }
 
+  async recordLoadoutAck(input: { matchId: string; seatId: string }): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO loadout_acks (match_id, seat_id)
+       VALUES ($1, $2)
+       ON CONFLICT (match_id, seat_id) DO NOTHING`,
+      [input.matchId, input.seatId],
+    );
+  }
+
+  async listLoadoutAcks(matchId: string): Promise<string[]> {
+    const res = await this.pool.query(
+      `SELECT s.seat_key
+         FROM loadout_acks a JOIN seats s ON s.id = a.seat_id
+        WHERE a.match_id = $1
+        ORDER BY s.position ASC`,
+      [matchId],
+    );
+    return res.rows.map((row) => row.seat_key as string);
+  }
+
   async listSubPhaseActions(matchId: string, round: number): Promise<string[]> {
     const res = await this.pool.query(
       `SELECT s.seat_key

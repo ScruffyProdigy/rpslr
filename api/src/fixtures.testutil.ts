@@ -23,3 +23,23 @@ export function prequeueFixture<T = unknown>(name: string): T {
 export function serialize(value: unknown): string {
   return JSON.stringify(value);
 }
+
+/**
+ * Walk a helpers match past its loadout reveal (JQ-149).
+ *
+ * A match whose seats brought loadouts opens on the `loadouts` phase rather than
+ * on `pick`, so a test that submits a move without this is testing the reveal's
+ * guard rather than whatever it meant to test. This is exactly what the client
+ * sends — one ack per seat, as each player dismisses the sheet — so a setup that
+ * calls it is still describing a real match rather than reaching around one.
+ *
+ * Structurally typed against the service so this file stays free of the import
+ * cycle a `GameService` type would create with the suites that use it.
+ */
+export async function pastLoadoutReveal(
+  service: { acknowledgeLoadouts(ref: string, playerId: string): Promise<unknown> },
+  code: string,
+  playerIds: string[],
+): Promise<void> {
+  for (const playerId of playerIds) await service.acknowledgeLoadouts(code, playerId);
+}

@@ -3,6 +3,7 @@ import { MemoryGameRepository } from './memoryRepository.js';
 import { BannedPlayerError, GameService, ValidationError } from './service.js';
 import { ConflictError, NotFoundError, ReservationError } from './repository.js';
 import type { Move } from './game.js';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 describe('GameService — standalone duel loop', () => {
   let service: GameService;
@@ -427,6 +428,10 @@ describe('GameService — duel-helpers loadouts', () => {
     const code = created.state.match.code;
     const hostId = created.you.playerId;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, code, [hostId, joined.you.playerId]);
     const cycle: Move[] = ['rock', 'paper', 'scissors'];
     let state = await service.getState(code);
     for (let i = 0; i < 6; i++) {
@@ -467,6 +472,10 @@ describe('GameService — ability firings', () => {
     });
     const code = created.state.match.code;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, code, [created.you.playerId, joined.you.playerId]);
     const state = await service.getState(code);
     return {
       code,
@@ -597,6 +606,13 @@ describe('GameService — firing an ability', () => {
       seatKey: '2',
       name: 'Bob',
     });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, created.state.match.code, [
+      created.you.playerId,
+      joined.you.playerId,
+    ]);
     return {
       code: created.state.match.code,
       alice: created.you.playerId,
@@ -852,6 +868,13 @@ describe('GameService — two charged abilities in one round', () => {
       seatKey: '2',
       name: 'Bob',
     });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, created.state.match.code, [
+      created.you.playerId,
+      joined.you.playerId,
+    ]);
     return {
       code: created.state.match.code,
       alice: created.you.playerId,
@@ -1052,6 +1075,10 @@ describe('GameService — a round nobody fired in', () => {
     const code = created.state.match.code;
     const alice = created.you.playerId;
     const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, code, [alice, joined.you.playerId]);
 
     await service.submitMove(code, alice, 'rock');
     // Bob never answers; the deadline settles the round for him.
@@ -1108,6 +1135,13 @@ describe('GameService — Oracle', () => {
       seatKey: '2',
       name: 'Bob',
     });
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, created.state.match.code, [
+      created.you.playerId,
+      joined.you.playerId,
+    ]);
     return {
       code: created.state.match.code,
       alice: created.you.playerId,
@@ -1340,6 +1374,10 @@ describe('GameService — Oracle', () => {
     const code = created.state.match.code;
     const alice = created.you.playerId;
     const bob = (await service.claimSeat(code, { seatKey: '2', name: 'Bob' })).you.playerId;
+    // Both players read the reveal, which is what the client sends when each
+    // dismisses the sheet. Without it the match is still on the `loadouts` phase
+    // and every move below would be testing that guard instead (JQ-149).
+    await pastLoadoutReveal(service, code, [alice, bob]);
 
     await service.fireAbility(code, alice, { helperId: 'oracle' });
     await service.fireAbility(code, alice, { helperId: 'freeze' });
@@ -1413,6 +1451,7 @@ describe('GameService — Oracle', () => {
       const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
       const alice = created.you.playerId;
       const bob = joined.you.playerId;
+      await pastLoadoutReveal(service, code, [alice, bob]);
       await service.fireAbility(code, alice, { helperId: 'oracle' });
       await service.fireAbility(code, bob, { helperId: 'oracle' });
       await service.submitMove(code, alice, 'rock');

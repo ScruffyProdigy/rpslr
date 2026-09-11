@@ -52,6 +52,8 @@ function state(over: {
   finished?: boolean;
   /** Seconds left on the round clock; omit for no clock at all. */
   secondsLeft?: number;
+  /** Overrides the phase the clock would otherwise imply — 'loadouts', say. */
+  phase?: MatchState['match']['phase'];
 } = {}): MatchState {
   const {
     currentRound = 1,
@@ -63,6 +65,7 @@ function state(over: {
     scores = [0, 0],
     finished = false,
     secondsLeft,
+    phase,
   } = over;
   const now = Date.now();
   return {
@@ -76,7 +79,7 @@ function state(over: {
       name: 'Friendly Match',
       gameMode: 'rpslr',
       status: finished ? 'finished' : 'playing',
-      phase: finished || secondsLeft === undefined ? null : 'pick',
+      phase: phase ?? (finished || secondsLeft === undefined ? null : 'pick'),
       phaseStartedAt:
         secondsLeft === undefined ? null : new Date(now - 5_000).toISOString(),
       phaseDeadline:
@@ -697,6 +700,72 @@ describe('<Board> loadouts (JQ-149)', () => {
     boardWith(state(), true);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /loadout/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The reveal is a phase, so round 1 genuinely has not started during it — the
+   * server refuses a move and a firing outright. The board must not offer what
+   * the server will turn down, and must say why rather than looking broken.
+   */
+  describe('the board while the reveal phase runs', () => {
+    const revealing = () => withLoadouts(state({ phase: 'loadouts', secondsLeft: 40 }));
+
+    it('takes no pick, even from a player who has dismissed the sheet', () => {
+      boardWith(revealing());
+      for (const name of [/^Rock/, /^Paper/, /^Scissors/]) {
+        expect(screen.getByRole('button', { name })).toBeDisabled();
+      }
+    });
+
+    it('does not tell a player to pick from a board that takes no picks', () => {
+      boardWith(revealing());
+      expect(screen.getByText("Round 1 hasn't started")).toBeInTheDocument();
+      expect(screen.queryByText('Pick a move')).not.toBeInTheDocument();
+    });
+
+    it('says what everyone is waiting for once the sheet is gone', () => {
+      boardWith(revealing());
+      expect(
+        screen.getByText(/Round 1 starts once you have both read the loadouts/),
+      ).toBeInTheDocument();
+    });
+
+    it('says it only after the sheet is gone — under a modal it is talking to nobody', () => {
+      boardWith(revealing(), true);
+      expect(
+        screen.queryByText(/Round 1 starts once you have both read the loadouts/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('hands the board back as soon as the phase does', () => {
+      boardWith(withLoadouts(state({ phase: 'pick', secondsLeft: 40 })));
+      expect(screen.getByRole('button', { name: /^Rock/ })).toBeEnabled();
+      expect(
+        screen.queryByText(/Round 1 starts once you have both read the loadouts/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('refuses a firing with a reason the player can act on', () => {
+      // Rust is a charge card, so this seat actually has a rail to be refused on.
+      const s = withLoadouts(state({ phase: 'loadouts', secondsLeft: 40 }), [
+        'rust',
+        'echo-chamber',
+      ]);
+      render(
+        <Board
+          myPlayerId={MY_PLAYER}
+          mySeatKey={MY_SEAT}
+          state={{ ...s, abilities: { rust: { marks: 0, available: true } } }}
+          connected
+          error={null}
+          myChosenMove={null}
+          onPlay={() => {}}
+          onFire={() => {}}
+        />,
+      );
+      const rail = screen.getByRole('region', { name: /your abilities/i });
+      expect(within(rail).getByText('Round 1 has not started yet.')).toBeInTheDocument();
+    });
   });
 });
 
