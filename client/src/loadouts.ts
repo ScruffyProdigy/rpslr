@@ -4,21 +4,22 @@
  * Pure, and deliberately thin: everything here is either a lookup in the roster
  * or a re-reading of what the server already sent. The one number that could
  * have been re-derived — where a same-move collision put the displaced marks —
- * is read out of `rulesForSeats` instead, which is the server's own module and
- * the same one the board already asks for `myOpeningDelays` (JQ-207). A second
- * copy of that arithmetic in the frontend is exactly the drift that argument
- * exists to prevent.
+ * is read out of `rulesFor` instead, which is the server's own module and the
+ * same one the board already asks for `myOpeningDelays` (JQ-207). A second copy
+ * of that arithmetic in the frontend is exactly the drift that argument exists
+ * to prevent.
+ *
+ * `rulesFor` rather than `rulesForSeats`: a seat's opening marks turn on its own
+ * loadout and nothing else, and the pair-shaped call would have meant inventing a
+ * dummy opponent to ask a question that has no opponent in it.
  */
 
-import { rulesForSeats, type SeatLoadout } from '@game/replayBoard';
+import { rulesFor } from '@game/helpers/rules';
 import type { Loadout } from '@game/helpers/loadout';
 import { MARK_COST, getHelper, type Tier } from '@game/helpers/roster';
 import type { DelayMap } from '@game/game';
 import type { Move, Seat } from './api';
 import { ALL_MOVES } from './moves';
-
-/** A seat that brought no helpers — the `duel` opening, and the side we ignore. */
-const NO_LOADOUT: SeatLoadout = { loadout: null, loadoutRoll: null };
 
 /** One helper, with everything the reveal says about it. */
 export interface LoadoutCard {
@@ -94,7 +95,7 @@ export function seatLoadoutView(seat: Seat | null): SeatLoadoutView | null {
   // Asked of the engine rather than summed here: a collision moves marks off the
   // bound move entirely, so `boundMove` alone would describe a board this match
   // never opened on.
-  const { initialDelays } = rulesForSeats(seat, NO_LOADOUT)[0];
+  const { initialDelays } = rulesFor(seat.loadout, { roll: seat.loadoutRoll });
   const roll = seat.loadoutRoll;
   return {
     cards,

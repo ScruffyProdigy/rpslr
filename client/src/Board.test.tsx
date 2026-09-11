@@ -789,11 +789,13 @@ describe('<Board> opponent cooldown counts (JQ-149 / JQ-151)', () => {
   it('turns the counts on once either seat has brought a loadout', () => {
     const s = {
       ...state({ oppDelays: { robot: 2, paper: 1 } }),
-      seats: state().seats.map((seat) => ({
-        ...seat,
-        loadout: ['ferrus', 'echo-chamber'] as unknown as Seat['loadout'],
-        delays: seat.seatKey === MY_SEAT ? {} : { robot: 2, paper: 1 },
-      })),
+      seats: state().seats.map(
+        (seat): Seat => ({
+          ...seat,
+          loadout: ['ferrus', 'echo-chamber'] as unknown as Seat['loadout'],
+          delays: seat.seatKey === MY_SEAT ? {} : { robot: 2, paper: 1 },
+        }),
+      ),
     };
     const { container } = render(
       <Board
