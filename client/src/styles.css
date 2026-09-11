@@ -912,6 +912,21 @@ button.ghost {
   border-color: var(--line-4);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 16%, transparent);
 }
+/* The moves your preview beats. Colour is the whole of this ring, and JQ-195
+   looked at whether it needs a shape or an icon beside it. It does not, and the
+   reason is recorded here rather than left for the next reviewer to re-derive:
+   the fact this ring restates is already on the board twice without colour.
+
+   The graph says it in weight — `.beat-arrow--preview` goes to 3.5 from the
+   resting 2 and drops its faded state, so the edges out of the previewed move
+   thicken and point at exactly these nodes. The centre says it in words, which
+   is the stronger of the two: `describeBeatsOf` writes "Rock crushes Scissors &
+   Lizard" into the picker caption for whatever is previewed, so the set this
+   ring marks is named in the middle of the board while the ring is on.
+
+   A third channel on the buttons themselves would be a third thing to decode
+   for a fact that is already stated. The arrow weight is pinned below in
+   `boardFit.test.ts`, because it is the one carrying it without colour. */
 .move-btn--target {
   border-color: color-mix(in srgb, var(--you) 55%, var(--line-control));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 16%, transparent);

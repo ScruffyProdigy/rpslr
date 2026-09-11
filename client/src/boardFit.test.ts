@@ -594,7 +594,43 @@ describe('the loadout sheet reads on a phone (JQ-149)', () => {
   });
 });
 
-describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
+/**
+ * Phase 6's "no colour-only state" criterion, for the whole board rather than
+ * just the unavailable move this block started with (JQ-195).
+ *
+ * The audit found the shipped UI in better shape than the criterion implies —
+ * the design-system work had already put a second cue on nearly everything — so
+ * most of what follows records a pass rather than fixing a failure. That is the
+ * point: three tickets have now re-derived this list from `grep`, and a list
+ * nobody wrote down gets derived again.
+ *
+ * The ledger, and where each cue is held:
+ *
+ *   selected      a check icon in the corner, plus `scale: 1.08`
+ *                 → `MovePicker.test.tsx`, and the scale in this file above
+ *   cooldown      a dashed border, and an hourglass pill carrying the turn count
+ *                 → this block, and `MovePicker.test.tsx`
+ *   locked in     the label steps to --muted and the border recedes (JQ-192)
+ *                 → `contrast.test.ts`
+ *   win pips      fill versus outline, not two colours
+ *                 → this block
+ *   target        no cue of its own, deliberately: the graph says it in arrow
+ *                 weight and the centre caption says it in words
+ *                 → this block, and the reasoning in `styles.css`
+ *   round result  every reveal state names its verdict — "Draw", "You take
+ *                 round 3", "Alex takes round 3"
+ *                 → `RevealCard.test.tsx`
+ *   round history the winner's own avatar, and none at all for a draw
+ *                 → `History.test.tsx`
+ *   seat identity --you blue and --opp amber never travel alone: every site
+ *                 that uses them carries the seat's avatar or name
+ *                 → `RevealCard.test.tsx`, `History.test.tsx`,
+ *                   `PlayerAvatar.test.tsx`
+ *
+ * Contrast is not this block's business — a state can be colour-only and high
+ * contrast, or neither. That is `contrast.test.ts` (JQ-192, JQ-193).
+ */
+describe('no state on the board is signalled by colour alone (JQ-98, JQ-195)', () => {
   it('draws the button with a dashed border', () => {
     // The same "this can't happen" language the faded opponent arrows use.
     expect(declaration('.move-btn--cooldown', 'border-style')).toBe('dashed');
@@ -618,6 +654,32 @@ describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
     // itself now lives in `contrast.test.ts`, which composites before it
     // measures (JQ-192).
     expect(declaration('.move-btn--cooldown', 'color')).toBe('var(--muted)');
+  });
+
+  it('scores the match in fill versus outline, not in two colours', () => {
+    // A pip you won is solid; a pip still to play is a ring. Which is which
+    // survives any colour-vision difference, and survives the colour being
+    // wrong — the shape is the reading.
+    expect(declaration('.win-pip.filled', 'background')).toBe('var(--win)');
+    expect(declaration('.win-pip.empty', 'background')).toBe('transparent');
+  });
+
+  it('lets the graph, not the ring, carry which moves your preview beats', () => {
+    // `.move-btn--target` is a border colour and a coloured shadow and nothing
+    // else, and it stays that way on purpose — see the rule in `styles.css`.
+    // What holds the decision up is this: the arrows out of the previewed move
+    // thicken, which is a channel colour-vision does not touch. If that ever
+    // stops being true the ring is on its own and needs a cue of its own.
+    const weight = (selector: string) => Number(declaration(selector, 'stroke-width'));
+    expect(weight('.beat-arrow--preview')).toBeGreaterThan(weight('.beat-arrow'));
+  });
+
+  it('keeps an added edge readable as an addition without its colour', () => {
+    // A loadout's extra edge is drawn in the same two role colours the winning
+    // edge uses, so shape is what says "extra": the ten shared edges are all
+    // straight, and this one curves and dashes (JQ-151).
+    expect(declaration('.beat-arrow--added', 'stroke-dasharray')).toBe('9 5');
+    expect(declaration('.graph-legend__added', 'border-radius')).toBe('60% / 100% 100% 0 0');
   });
 });
 
