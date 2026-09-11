@@ -21,6 +21,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgGameRepository } from './pgRepository.js';
 import { GameService } from './service.js';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const SCHEMA = 'jq262_subphase_test';
@@ -103,6 +104,12 @@ describe.skipIf(!databaseUrl)('JQ-262 sub-phase pacing views', () => {
         name: 'Bob',
       });
       id[key] = created.state.match.id;
+      // Past the loadout reveal (JQ-149), which this suite's pacing budget counts
+      // nothing of: it measures the *round* sub-phase, and the reveal is not one.
+      await pastLoadoutReveal(service, created.state.match.code, [
+        created.you.playerId,
+        joined.you.playerId,
+      ]);
       return {
         code: created.state.match.code,
         alice: created.you.playerId,

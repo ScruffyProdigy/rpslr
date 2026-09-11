@@ -277,6 +277,19 @@ export function createApp(
     }),
   );
 
+  // "I have read the loadouts" — the reveal's early exit, which is how a match
+  // whose players are both done reading starts round 1 without waiting out the
+  // cap. REST only: there is nothing latency-sensitive about it, and it reaches
+  // the opponent through the hub like every other write.
+  api.post(
+    '/matches/:ref/loadouts-ack',
+    asyncHandler(async (req: Request, res: Response) => {
+      const { playerId } = req.body ?? {};
+      if (!playerId) return res.status(400).json({ error: 'playerId is required' });
+      res.json(await service.acknowledgeLoadouts(req.params.ref, playerId));
+    }),
+  );
+
   // Replay link previews (JQ-120). Registered before the error middleware:
   // these routes answer with a card rather than an error, always.
   registerReplayCardRoutes(app, { service, config, fetchImpl: opts.fetchImpl });

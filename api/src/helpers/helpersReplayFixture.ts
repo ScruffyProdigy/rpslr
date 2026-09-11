@@ -89,6 +89,11 @@ export async function captureHelpersReplay(): Promise<HelpersReplayFixture> {
   const hostId = created.you.playerId;
   const joined = await service.claimSeat(code, { seatKey: '2', name: 'Bob' });
   const challengerId = joined.you.playerId;
+  // A helpers match opens on the loadout reveal (JQ-149), and a replay is of the
+  // rounds. Both players read it, as the client's two acks say they did, and the
+  // fixture picks up from round 1 exactly where it always did.
+  await service.acknowledgeLoadouts(code, hostId);
+  await service.acknowledgeLoadouts(code, challengerId);
 
   const boards: RecordedBoard[] = [];
   for (const [a, b] of SCRIPT) {

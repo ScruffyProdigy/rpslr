@@ -364,7 +364,7 @@ export class GameService {
     if (!reclaimed && match.status === 'waiting' && seats.every((s) => s.player)) {
       await this.repo.setMatchStatus(match.id, 'playing');
       // The clock starts when the match does, not when the first move arrives.
-      await this.startPhase(match.id, match.gameMode, match.currentRound);
+      await this.startPhase(match.id, match.gameMode, match.currentRound, openingPhase(seats));
     }
 
     // Full authoritative state, not the deltas they missed — a returning player
@@ -546,6 +546,13 @@ export class GameService {
     const mySeat = seats.find((s) => s.player?.id === playerId);
     if (!mySeat) throw new NotFoundError('player not in this match');
 
+    // Round 1 has not begun. `enforceDeadlines` above has already handed the
+    // reveal on if its clock was up, so reaching here means it genuinely is still
+    // running rather than that this move raced the transition.
+    if (match.phase === LOADOUTS) {
+      throw new ConflictError('the loadouts are still being revealed');
+    }
+
     // Enforce the cooldown. Asked through `availableMoves` rather than by testing
     // the mark count, so the "you always have something to play" floor is honoured
     // here too — re-deriving the rule is how the two drift apart.
@@ -710,6 +717,50 @@ export class GameService {
   }
 
   /**
+   * "I have read the loadouts" — the reveal's other exit (JQ-149).
+   *
+   * The deadline is the cap and this is the usual way out. Reading four helper
+   * cards takes about as long as reading the rules, which watched players took a
+   * good 30 seconds over, so the cap has to be generous — and a generous cap with
+   * no early exit would mean the faster reader sitting in front of a board they
+   * cannot touch, for a segment whose whole purpose they have finished with.
+   *
+   * Both seats, not either. One player's reading pace is not the other's, and a
+   * single ack starting the round would let whoever taps first take the reading
+   * time away from someone still using it.
+   *
+   * Idempotent and quiet outside the phase: a tap that lands just after the
+   * deadline flipped the match to `pick` is a tap on the same intention, and
+   * answering it with a 409 would turn the good outcome into an error the player
+   * sees. It returns state either way.
+   */
+  async acknowledgeLoadouts(idOrCode: string, playerId: string): Promise<MatchState> {
+    const found = await this.repo.getMatch(idOrCode);
+    if (!found) throw new NotFoundError('match not found');
+    // Settle the deadline first, so an ack arriving after it does not re-enter a
+    // phase the clock has already ended.
+    await this.enforceDeadlines(found.id);
+    const match = (await this.repo.getMatch(found.id))!;
+    const seats = await this.repo.listSeats(match.id);
+    const mySeat = seats.find((s) => s.player?.id === playerId);
+    if (!mySeat) throw new NotFoundError('player not in this match');
+    if (match.phase !== LOADOUTS) return this.publishState(match.id, playerId);
+
+    await this.repo.recordLoadoutAck({ matchId: match.id, seatId: mySeat.id });
+    const acked = new Set(await this.repo.listLoadoutAcks(match.id));
+    const occupied = seats.filter((s) => s.player);
+    if (occupied.every((seat) => acked.has(seat.seatKey))) {
+      // Re-read rather than trusting the phase we loaded: two acks landing
+      // together must start round 1 once, and `startPhase` on an already-started
+      // round would hand the second arrival a fresh 60s.
+      if ((await this.repo.getMatch(match.id))?.phase === LOADOUTS) {
+        await this.startPhase(match.id, match.gameMode, match.currentRound);
+      }
+    }
+    return this.publishState(match.id, playerId);
+  }
+
+  /**
    * Spend a charge on the round being played.
    *
    * Its own call rather than a field on the move commit. Oracle (JQ-150) has to
@@ -765,6 +816,11 @@ export class GameService {
     // one — the only way in is the commit that completes the round's picks.
     if (match.phase === REACT) {
       throw new ConflictError('the round is already resolving');
+    }
+    // And for the same reason at the other end of the match: a charge is spent on
+    // a round, and round 1 has not started yet.
+    if (match.phase === LOADOUTS) {
+      throw new ConflictError('the loadouts are still being revealed');
     }
 
     const results = await this.repo.listResults(match.id);
@@ -973,6 +1029,15 @@ export class GameService {
     // simply resolves the round on the moves as they stand: every original pick,
     // for anyone who did not replace theirs. Charges stay spent, which is what
     // declining to use what you paid for costs.
+    // The loadout reveal answers to the clock and to nothing else. Nobody has been
+    // asked for anything yet, so there is no silence to count and no move to pick
+    // for anyone: when it is up, round 1 starts, and that is the whole policy.
+    if (match.phase === LOADOUTS) {
+      if (deadline === null || now < deadline) return;
+      await this.startPhase(matchId, match.gameMode, match.currentRound);
+      return;
+    }
+
     if (match.phase === REACT) {
       if (deadline === null || now < deadline) return;
       await this.resolveDuelRound(
@@ -1217,6 +1282,37 @@ function rulesForSeat(seat: Seat): PlayerRules {
  * work, not just protocol work.
  */
 const REACT: Phase = 'react';
+
+/**
+ * The segment before round 1 in which both loadouts are shown face-up (JQ-149).
+ *
+ * A phase rather than the first few seconds of round 1's allowance, which was the
+ * other option on the table. Two things follow from that and neither is cosmetic.
+ * Nobody is picking, so expiry costs nobody a strike and cannot forfeit anyone —
+ * the idle policy is a run-of-silence counter and there has been no silence. And
+ * the round-1 clock is not running down while a player reads four helper cards,
+ * which is what "inside round 1's allowance" would have meant: the reveal would
+ * have been paid for out of the thinking time it exists to inform.
+ *
+ * Entered once, at the moment the last seat is claimed, and only by a match whose
+ * seats brought loadouts — `duel` opens straight on `pick`, exactly as it does
+ * today. It ends either way out: both players saying they have read it
+ * (`acknowledgeLoadouts`), which is the usual one, or the deadline, which is what
+ * it costs when somebody has walked away.
+ */
+const LOADOUTS: Phase = 'loadouts';
+
+/**
+ * The phase a match opens on: the loadout reveal where there are loadouts to
+ * reveal, and the first pick where there are not.
+ *
+ * Asked of the seats rather than of the mode key, which is the convention the
+ * rest of this reads by — `duel` is the null loadout rather than a special case,
+ * so a future mode that brings helpers gets the reveal without being listed here.
+ */
+function openingPhase(seats: Seat[]): Phase {
+  return seats.some((seat) => seat.loadout) ? LOADOUTS : 'pick';
+}
 
 /**
  * Who may act in this round's sub-phase, keyed by seat key.

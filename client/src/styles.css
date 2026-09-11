@@ -289,6 +289,8 @@ button.ghost {
   margin-block: 20px;
 }
 .player {
+  /* The loadout button below is absolute against this. */
+  position: relative;
   background: var(--surface-2);
   border: 1px solid var(--line-1);
   border-radius: 16px;
@@ -300,6 +302,40 @@ button.ghost {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+/* The loadout button covers its whole seat card and adds no row to it: the
+   pentagon is already at its 205px floor on a 390x844 phone (JQ-165), so a
+   persistent chip row could only be paid for out of the tap surface. The corner
+   glyph is the affordance; the transparent button behind it is the target, and
+   it is the full card so it clears 44px at every width the board claims. */
+.player__loadout {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+.player__loadout-mark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface-4);
+  border: 1px solid var(--line-2);
+}
+.player__loadout:hover .player__loadout-mark,
+.player__loadout:focus-visible .player__loadout-mark {
+  color: var(--text);
+  border-color: var(--line-4);
 }
 .player.you {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line-1));
@@ -905,7 +941,8 @@ button.ghost {
   vertical-align: middle;
 }
 
-/* Opponent cooldown lives on the node, not as a ring around your button. */
+/* Opponent cooldown lives on the node, not as a ring around your button. A disc
+   by default and a pill only when it carries a count — see `--counted` below. */
 .opp-cooldown-mark {
   position: absolute;
   top: -3px;
@@ -942,6 +979,14 @@ button.ghost {
   height: 1.05rem;
   font-size: 0.6rem;
   vertical-align: middle;
+}
+/* The legend's own copy of the pill. `--legend` pins a width so the inline badge
+   does not inherit the board's `cqw` sizing, which would make it grow with a
+   container it is not in — so the counted case has to say `auto` again after it. */
+.opp-cooldown-mark--legend.opp-cooldown-mark--counted {
+  width: auto;
+  min-width: 1.05rem;
+  padding: 0 4px;
 }
 
 /* The pentagon's middle cell: prompt, preview caption, explicit commit. Kept
@@ -2075,6 +2120,131 @@ input:focus-visible {
     max-height: 92dvh;
     border-radius: 14px 14px 0 0;
     border-bottom: none;
+  }
+}
+
+/* The loadout sheet (JQ-149): both loadouts face up, in the same dialog shell
+   the rules use. Two moments, one sheet — it opens itself before round 1 and
+   closes on a clock, and it opens from either seat card for the rest of the
+   match. Sitting in a modal is what lets the loadouts stay reachable all match
+   without the board reserving a single pixel for them. */
+.loadout-sheet__lead {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.loadout-sheet__sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.loadout-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+/* Whose side this is, in the board's own two colours. The heading names them as
+   well — JQ-195's rule is that nothing here rides on colour alone. */
+.loadout-side--you {
+  border-color: color-mix(in srgb, var(--you) 45%, var(--line-2));
+}
+.loadout-side--opp {
+  border-color: color-mix(in srgb, var(--opp) 45%, var(--line-2));
+}
+.loadout-side__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+.loadout-side__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.loadout-side__price {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.loadout-side__none {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.loadout-card {
+  padding: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  background: var(--surface-4);
+}
+.loadout-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 4px;
+}
+.loadout-card__name {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+.loadout-card__tier {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.loadout-card__move {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.loadout-card__blurb {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.loadout-opening {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-2);
+}
+.loadout-opening__marks,
+.loadout-opening__roll {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.loadout-opening__label {
+  color: var(--muted);
+}
+.loadout-opening__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.loadout-opening__roll {
+  color: var(--muted);
+}
+
+/* One column below the split, where two would leave each side about 150px and
+   fold every helper name onto three lines. */
+@media (max-width: 520px) {
+  .loadout-sheet__sides {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

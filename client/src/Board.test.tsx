@@ -52,6 +52,8 @@ function state(over: {
   finished?: boolean;
   /** Seconds left on the round clock; omit for no clock at all. */
   secondsLeft?: number;
+  /** Overrides the phase the clock would otherwise imply — 'loadouts', say. */
+  phase?: MatchState['match']['phase'];
 } = {}): MatchState {
   const {
     currentRound = 1,
@@ -63,6 +65,7 @@ function state(over: {
     scores = [0, 0],
     finished = false,
     secondsLeft,
+    phase,
   } = over;
   const now = Date.now();
   return {
@@ -76,7 +79,7 @@ function state(over: {
       name: 'Friendly Match',
       gameMode: 'rpslr',
       status: finished ? 'finished' : 'playing',
-      phase: finished || secondsLeft === undefined ? null : 'pick',
+      phase: phase ?? (finished || secondsLeft === undefined ? null : 'pick'),
       phaseStartedAt:
         secondsLeft === undefined ? null : new Date(now - 5_000).toISOString(),
       phaseDeadline:
@@ -621,5 +624,205 @@ describe('<Board> mid-round sub-phase (JQ-221)', () => {
     );
     expect(screen.getByText(/your answer is in/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
+  });
+});
+
+/**
+ * The loadout reveal, and the check it turns into (JQ-149).
+ *
+ * The window itself is `useLoadoutReveal`'s and tested there; what the board owes
+ * is that the sheet reaches the screen, that it stays reachable once the reveal is
+ * over, and that a duel board renders none of it.
+ */
+describe('<Board> loadouts (JQ-149)', () => {
+  /** Both seats holding a helpers loadout, as a provisioned `duel-helpers` match. */
+  function withLoadouts(
+    s: MatchState,
+    mine: string[] = ['ferrus', 'echo-chamber'],
+    theirs: string[] = ['chimera', 'poker-face'],
+    myRoll: Move | null = null,
+  ): MatchState {
+    return {
+      ...s,
+      seats: s.seats.map((seat) =>
+        seat.seatKey === MY_SEAT
+          ? { ...seat, loadout: mine as unknown as Seat['loadout'], loadoutRoll: myRoll }
+          : { ...seat, loadout: theirs as unknown as Seat['loadout'] },
+      ),
+    };
+  }
+
+  function boardWith(s: MatchState, revealLoadouts = false) {
+    return render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+        revealLoadouts={revealLoadouts}
+        onDismissReveal={() => {}}
+      />,
+    );
+  }
+
+  it('shows both loadouts face up while the reveal is running', () => {
+    boardWith(withLoadouts(state()), true);
+    const sheet = screen.getByRole('dialog', { name: 'Loadouts revealed' });
+    expect(within(sheet).getByText('Ferrus')).toBeInTheDocument();
+    expect(within(sheet).getByText('Chimera')).toBeInTheDocument();
+  });
+
+  it('names the move a collision displaced marks onto — the first sight of it', () => {
+    boardWith(withLoadouts(state(), ['ferrus', 'well-oiled'], undefined, 'lizard'), true);
+    expect(screen.getByText(/Both helpers bind the same move/)).toHaveTextContent(/Lizard/);
+  });
+
+  it('keeps the loadouts reachable from either seat card once the reveal is over', () => {
+    boardWith(withLoadouts(state({ currentRound: 4 })));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Grace's loadout: Chimera, Poker Face/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Loadouts' });
+    expect(within(sheet).getByText('Chimera')).toBeInTheDocument();
+    expect(within(sheet).getByText('Ferrus')).toBeInTheDocument();
+  });
+
+  it('names both helpers in the button, so a screen reader gets them without a tap', () => {
+    boardWith(withLoadouts(state()));
+    expect(
+      screen.getByRole('button', { name: /Your loadout: Ferrus, Echo Chamber/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders none of it on a duel board', () => {
+    boardWith(state(), true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /loadout/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The reveal is a phase, so round 1 genuinely has not started during it — the
+   * server refuses a move and a firing outright. The board must not offer what
+   * the server will turn down, and must say why rather than looking broken.
+   */
+  describe('the board while the reveal phase runs', () => {
+    const revealing = () => withLoadouts(state({ phase: 'loadouts', secondsLeft: 40 }));
+
+    it('takes no pick, even from a player who has dismissed the sheet', () => {
+      boardWith(revealing());
+      for (const name of [/^Rock/, /^Paper/, /^Scissors/]) {
+        expect(screen.getByRole('button', { name })).toBeDisabled();
+      }
+    });
+
+    it('does not tell a player to pick from a board that takes no picks', () => {
+      boardWith(revealing());
+      expect(screen.getByText("Round 1 hasn't started")).toBeInTheDocument();
+      expect(screen.queryByText('Pick a move')).not.toBeInTheDocument();
+    });
+
+    it('says what everyone is waiting for once the sheet is gone', () => {
+      boardWith(revealing());
+      expect(
+        screen.getByText(/Round 1 starts once you have both read the loadouts/),
+      ).toBeInTheDocument();
+    });
+
+    it('says it only after the sheet is gone — under a modal it is talking to nobody', () => {
+      boardWith(revealing(), true);
+      expect(
+        screen.queryByText(/Round 1 starts once you have both read the loadouts/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('hands the board back as soon as the phase does', () => {
+      boardWith(withLoadouts(state({ phase: 'pick', secondsLeft: 40 })));
+      expect(screen.getByRole('button', { name: /^Rock/ })).toBeEnabled();
+      expect(
+        screen.queryByText(/Round 1 starts once you have both read the loadouts/),
+      ).not.toBeInTheDocument();
+    });
+
+    it('refuses a firing with a reason the player can act on', () => {
+      // Rust is a charge card, so this seat actually has a rail to be refused on.
+      const s = withLoadouts(state({ phase: 'loadouts', secondsLeft: 40 }), [
+        'rust',
+        'echo-chamber',
+      ]);
+      render(
+        <Board
+          myPlayerId={MY_PLAYER}
+          mySeatKey={MY_SEAT}
+          state={{ ...s, abilities: { rust: { marks: 0, available: true } } }}
+          connected
+          error={null}
+          myChosenMove={null}
+          onPlay={() => {}}
+          onFire={() => {}}
+        />,
+      );
+      const rail = screen.getByRole('region', { name: /your abilities/i });
+      expect(within(rail).getByText('Round 1 has not started yet.')).toBeInTheDocument();
+    });
+  });
+});
+
+/**
+ * The opponent's opening, on the pentagon.
+ *
+ * JQ-151 built the badge and owns how it draws — `MovePicker.test.tsx` covers
+ * that, including the duel case where a count would restate what the history
+ * strip already says. What is left for here is the wiring JQ-149 depends on: the
+ * board deciding *when* the counts are on, which neither that suite (it is handed
+ * the flag) nor this ticket's own reveal tests exercise.
+ *
+ * It matters to JQ-149 because the reveal's promise is that both openings are
+ * legible before the first pick, and half of that promise is drawn by this badge
+ * rather than by the sheet.
+ */
+describe('<Board> opponent cooldown counts (JQ-149 / JQ-151)', () => {
+  const counted = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('.opp-cooldown-mark--counted'));
+
+  it('turns the counts on once either seat has brought a loadout', () => {
+    const s = {
+      ...state({ oppDelays: { robot: 2, paper: 1 } }),
+      seats: state().seats.map(
+        (seat): Seat => ({
+          ...seat,
+          loadout: ['ferrus', 'echo-chamber'] as unknown as Seat['loadout'],
+          delays: seat.seatKey === MY_SEAT ? {} : { robot: 2, paper: 1 },
+        }),
+      ),
+    };
+    const { container } = render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    // Both marks, and the legend badge that teaches them.
+    expect(counted(container).map((el) => el.textContent?.trim())).toEqual(['1', '2', 'N']);
+  });
+
+  it('leaves a duel board exactly as it was — no counts, and none promised', () => {
+    const { container } = renderBoard(state({ oppDelays: { robot: 2 } }));
+    expect(counted(container)).toEqual([]);
+    // The legend must not teach a number the board never draws.
+    expect(container.querySelector('.opp-cooldown-mark--legend')?.textContent?.trim()).toBe('');
+  });
+
+  it('still says the depth in words on the move itself, which is what is announced', () => {
+    renderBoard(state({ oppDelays: { robot: 2 } }));
+    expect(
+      screen.getByRole('button', { name: /Robot, opponent cooldown, 2 turns/ }),
+    ).toBeInTheDocument();
   });
 });

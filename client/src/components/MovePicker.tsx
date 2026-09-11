@@ -61,6 +61,7 @@ export function MovePicker({
   onPlay,
   secondsLeft = null,
   centerSlot,
+  idleCaption,
   winningEdge = null,
   voice = PLAYER_VOICE,
   oppName,
@@ -93,6 +94,16 @@ export function MovePicker({
   secondsLeft?: number | null;
   /** Takes over the centre slot — the round reveal, while it holds. */
   centerSlot?: React.ReactNode;
+  /**
+   * What the empty centre says instead of "Pick a move".
+   *
+   * For the one state where the default is a wrong instruction: during the
+   * loadout reveal (JQ-149) the board is inert because round 1 has not started,
+   * and telling a player to pick from five disabled moves reads as a bug. A
+   * caption rather than a `centerSlot`, because the centre is still the idle
+   * centre — only its words are wrong.
+   */
+  idleCaption?: string;
   /** The edge the round was just won on, lit as the reveal card dissolves. */
   winningEdge?: WinningEdge | null;
   /** How to refer to the you-side: second person, or by name on a replay. */
@@ -496,6 +507,7 @@ export function MovePicker({
         <div className="picker-slot" role="status">
           {centerSlot ?? (
             <PickerCenter
+              idleCaption={idleCaption}
               preview={preview}
               picked={picked}
               lockedIn={lockedIn}
@@ -539,8 +551,17 @@ export function MovePicker({
           <UiIcon name="hourglass" /> N
         </span>{' '}
         {voice.you ? `${voice.you}'s cooldown` : 'your cooldown'} ·{' '}
-        <span className="opp-cooldown-mark opp-cooldown-mark--legend" aria-hidden="true">
+        {/* The legend teaches the badge the board is actually drawing, so the
+            count is gated on the same flag: a duel badge carries no number, and a
+            legend promising one would be teaching a mark that never appears. */}
+        <span
+          className={`opp-cooldown-mark opp-cooldown-mark--legend${
+            showOppCooldownCounts ? ' opp-cooldown-mark--counted' : ''
+          }`}
+          aria-hidden="true"
+        >
           <UiIcon name="hourglass" />
+          {showOppCooldownCounts && ' N'}
         </span>{' '}
         {voice.you ? `${oppName ? `${oppName}'s` : 'their'} cooldown` : 'opponent cooldown'} (faded
         arrows = attacks they can&rsquo;t make)
@@ -587,6 +608,7 @@ export function MovePicker({
  * (JQ-157).
  */
 function PickerCenter({
+  idleCaption,
   preview,
   picked,
   lockedIn,
@@ -602,6 +624,7 @@ function PickerCenter({
   myLedger,
   oppCanFreeze,
 }: {
+  idleCaption?: string;
   preview: Move | null;
   picked: Move | null;
   lockedIn: boolean;
@@ -641,7 +664,7 @@ function PickerCenter({
     return (
       <div className="picker-center picker-center--idle">
         <span className="picker-center__idle">
-          {voice.you ? `What does ${voice.you} play?` : 'Pick a move'}
+          {idleCaption ?? (voice.you ? `What does ${voice.you} play?` : 'Pick a move')}
         </span>
       </div>
     );

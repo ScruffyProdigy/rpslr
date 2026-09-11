@@ -14,17 +14,21 @@ export type { Move };
 
 export type MatchStatus = 'waiting' | 'playing' | 'finished';
 /**
- * A timed segment of a match. `react` is the mid-round sub-phase: both players are
- * locked in, and anyone entitled to it — an ability revealed something to them, or
- * a public firing acted against them — is deciding whether to re-pick. It was
- * `oracle` while Oracle was its only way in (JQ-150); JQ-239 generalised it.
+ * A timed segment of a match.
  *
- * Nothing here branches on it yet — the countdown reads the deadline rather than
- * the phase, so a sub-phase renders as a shorter clock — but the server can send
- * it, and a type that says otherwise is a lie waiting to be believed. The prompt
- * itself is the ability HUD's (JQ-221) — see `SubPhasePrompt`.
+ * `react` is the mid-round sub-phase: both players are locked in, and anyone
+ * entitled to it — an ability revealed something to them, or a public firing
+ * acted against them — is deciding whether to re-pick. It was `oracle` while
+ * Oracle was its only way in (JQ-150); JQ-239 generalised it. The prompt itself
+ * is the ability HUD's (JQ-221) — see `SubPhasePrompt`.
+ *
+ * `loadouts` is the segment before round 1 in which both loadouts are shown
+ * face-up (JQ-149). The board branches on this one: no move can be committed
+ * during it, because round 1 has not started. It is also what makes a reload
+ * restore rather than replay the reveal — the window is server state, not a
+ * timer the client started when it happened to mount.
  */
-export type Phase = 'pick' | 'react';
+export type Phase = 'pick' | 'react' | 'loadouts';
 /** How a match ended; everything but 'played' comes from the idle policy. */
 /** Mirrors the API's `MatchEndReason`; `draw` is the round cap reached level. */
 export type MatchEndReason =
@@ -229,6 +233,16 @@ export const api = {
       // `round` keeps a move that arrives after its round resolved from being
       // recorded against the next one.
       body: JSON.stringify({ playerId, move, round }),
+    }),
+
+  // "I have read the loadouts" — the reveal's early exit. Both seats have to
+  // send it before round 1 starts, so one player tapping through cannot take the
+  // reading time away from the other; the phase deadline is the cap if somebody
+  // never does. Idempotent server-side, so a double tap is one statement.
+  acknowledgeLoadouts: (ref: string, playerId: string) =>
+    request<MatchState>(`/api/v1/matches/${ref}/loadouts-ack`, {
+      method: 'POST',
+      body: JSON.stringify({ playerId }),
     }),
 
   // Spending a charge is a separate act from committing a move, so it is a

@@ -16,7 +16,7 @@ import type { ReactElement } from 'react';
  * from whatever they sit in.
  */
 
-export type UiIconName = 'hourglass' | 'check' | 'trophy' | 'close';
+export type UiIconName = 'hourglass' | 'check' | 'trophy' | 'close' | 'cards';
 
 const ART: Record<UiIconName, ReactElement> = {
   /* A solid bowtie between two heavy caps. The pill renders this at 11px, and
@@ -30,6 +30,23 @@ const ART: Record<UiIconName, ReactElement> = {
       <path d="M5.6 19.6 H18.4 A1 1 0 0 1 18.4 21.8 H5.6 A1 1 0 0 1 5.6 19.6 Z" fill="currentColor" />
       <path d="M7.4 4.4 H16.6 L12 11.4 Z" fill="currentColor" opacity="0.5" />
       <path d="M7.4 19.6 H16.6 L12 12.6 Z" fill="currentColor" />
+    </>
+  ),
+  /* Two cards, the back one offset behind the front. Filled rather than
+     outlined for the same reason the hourglass is: it renders at 13px on the
+     seat card, where a 1px frame would close up into a smudge. The offset is
+     what makes it read as two rather than as one rounded rectangle. */
+  cards: (
+    <>
+      <path
+        d="M8.2 2.6 H18.6 A1.8 1.8 0 0 1 20.4 4.4 V15.4 A1.8 1.8 0 0 1 18.6 17.2 H8.2 A1.8 1.8 0 0 1 6.4 15.4 V4.4 A1.8 1.8 0 0 1 8.2 2.6 Z"
+        fill="currentColor"
+        opacity="0.45"
+      />
+      <path
+        d="M5.4 6.8 H14.4 A1.8 1.8 0 0 1 16.2 8.6 V19.6 A1.8 1.8 0 0 1 14.4 21.4 H5.4 A1.8 1.8 0 0 1 3.6 19.6 V8.6 A1.8 1.8 0 0 1 5.4 6.8 Z"
+        fill="currentColor"
+      />
     </>
   ),
   check: (

@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HELPERS } from './helpers/roster.js';
 import { PgGameRepository } from './pgRepository.js';
 import { GameService } from './service.js';
+import { pastLoadoutReveal } from './fixtures.testutil.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const SCHEMA = 'jq152_telemetry_test';
@@ -96,6 +97,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       seats: [loadout('1', 'quarantine', 'copycat'), loadout('2', 'oracle', 'watchful')],
     });
     const aJoin = await service.claimSeat(a.state.match.code, { seatKey: '2', name: 'Bob' });
+    await pastLoadoutReveal(service, a.state.match.code, [a.you.playerId, aJoin.you.playerId]);
     const aState = await service.getState(a.state.match.code);
     await repo.recordAbilityFiring({
       matchId: aState.match.id,
@@ -117,6 +119,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       seats: [loadout('1', 'quarantine', 'copycat'), loadout('2', 'freeze', 'old-habits')],
     });
     const bJoin = await service.claimSeat(b.state.match.code, { seatKey: '2', name: 'Dan' });
+    await pastLoadoutReveal(service, b.state.match.code, [b.you.playerId, bJoin.you.playerId]);
     const bState = await service.getState(b.state.match.code);
     await repo.recordAbilityFiring({
       matchId: bState.match.id,
@@ -138,12 +141,14 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       seats: [loadout('1', 'quarantine', 'copycat'), loadout('2', 'quarantine', 'copycat')],
     });
     const cJoin = await service.claimSeat(c.state.match.code, { seatKey: '2', name: 'Fay' });
+    await pastLoadoutReveal(service, c.state.match.code, [c.you.playerId, cJoin.you.playerId]);
     await service.submitMove(c.state.match.code, c.you.playerId, 'rock');
     await service.submitMove(c.state.match.code, cJoin.you.playerId, 'lizard');
 
     // D: a plain `duel` — the null loadout, on the same path, with a drawn round.
     const d = await service.createStandaloneMatch({ hostName: 'Gus', bestOf: 1 });
     const dJoin = await service.claimSeat(d.state.match.code, { seatKey: '2', name: 'Hal' });
+    // No reveal to read past: `duel` brings no loadout, so it opens on `pick`.
     await service.submitMove(d.state.match.code, d.you.playerId, 'rock');
     await service.submitMove(d.state.match.code, dJoin.you.playerId, 'rock');
     await service.submitMove(d.state.match.code, d.you.playerId, 'paper');
@@ -177,6 +182,7 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
       seats: [loadout('1', 'tempered', 'well-oiled'), loadout('2', 'featherweight', 'grudge')],
     });
     const fJoin = await service.claimSeat(f.state.match.code, { seatKey: '2', name: 'Lou' });
+    await pastLoadoutReveal(service, f.state.match.code, [f.you.playerId, fJoin.you.playerId]);
     await service.submitMove(f.state.match.code, f.you.playerId, 'rock');
     await service.submitMove(f.state.match.code, fJoin.you.playerId, 'rock');
     // Rock carries two delay marks now, so the second mirror has to be a fresh move.

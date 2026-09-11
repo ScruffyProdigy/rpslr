@@ -168,6 +168,16 @@ export interface GameRepository {
   }): Promise<void>;
   /** The seat keys that have acted in one round's sub-phase. */
   listSubPhaseActions(matchId: string, round: number): Promise<string[]>;
+
+  /**
+   * Record that a seat has read the loadout reveal (JQ-149). Idempotent, like
+   * `recordSubPhaseAction` and for the same reason: a second tap is the same
+   * statement, and two connections racing must not turn it into an error.
+   */
+  recordLoadoutAck(input: { matchId: string; seatId: string }): Promise<void>;
+
+  /** Seat keys that have read the reveal, in seat order. */
+  listLoadoutAcks(matchId: string): Promise<string[]>;
   close(): Promise<void>;
 }
 

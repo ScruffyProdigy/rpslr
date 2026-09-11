@@ -15,11 +15,11 @@
  *
  * ## Why a *phase* deadline rather than a round deadline
  *
- * A round is not always one decision. `duel-helpers` has a mid-round sub-phase —
- * after both players lock in, anyone entitled to it may re-pick before the round
- * resolves — and its draft screen will have a deadline of its own before round 1.
- * Keying the deadline to a phase is what let that land without touching a single
- * existing call site.
+ * A round is not always one decision, and a match is not only rounds.
+ * `duel-helpers` has a mid-round sub-phase — after both players lock in, anyone
+ * entitled to it may re-pick before the round resolves — and it opens on a
+ * loadout reveal that belongs to no round at all. Keying the deadline to a phase
+ * is what let both land without touching a single existing call site.
  *
  * @see docs/superpowers/specs/2026-09-07-jq-156-round-timer-design.md
  */
@@ -36,9 +36,17 @@ import { availableMoves, type DelayMap, type Move } from './game.js';
  * that reaches a player after their commitment and before the round resolves" and
  * Oracle is one way in rather than the reason for the window.
  *
- * `duel-helpers` will add `draft` too, which is why this stays a union.
+ * `loadouts` is the segment before round 1 in which both loadouts are shown
+ * face-up (JQ-149). It is a phase rather than the first few seconds of round 1's
+ * allowance because it is not round 1: nobody is picking, so nobody can be
+ * struck for letting it expire, and the round-1 clock should not be running down
+ * while a player reads what they are up against. Named for its subject rather
+ * than `reveal`, which on this board already means the round showdown.
+ *
+ * There is no `draft`. Helpers are picked pre-queue in the lobby (JQ-163), so
+ * the only thing left to do in the game is look at them.
  */
-export type Phase = 'pick' | 'react';
+export type Phase = 'pick' | 'react' | 'loadouts';
 
 export interface RoundPolicy {
   /** How long a player has in this phase. Round 1 is deliberately longer. */
@@ -89,13 +97,38 @@ const REVEAL_DEAD_TIME_MS = 3_200;
  */
 const REACT_MS = 12_000;
 
+/**
+ * The loadout reveal: four helper cards to read, two names, two tiers and two
+ * openings, before a round neither player has any history to reason from.
+ *
+ * A cap rather than a duration. It is what the segment costs when somebody walks
+ * away; the usual exit is both players saying they have read it
+ * (`acknowledgeLoadouts`), which is what makes a number this large affordable.
+ *
+ * Large because reading takes longer than it looks. Watched players — and not
+ * slow ones — spent a good 30 seconds on the how-to-play panels, and four helper
+ * cards are comparable reading with none of the familiarity: the rules are Rock
+ * Paper Scissors, where "Your Lizard also beats Scissors, all match" is a
+ * sentence you have never seen before. An earlier draft of this had it at 9s,
+ * which was the author guessing at his own re-reading speed on copy he wrote.
+ *
+ * 45s is 30 plus slack, and matches `disconnectGraceMs` — a player who is gone
+ * rather than reading costs the match the same wait either way.
+ *
+ * Round-independent for the obvious reason: there is only ever one, and it is
+ * before round 1.
+ */
+const LOADOUTS_MS = 45_000;
+
 export const DUEL_POLICY: RoundPolicy = {
   allowanceMs: (phase, round) =>
     phase === 'react'
       ? REACT_MS
-      : round <= 1
-        ? FIRST_ROUND_MS
-        : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,
+      : phase === 'loadouts'
+        ? LOADOUTS_MS
+        : round <= 1
+          ? FIRST_ROUND_MS
+          : LATER_ROUND_MS + REVEAL_DEAD_TIME_MS,
   strikesToForfeit: 2,
   disconnectGraceMs: 45_000,
 };
@@ -104,6 +137,11 @@ export const DUEL_POLICY: RoundPolicy = {
  * Modes share one policy until one of them needs its own. `duel-helpers` is
  * listed explicitly rather than left to the fallback so that adding the mode
  * does not silently invent a second idle policy.
+ *
+ * The loadout allowance lives on the shared policy even though only
+ * `duel-helpers` ever runs that phase, for the same reason: a mode that never
+ * enters a phase does not need a policy that refuses to price it, and the second
+ * mode to bring loadouts should inherit the number rather than rediscover it.
  */
 const POLICY_BY_MODE: Record<string, RoundPolicy> = {
   duel: DUEL_POLICY,
