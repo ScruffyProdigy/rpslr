@@ -12,6 +12,7 @@ import {
 } from './commentary';
 import { ALL_MOVES, isPlayable, threatsTo } from './moves';
 import { buildReplay, type DelayMap, type Replay } from './replay';
+import { FLOOR_FIRINGS, FLOOR_MATCH, floorRounds, floorSeats } from './test/floorMatch';
 
 /**
  * Frames come from `buildReplay` rather than being hand-built: the commentary
@@ -718,61 +719,17 @@ describe('commentary at a helpers match', () => {
 });
 
 /**
- * A real match that reaches the floor.
- *
- * Ben brought Rust and Freeze, which is the pair that drives a board past the
- * point `delays[m] === 0` can read. Both open charged and recharge on 3, so
- * Rebuilt by JQ-209, which repriced the two cards that used to produce it. Rust
- * added two marks a firing on a three-mark recharge and Freeze recharged at all;
- * between them they could bury a board twice in six rounds, which is exactly the
- * ~26pp each was found to be worth. Neither can now, so the floor is reached the
- * way the game intends instead: by accumulation.
- *
- * Ana carries Echo Chamber, so every drawn round costs her an extra mark of her
- * own; Ben's Quarantine names her pick in rounds 1 and 4 and lands both, adding two
- * more each time; and five drawn rounds mean she pays for a pick every round with
- * nothing coming back. Ben's Freeze then holds the whole board for round 5 — once
- * per match now, so its timing is the decision. By round 5 she is down to a single
- * playable move, and by round 6 every one of the five carries a mark and the floor
- * is the only thing giving her a hand at all.
- *
- * Six rounds, not seven, since JQ-214: `roundCap` is `bestOf * 2`, so a best-of-3
- * cannot reach a seventh. The match therefore ends *at* the cap on Ana's 1-0 rather
- * than on the win threshold — which is the point of putting five draws in front of
- * it, and means this fixture now covers a capped finish as well as the floor. A
- * seventh round here would describe a match the server can no longer produce, and
- * this fixture's whole claim is that it describes one it can.
- *
- * Scripted rather than mutated. The frames come from `buildReplay` over the
- * engine's own reconstruction, so this is a board the server can actually
- * arrive at, and every move in it is one `availableMoves` would have allowed.
+ * The floor fixture — the script itself lives in `test/floorMatch.ts`, shared
+ * with `ReplayPage.test.tsx`, which asserts that the page can play the board
+ * this file asserts the content of (JQ-256).
  */
-const FLOOR_SEATS = (): Seat[] => [
-  seat(0, 'a', 'pa', 'Ana', ['bookend', 'watchful']),
-  seat(1, 'b', 'pb', 'Ben', ['echo-chamber', 'quarantine']),
-];
-
-const FLOOR_ROUNDS = [
-  round(1, 'rock', 'rock', 'draw'),
-  round(2, 'paper', 'paper', 'draw'),
-  round(3, 'scissors', 'scissors', 'draw'),
-  round(4, 'lizard', 'lizard', 'draw'),
-  round(5, 'robot', 'robot', 'draw'),
-  round(6, 'paper', 'rock', 'a'),
-];
-
-/**
- * Quarantine names the move Ana is about to play and lands both times — a hit is
- * two marks, and its three-mark recharge puts it in rounds 1 and 4. Freeze needs no
- * target and comes once per match, spent in round 5 where it does the most.
- */
-const FLOOR_FIRINGS: AbilityFiring[] = [
-  { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
-  { round: 5, seatKey: 'b', helperId: 'quarantine', target: 'robot', source: null },
-];
-
 const floorReplay = (): Replay =>
-  replayOf(FLOOR_ROUNDS, { bestOf: 3, winnerSeatKey: 'a' }, FLOOR_SEATS(), FLOOR_FIRINGS);
+  replayOf(
+    floorRounds(),
+    { bestOf: FLOOR_MATCH.bestOf, winnerSeatKey: FLOOR_MATCH.winnerSeatKey },
+    floorSeats(),
+    FLOOR_FIRINGS,
+  );
 
 describe('commentary under the floor (JQ-234)', () => {
   it('reaches a round pinned to a single playable move', () => {

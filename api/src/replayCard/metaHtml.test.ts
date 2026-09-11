@@ -10,6 +10,8 @@ const model: CardModel = {
   ogDescription: '1 Rock over Scissors',
   cacheable: true,
   players: [],
+  showdown: null,
+  shortCode: null,
 };
 
 const ctx = {

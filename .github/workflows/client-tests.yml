@@ -36,5 +36,37 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
+      # The layout suite, which needs a browser: rendered tap-target boxes,
+      # `container-type: inline-size`, whether the "opponent locked in" pill
+      # moves the pentagon. jsdom does no layout, so none of it can be asked
+      # there (JQ-158).
+      #
+      # Keyed on the resolved Playwright version rather than the lockfile as a
+      # whole, so a change to any other dependency does not throw the browser
+      # away and re-download 130MB.
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(npm ls playwright --json | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).dependencies.playwright.version')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # The system libraries are outside the cached directory, so they are
+      # installed even on a hit — cheap next to the browser itself.
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Layout tests (vitest browser mode)
+        run: npm run test:browser
+
       - name: Build verification
         run: npm run build

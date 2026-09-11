@@ -14,19 +14,5 @@
     "noEmit": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    // Pre-existing debt, not JQ-237's. These predate this config and fail on stale
-    // fixtures — object literals missing fields their types have since grown. They
-    // are excluded so the gate can go into CI today rather than waiting on a
-    // clean-up that touches five unrelated areas. Emptying this list is JQ-250.
-    "src/replayCard/avatars.test.ts",
-    "src/replayCard/cardImage.test.ts",
-    "src/replayCard/cardModel.test.ts",
-    "src/replayCard/cardSvg.test.ts",
-    "src/replayCard/metaHtml.test.ts",
-    "src/telemetry.pg.test.ts",
-    "src/ws.test.ts"
-  ]
+  "exclude": ["node_modules", "dist"]
 }

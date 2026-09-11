@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type MatchState, type Move, type RoundResult, type Seat } from './api';
 import { markSeen } from './lib/prefs';
 import { ReplayPage } from './ReplayPage';
+import { FLOOR_FIRINGS, FLOOR_MATCH, floorRounds, floorSeats } from './test/floorMatch';
 
 function seat(position: number, seatKey: string, playerId: string, name: string): Seat {
   return {
@@ -428,53 +429,30 @@ describe('<ReplayPage> play along', () => {
 });
 
 /**
- * A match that reaches the floor, so the page has to draw a board where no move
- * is clear.
+ * The floor fixture: a match where the board reaches the point no move is clear,
+ * so the page has to draw one.
  *
- * Rebuilt by JQ-209, which repriced the two cards that used to produce it. Rust
- * added two marks a firing on a three-mark recharge and Freeze recharged at all;
- * between them they buried a board twice in six rounds, which is the ~26pp each
- * turned out to be worth. Neither can now, so the floor is reached by
- * accumulation instead.
+ * The script is shared with `commentary.test.ts` (`test/floorMatch.ts`), which
+ * asserts the board this draws. They used to hold a copy each, under comments in
+ * both claiming to be the same script — and by the time JQ-256 looked, the
+ * loadouts and the firings had drifted apart while the comments still said they
+ * had not.
  *
- * Ana carries Echo Chamber, so every drawn round costs her an extra mark of her
- * own. Ben's Quarantine names her pick in rounds 1 and 4 and lands both, adding
- * two more each time. Five drawn rounds mean she pays for a pick every round with
- * nothing coming back, and Ben's Freeze — once per match now, so the timing is
- * the decision — holds the whole board for round 5. She comes into round 6 with a
- * mark on all five, playable only because `availableMoves` has a floor.
- *
- * The same script as the floor fixture in `commentary.test.ts`, deliberately: that
- * one asserts the board this one draws. Six rounds, because JQ-214 caps a best-of-3
- * at `bestOf * 2` — the match ends at the cap on Ana's 1-0, not on the threshold.
- *
- * The commentary used to reconstruct that hand as `delays[m] === 0` and get
- * nothing back, and hand the empty list to a solver that indexes three rows and
- * three columns unconditionally — which threw, and a throw here is a blank
- * replay rather than a wrong sentence (JQ-234).
+ * The commentary used to reconstruct Ana's hand as `delays[m] === 0` and get
+ * nothing back, then hand the empty list to a solver that indexes three rows and
+ * three columns unconditionally — which threw, and a throw here is a blank replay
+ * rather than a wrong sentence (JQ-234).
  */
 function floorState(): MatchState {
-  const script: [Move, Move, string][] = [
-    ['rock', 'rock', 'draw'],
-    ['paper', 'paper', 'draw'],
-    ['scissors', 'scissors', 'draw'],
-    ['lizard', 'lizard', 'draw'],
-    ['robot', 'robot', 'draw'],
-    ['paper', 'rock', 'a'],
-  ];
-  const helped = seat(1, 'b', 'pb', 'Ben');
   return {
-    ...finishedState({ bestOf: 3, currentRound: 6, gameMode: 'duel-helpers' }),
-    seats: [
-      { ...seat(0, 'a', 'pa', 'Ana'), loadout: ['echo-chamber', 'bookend'] },
-      { ...helped, loadout: ['quarantine', 'freeze'] },
-    ],
-    results: script.map(([a, b, outcome], i) => round(i + 1, a, b, outcome)),
-    abilityFirings: [
-      { round: 1, seatKey: 'b', helperId: 'quarantine', target: 'rock', source: null },
-      { round: 4, seatKey: 'b', helperId: 'quarantine', target: 'lizard', source: null },
-      { round: 5, seatKey: 'b', helperId: 'freeze', target: null, source: null },
-    ],
+    ...finishedState({
+      bestOf: FLOOR_MATCH.bestOf,
+      currentRound: FLOOR_MATCH.currentRound,
+      gameMode: FLOOR_MATCH.gameMode,
+    }),
+    seats: floorSeats(),
+    results: floorRounds(),
+    abilityFirings: FLOOR_FIRINGS,
   };
 }
 

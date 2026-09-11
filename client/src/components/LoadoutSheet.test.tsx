@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Loadout } from '@game/helpers/loadout';
 import type { Move, Seat } from '../api';
+import { MARK_COST, getHelper } from '@game/helpers/roster';
 import { seatLoadoutView } from '../loadouts';
 import { LoadoutSheet } from './LoadoutSheet';
 
@@ -58,14 +59,23 @@ describe('<LoadoutSheet> (JQ-149)', () => {
   it('shows both loadouts face up, with names, tier and mark cost', () => {
     sheet();
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Ferrus')).toBeInTheDocument();
-    expect(within(dialog).getByText('Echo Chamber')).toBeInTheDocument();
-    expect(within(dialog).getByText('Chimera')).toBeInTheDocument();
-    expect(within(dialog).getByText('Poker Face')).toBeInTheDocument();
+    for (const id of ['ferrus', 'echo-chamber', 'chimera', 'poker-face']) {
+      expect(within(dialog).getByText(getHelper(id)!.name)).toBeInTheDocument();
+    }
     // Ferrus and Chimera are both Majors, so the tier line is not unique — and
-    // that it is stated per card rather than once per side is the point.
-    expect(within(dialog).getAllByText(/Major · 2 marks on/)).toHaveLength(2);
-    expect(within(dialog).getByText(/Minor · 1 mark on/)).toBeInTheDocument();
+    // that it is stated per card rather than once per side is the point. The
+    // premise is pinned rather than assumed; the price is the tier's, read from
+    // `MARK_COST` rather than restated (JQ-256).
+    expect(getHelper('ferrus')!.tier).toBe('Major');
+    expect(getHelper('chimera')!.tier).toBe('Major');
+    expect(within(dialog).getAllByText(`Major · ${MARK_COST.Major} marks on`, { exact: false }))
+      .toHaveLength(2);
+    expect(
+      within(dialog).getByText(`Minor · ${MARK_COST.Minor} mark on`, { exact: false }),
+    ).toBeInTheDocument();
+    // A Trinket's price is not rendered as a number at all — `MARK_COST.Trinket`
+    // being 0 is exactly why the copy says "free" instead.
+    expect(MARK_COST.Trinket).toBe(0);
     expect(within(dialog).getByText(/Trinket · free/)).toBeInTheDocument();
   });
 
@@ -79,9 +89,16 @@ describe('<LoadoutSheet> (JQ-149)', () => {
     sheet();
     const sides = screen.getAllByRole('heading', { level: 3 });
     expect(sides).toHaveLength(2);
-    // Ferrus + Echo Chamber: Robot on 2, Paper on 1. Chimera + Poker Face: Lizard on 2.
-    expect(screen.getAllByLabelText('on cooldown, 2 turns')).toHaveLength(2);
-    expect(screen.getAllByLabelText('on cooldown, 1 turn')).toHaveLength(1);
+    // Three cards across the two sides bind a move, and each lays its tier's
+    // marks on it: two Majors at `MARK_COST.Major`, one Minor at `MARK_COST.Minor`.
+    // Counted off the roster rather than restated, so a retier moves this with it.
+    const bound = ['ferrus', 'echo-chamber', 'chimera', 'poker-face']
+      .map((id) => getHelper(id)!)
+      .filter((h) => h.boundMove !== null);
+    const deep = bound.filter((h) => MARK_COST[h.tier] === MARK_COST.Major).length;
+    const shallow = bound.filter((h) => MARK_COST[h.tier] === MARK_COST.Minor).length;
+    expect(screen.getAllByLabelText(`on cooldown, ${MARK_COST.Major} turns`)).toHaveLength(deep);
+    expect(screen.getAllByLabelText(`on cooldown, ${MARK_COST.Minor} turn`)).toHaveLength(shallow);
   });
 
   it('names the move a same-move pairing displaced marks onto', () => {

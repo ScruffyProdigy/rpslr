@@ -124,7 +124,7 @@ describe('WebSocket gameplay transport', () => {
       challenger,
       (m) =>
         m.type === 'state' &&
-        (m.state as { submittedPlayerIds?: string[] }).submittedPlayerIds?.includes(hostId),
+        (m.state as { submittedPlayerIds?: string[] }).submittedPlayerIds?.includes(hostId) === true,
     );
     const state = msg.state as { submittedPlayerIds: string[]; currentRoundMoves: Record<string, unknown> };
     expect(state.submittedPlayerIds).toEqual([hostId]);

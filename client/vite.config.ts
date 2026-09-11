@@ -51,5 +51,12 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
+    /**
+     * The browser suite is a separate run (`npm run test:browser`,
+     * `vitest.browser.config.ts`). It asks questions jsdom cannot answer at all
+     * — rendered box sizes, `container-type: inline-size` — so running it here
+     * would not fail usefully, it would fail meaninglessly (JQ-158).
+     */
+    exclude: ['**/node_modules/**', '**/dist/**', 'src/**/*.browser.test.{ts,tsx}'],
   },
 });

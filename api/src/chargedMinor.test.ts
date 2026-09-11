@@ -50,7 +50,7 @@ const { helpersIn, loadoutPrice, openingMarks, uniformPicker } = await import(
   './helpers/loadout.js'
 );
 const { abilityMarks, chargesNow, slotsFor } = await import('./helpers/abilities.js');
-const { MARK_COST } = await import('./helpers/roster.js');
+const { MARK_COST, getHelper } = await import('./helpers/roster.js');
 const { MemoryGameRepository } = await import('./memoryRepository.js');
 const { GameService } = await import('./service.js');
 
@@ -62,9 +62,18 @@ describe('the cooldown track takes a charged Minor unchanged', () => {
   it('gives it a slot, exactly as it does a Major', () => {
     // `slotsFor` never asked about tier — this is the assertion that it never had
     // to, and that the ticket's "no engine change" reading is right.
+    // Rust is scenery here — a real Major to sit the fixture beside — so its
+    // clock is read off the roster rather than restated. Whetstone's is the
+    // fixture's own, declared above, and stays written out.
+    // `slotsFor` hands on the clock and drops the `kind`, so both sides are read
+    // as `{ opening, recharge }`.
+    const clock = ({ opening, recharge }: { opening: number; recharge: number | null }) => ({
+      opening,
+      recharge,
+    });
     expect(slotsFor(load('rust', 'whetstone'))).toEqual({
-      rust: { opening: 0, recharge: 3 },
-      whetstone: { opening: 0, recharge: 2 },
+      rust: clock(getHelper('rust')!.load as typeof WHETSTONE.load),
+      whetstone: clock(WHETSTONE.load),
     });
   });
 

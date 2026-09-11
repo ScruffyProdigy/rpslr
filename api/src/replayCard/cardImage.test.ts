@@ -18,6 +18,8 @@ const match: CardModel = {
     { seatKey: '1', name: 'Ana', score: 3, role: 'you', avatarUrl: null, avatarDataUri: PIXEL, initial: 'A', winner: true },
     { seatKey: '2', name: 'Ben', score: 1, role: 'opp', avatarUrl: null, avatarDataUri: PIXEL, initial: 'B', winner: false },
   ],
+  showdown: null,
+  shortCode: null,
 };
 
 describe('renderCardPng', () => {

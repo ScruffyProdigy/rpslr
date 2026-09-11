@@ -1204,6 +1204,23 @@ button.ghost {
 .board-status > * {
   margin: 0;
 }
+/* One line is only enough to reserve while the pill fits on one line, and below
+   about 370px it does not: "Opponent has locked in — pick your move!" wraps, the
+   slot grows to hold it, and the pentagon drops 14-16px under the thumb that is
+   mid-decision — the exact bug the slot exists to prevent.
+
+   It went unnoticed because the guarantee rested on one hand measurement, taken
+   at 390px, where the pill still fits. `board.browser.test.tsx` measures 320,
+   360 and 390, which is what found it (JQ-158).
+
+   Two lines, measured at those widths. It is a constant, and the browser test is
+   what keeps it honest: copy that grows to need a third line fails there rather
+   than in someone's hand. */
+@media (max-width: 369px) {
+  .board-status {
+    min-height: 46px;
+  }
+}
 .hint.opponent-ready {
   align-self: center;
   width: auto;
