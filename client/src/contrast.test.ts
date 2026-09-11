@@ -210,6 +210,28 @@ describe('text on the board clears 4.5:1 (JQ-192)', () => {
     ).toBeGreaterThanOrEqual(AA_TEXT);
   });
 
+  it('steps the cooldown glyph back without taking it under its own floor', () => {
+    // JQ-192 asked for this to be re-measured once the dim above stopped
+    // compounding on top of it. It is unchanged — 0.75 over --surface-2, 4.53:1
+    // — and it now reads the same whether or not the move is also dimmed,
+    // because `.move-btn--dimmed` no longer multiplies anything.
+    //
+    // Read against 3:1 rather than 4.5:1, which is the correction: the glyph is
+    // a graphic under 1.4.11 with the move's name written directly beneath it,
+    // not text. The ticket called 4.55:1 "no margin at all" while measuring it
+    // against the threshold for text; against its own it has half as much
+    // headroom again.
+    const glyph = composite(
+      colour(declaration('.move-btn--cooldown', 'color')),
+      COOLDOWN,
+      Number(declaration('.move-btn--cooldown .move-btn__emoji', 'opacity')),
+    );
+    expect(ratio(glyph, COOLDOWN)).toBeGreaterThanOrEqual(AA_GRAPHIC);
+    // And nothing re-fades it once the round is locked: `boardFit.test.ts`
+    // holds the 0.75 itself, this holds that it stays the only multiplier.
+    expect(css).not.toMatch(/\.move-btn--dimmed[^{]*\.move-btn__emoji\s*\{[^}]*opacity/);
+  });
+
   it('keeps the board card itself the backdrop these are measured against', () => {
     // Every number above assumes the buttons sit on `--card`. If the board ever
     // grows its own background, they are all measuring the wrong thing.
