@@ -796,7 +796,7 @@ button.ghost {
     transform 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.15s ease,
-    opacity 0.15s ease;
+    color 0.15s ease;
 }
 .move-btn__emoji {
   font-size: clamp(1.75rem, 12.05cqw, 2.86rem);
@@ -888,9 +888,32 @@ button.ghost {
   border-color: var(--you);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--you) 45%, transparent);
 }
-/* Only once the round is decided does anything fade out. */
+/* Once the round is decided, the moves you did not take step back — and they do
+   it without fading, which is what JQ-192 came to fix. `opacity: 0.45` composites
+   the foreground and the background toward each other in one move, so it takes
+   the label down with the surface: the move name measured 3.86:1, and a name
+   that was already --muted — a move on cooldown — measured 2.48:1, the worst
+   text on the board. No value of the number fixes that, because the fade is the
+   mechanism; only leaving the text out of it does.
+
+   So the state moves onto channels that can carry it at full legibility: the
+   border recedes to a seam, the label and its glyph step from --text to --muted
+   (6.7:1 on the button's own surface), and the cooldown pill steps with them.
+   Three channels, all measured in `contrast.test.ts`, none of them opacity.
+
+   The receded border is not a contrast regression: `disabled` is true for the
+   whole time this class is on a button (App passes `youMovedThisRound`), so it
+   is an inactive control and outside 1.4.11. The borders that are inside it are
+   JQ-193's. */
 .move-btn--dimmed {
-  opacity: 0.45;
+  border-color: var(--line-1);
+  color: var(--muted);
+}
+/* The pill carries a turn count, so it steps back with the button rather than
+   fading out from under the number: --muted on --surface-3 is 6.7:1. */
+.move-btn--dimmed .cooldown-pill {
+  color: var(--muted);
+  background: var(--surface-3);
 }
 .move-btn__check {
   position: absolute;

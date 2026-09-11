@@ -610,9 +610,13 @@ describe('an unavailable move is not signalled by colour alone (JQ-98)', () => {
     expect(opacity).toBeGreaterThanOrEqual(0.7);
   });
 
-  it('keeps the label readable rather than fading it out', () => {
-    // Phase 2 rejected the old 28% opacity for failing contrast; the cooldown
-    // state must stay legible, so its colour comes from the muted token.
+  it('takes the label to the muted token rather than fading it out', () => {
+    // Named for what it checks, which is a declaration and not a ratio. It was
+    // called `keeps the label readable` and passed the entire time that label
+    // rendered at 2.48:1 — `.move-btn--dimmed` faded the token after the
+    // cascade was done with it, where no declaration check can see. The reading
+    // itself now lives in `contrast.test.ts`, which composites before it
+    // measures (JQ-192).
     expect(declaration('.move-btn--cooldown', 'color')).toBe('var(--muted)');
   });
 });
