@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { prequeueFixture, serialize } from '../fixtures.testutil.js';
 import { getGameMode } from '../gameModes.js';
 import { badgeForTier, helperChoices, validateSelection } from './queueOptions.js';
-import { HELPERS, MARK_COST } from './roster.js';
+import { HELPERS, MARK_COST, getHelper } from './roster.js';
 
 const HELPERS_GROUP = getGameMode('duel-helpers')!.preQueue!.groups[0];
 
@@ -36,11 +36,19 @@ describe('helper roster for queue-options', () => {
    */
   it('says of every card whether it carries a charge, and on what clock', () => {
     const byId = new Map(helperChoices().map((c) => [c.id, c.load]));
+    // The `kind` is the claim and stays written out — a passive card and a charged
+    // one have to come back distinguishable. The numbers on the charged pair are
+    // the roster's and are read from it: a reprice is not a fact about this
+    // payload, and restating them here made it fail as though it were.
     expect(byId.get('ferrus')).toEqual({ kind: 'passive' });
-    expect(byId.get('quarantine')).toEqual({ kind: 'ability', opening: 0, recharge: 3 });
-    // Sacrifice is the card the numbers exist for: it does nothing until round 4,
-    // and a player drafting it blind has no way to know that from the blurb.
-    expect(byId.get('sacrifice')).toEqual({ kind: 'ability', opening: 3, recharge: 3 });
+    expect(byId.get('quarantine')).toMatchObject({ kind: 'ability' });
+    expect(byId.get('quarantine')).toEqual(getHelper('quarantine')!.load);
+    // Sacrifice is the card the numbers exist for: it opens on marks it has to
+    // burn down before it fires at all, and a player drafting it blind has no way
+    // to know that from the blurb.
+    expect(byId.get('sacrifice')).toMatchObject({ kind: 'ability' });
+    expect(byId.get('sacrifice')).toEqual(getHelper('sacrifice')!.load);
+    expect((getHelper('sacrifice')!.load as { opening: number }).opening).toBeGreaterThan(0);
   });
 
   it('takes the load from roster.ts rather than restating it', () => {

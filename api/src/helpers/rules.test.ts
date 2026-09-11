@@ -13,6 +13,15 @@ import {
   type PlayerOutcome,
 } from '../game.js';
 import type { Loadout } from './loadout.js';
+import { getHelper } from './roster.js';
+
+/** An ability's clock as the roster states it, before the engine drops its `kind`. */
+type Spend = { kind: 'ability'; opening: number; recharge: number | null };
+
+/** What firing a card costs, read off the roster rather than restated (JQ-256). */
+function rechargeOf(id: string): number | null {
+  return (getHelper(id)!.load as Spend).recharge;
+}
 
 /** A Trinket with no engine effect, so a test isolates the card it is paired with. */
 const INERT = 'old-habits';
@@ -475,8 +484,12 @@ describe('a loadout hands its ability slots to the engine', () => {
   });
 
   it('carries what each ability opens on and what firing it costs', () => {
+    // What is carried, not what it currently reads: the roster owns the numbers,
+    // and a reprice there is not a change to this handover. The `kind` is
+    // dropped on the way through — the engine takes a clock, not a card.
+    const { opening, recharge } = getHelper('sacrifice')!.load as Spend;
     expect(rulesFor(load('sacrifice')).abilities).toEqual({
-      sacrifice: { opening: 3, recharge: 3 },
+      sacrifice: { opening, recharge },
     });
   });
 
@@ -549,7 +562,10 @@ describe('Quarantine', () => {
 
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['quarantine', 'old-habits'], [name('lizard')]);
-    expect(missed).toEqual({ quarantine: { marks: 3, available: false } });
+    // The recharge itself, read off the roster: Quarantine opens on nothing, so
+    // round one's decrement has nothing to take and a miss leaves the full cost
+    // standing. The claim is "a miss is not cheaper", not what the cost is.
+    expect(missed).toEqual({ quarantine: { marks: rechargeOf('quarantine'), available: false } });
   });
 });
 
@@ -640,10 +656,11 @@ describe('Tripwire', () => {
 
   it('spends the charge on a miss just as on a hit', () => {
     const missed = abilityMarks(['tripwire', 'old-habits'], [name('scissors')]);
-    // 2, not 3: the card opens on 1, round one's decrement clears that, and firing
-    // then costs the recharge. Spelled out because the recharge convention is the
-    // thing this roster has most often got wrong.
-    expect(missed).toEqual({ tripwire: { marks: 2, available: false } });
+    // The recharge, not the opening plus the recharge: the card opens charged,
+    // round one's decrement clears that, and firing then costs the recharge on
+    // its own. Worth being explicit about, because the recharge convention is
+    // the thing this roster has most often got wrong.
+    expect(missed).toEqual({ tripwire: { marks: rechargeOf('tripwire'), available: false } });
   });
 });
 

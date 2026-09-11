@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HELPERS } from './helpers/roster.js';
+import { HELPERS, MARK_COST, getHelper } from './helpers/roster.js';
 import { PgGameRepository } from './pgRepository.js';
 import { GameService } from './service.js';
 import { pastLoadoutReveal } from './fixtures.testutil.js';
@@ -207,7 +207,15 @@ describe.skipIf(!databaseUrl)('JQ-152 telemetry views', () => {
     // deliberate pin lives in `roster.test.ts`, where changing it is the point.
     expect(num(row!.n)).toBe(HELPERS.length);
     const quarantine = await one("SELECT * FROM helper_catalog WHERE id = 'quarantine'");
-    expect(quarantine).toMatchObject({ tier: 'Major', mark_cost: 2, bound_move: 'scissors' });
+    // One card checked column by column, to show the mirroring is field-deep and
+    // not just a row count — read off the roster for the same reason the count
+    // above is. `mark_cost` is the tier's price rather than the card's own.
+    const card = getHelper('quarantine')!;
+    expect(quarantine).toMatchObject({
+      tier: card.tier,
+      mark_cost: MARK_COST[card.tier],
+      bound_move: card.boundMove,
+    });
   });
 
   it('records both loadouts, the winner and the round count for every finished match', async () => {

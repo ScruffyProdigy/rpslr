@@ -4,6 +4,14 @@ import { BannedPlayerError, GameService, ValidationError } from './service.js';
 import { ConflictError, NotFoundError, ReservationError } from './repository.js';
 import type { Move } from './game.js';
 import { pastLoadoutReveal } from './fixtures.testutil.js';
+import { getHelper } from './helpers/roster.js';
+
+/** How many marks a card opens on, read off the roster rather than restated (JQ-256). */
+function openingOf(id: string): number {
+  const { load } = getHelper(id)!;
+  if (load.kind !== 'ability') throw new Error(`${id} carries no charge to read`);
+  return load.opening;
+}
 
 describe('GameService — standalone duel loop', () => {
   let service: GameService;
@@ -791,10 +799,16 @@ describe('GameService — firing an ability', () => {
       ['sacrifice', 'poker-face'],
       ['freeze', 'poker-face'],
     );
-    // Three drawn rounds bring Sacrifice's opening 3 marks down to 0.
-    await playRound(code, alice, 'paper', bob, 'paper');
-    await playRound(code, alice, 'scissors', bob, 'scissors');
-    await playRound(code, alice, 'lizard', bob, 'lizard');
+    // One drawn round per opening mark, each on a fresh move so nothing is
+    // refused for cooldown. The count comes off the roster rather than being
+    // restated — but the delay arithmetic asserted at the end is written for
+    // this script's length, so a reprice that changes it should fail here,
+    // saying why, rather than in that arithmetic (JQ-256).
+    const opening = openingOf('sacrifice');
+    expect(opening).toBe(3);
+    for (const move of (['paper', 'scissors', 'lizard'] as const).slice(0, opening)) {
+      await playRound(code, alice, move, bob, move);
+    }
     expect((await service.getState(code, alice)).abilities.sacrifice).toEqual({
       marks: 0,
       available: true,
@@ -804,7 +818,7 @@ describe('GameService — firing an ability', () => {
     // Paper beats rock, so this round had a winner in it — Sacrifice replaces it.
     const state = await playRound(code, alice, 'rock', bob, 'paper');
 
-    expect(state.results[3].outcome).toBe('draw');
+    expect(state.results[opening].outcome).toBe('draw');
     expect(state.seats.map((s) => s.player!.score)).toEqual([0, 0]);
     // Alice's board is wiped, then her own move takes its cost. Bob keeps his lizard.
     expect(state.seats[0].delays).toEqual({ rock: 2, paper: 0, scissors: 0, lizard: 0, robot: 0 });
