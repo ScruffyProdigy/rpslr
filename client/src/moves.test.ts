@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { DelayMap } from '@game/game';
+import type { DelayMap, MarkEvent } from '@game/game';
 import {
   ALL_MOVES,
   MOVE_META,
+  SHARED_BEATS,
+  addedEdgesOf,
+  backInPhrase,
+  cooldownReason,
+  holdsFreeze,
   describeBeat,
   describeOutcome,
   describeBeatsOf,
@@ -18,6 +23,7 @@ import {
   isPlayable,
   isForcedPick,
 } from './moves';
+import type { Move } from './api';
 
 describe('moves metadata', () => {
   it('has a label for every move', () => {
@@ -78,7 +84,9 @@ describe('beatsOf', () => {
   });
 
   it('covers every move exactly twice across the graph', () => {
-    const beaten = ALL_MOVES.flatMap(beatsOf);
+    // Called through a lambda, not passed by reference: `beatsOf` takes an
+    // optional graph second, and `flatMap` would hand it the array index.
+    const beaten = ALL_MOVES.flatMap((m) => beatsOf(m));
     for (const m of ALL_MOVES) {
       expect(beaten.filter((x) => x === m)).toHaveLength(2);
     }
@@ -128,12 +136,22 @@ describe('opponentCooldownPhrase', () => {
 
 describe('winningEdgeOf', () => {
   it('points from the winning move to the losing one', () => {
-    expect(winningEdgeOf('rock', 'scissors')).toEqual({ from: 'rock', to: 'scissors', role: 'you' });
+    expect(winningEdgeOf('rock', 'scissors')).toEqual({
+      from: 'rock',
+      to: 'scissors',
+      role: 'you',
+      added: false,
+    });
   });
 
   // The edge is the graph's, not the viewer's — only `role` flips.
   it('marks the edge as the opponent’s when they win', () => {
-    expect(winningEdgeOf('scissors', 'rock')).toEqual({ from: 'rock', to: 'scissors', role: 'opp' });
+    expect(winningEdgeOf('scissors', 'rock')).toEqual({
+      from: 'rock',
+      to: 'scissors',
+      role: 'opp',
+      added: false,
+    });
   });
 
   it('has no edge for a mirror match', () => {
@@ -148,6 +166,7 @@ describe('winningEdgeOf', () => {
           expect(edge).toBeNull();
         } else {
           expect(beatsOf(edge!.from)).toContain(edge!.to);
+          expect(edge!.added).toBe(false);
         }
       }
     }
@@ -316,5 +335,220 @@ describe('the opponent gets the floor too (JQ-215)', () => {
     expect(describeBeatsGraph(THEIRS).opponent).toBe(
       "The opponent can't play Rock, Scissors or Robot this round, so those attacks are drawn faded.",
     );
+  });
+});
+
+/**
+ * Per-player graphs (JQ-151).
+ *
+ * Phase 2 and 3 exist to teach a fixed ten-edge graph that tells the truth about
+ * both players. A conditional graph makes every arrow ask "whose?", so these hold
+ * two lines: the shared ten never change, and the extra edge is always visible and
+ * always attributed.
+ */
+const CHIMERA_BEATS = { ...SHARED_BEATS, lizard: ['robot', 'paper', 'scissors'] as Move[] };
+
+describe('an edge a loadout added', () => {
+  it('is found against the shared graph, not against a list of card names', () => {
+    expect(addedEdgesOf(CHIMERA_BEATS)).toEqual([{ from: 'lizard', to: 'scissors' }]);
+  });
+
+  it('finds none at all in a duel, which is what keeps the ten untouched', () => {
+    expect(addedEdgesOf(SHARED_BEATS)).toEqual([]);
+  });
+
+  it('comes last in beatsOf, after the two edges everyone learned', () => {
+    expect(beatsOf('lizard', CHIMERA_BEATS)).toEqual(['paper', 'robot', 'scissors']);
+  });
+
+  it('leaves every other move of a Chimera owner exactly as it was', () => {
+    for (const m of ALL_MOVES.filter((x) => x !== 'lizard')) {
+      expect(beatsOf(m, CHIMERA_BEATS)).toEqual(beatsOf(m));
+    }
+  });
+});
+
+describe('describeBeatsOf with an added edge', () => {
+  // The fallback verb, deliberately: api/src/replayCard/moveVerbs.ts phrases the
+  // same pair the same way, and the card and the board must not disagree about a
+  // round the player just watched.
+  it('names all three, with the extra one last', () => {
+    expect(describeBeatsOf('lizard', CHIMERA_BEATS)).toBe(
+      'Lizard eats Paper, poisons Robot & beats Scissors',
+    );
+  });
+
+  it('says nothing different about the ten shared edges', () => {
+    for (const m of ALL_MOVES.filter((x) => x !== 'lizard')) {
+      expect(describeBeatsOf(m, CHIMERA_BEATS)).toBe(describeBeatsOf(m));
+    }
+  });
+});
+
+describe('threatsTo reads the opponent’s graph', () => {
+  // The safe-move read is "what can beat me", so it is *their* graph that decides
+  // it. Reading your own would tell a Chimera holder their Scissors was safe from
+  // a Lizard it is not safe from.
+  it('counts an edge the opponent was granted as a threat', () => {
+    // In ALL_MOVES order, so the added edge lands in the middle rather than last.
+    expect(threatsTo('scissors', {}).all).toEqual(['rock', 'robot']);
+    expect(threatsTo('scissors', {}, CHIMERA_BEATS).all).toEqual(['rock', 'lizard', 'robot']);
+  });
+
+  it('still drops the ones they cannot play, added edge included', () => {
+    const t = threatsTo('scissors', { robot: 2, rock: 2 }, CHIMERA_BEATS);
+    expect(t.live).toEqual(['lizard']);
+    expect(t.safe).toBe(false);
+  });
+
+  it('is safe again once the granted edge is on cooldown too', () => {
+    expect(threatsTo('scissors', { robot: 2, rock: 2, lizard: 2 }, CHIMERA_BEATS).safe).toBe(true);
+  });
+});
+
+describe('winningEdgeOf with per-player graphs', () => {
+  // Mirrors the engine's `seatWinner`: an added edge outranks a shared one. Reading
+  // each side through only its own graph would light both arrows on the pair.
+  it('lets the added edge take the round it decides', () => {
+    expect(winningEdgeOf('lizard', 'scissors', { mine: CHIMERA_BEATS })).toEqual({
+      from: 'lizard',
+      to: 'scissors',
+      role: 'you',
+      added: true,
+    });
+  });
+
+  it('gives the same pair to the opponent when the edge is theirs', () => {
+    expect(winningEdgeOf('scissors', 'lizard', { theirs: CHIMERA_BEATS })).toEqual({
+      from: 'lizard',
+      to: 'scissors',
+      role: 'opp',
+      added: true,
+    });
+  });
+
+  it('leaves the pair to the shared graph when nobody was granted it', () => {
+    expect(winningEdgeOf('lizard', 'scissors')).toEqual({
+      from: 'scissors',
+      to: 'lizard',
+      role: 'opp',
+      added: false,
+    });
+  });
+});
+
+describe('describeBeatsGraph names the extra edges out loud', () => {
+  it('says nothing extra in a duel', () => {
+    expect(describeBeatsGraph({}).added).toEqual([]);
+  });
+
+  it('names your own', () => {
+    expect(describeBeatsGraph({}, undefined, { mine: CHIMERA_BEATS }).added).toEqual([
+      'Your Lizard also beats Scissors this match',
+    ]);
+  });
+
+  // The opponent must be able to hear the rule they are playing against: an edge
+  // rendered on their screen only for its owner is a rule they cannot see.
+  it('names theirs too, by name where there is one', () => {
+    expect(describeBeatsGraph({}, 'Ben', { theirs: CHIMERA_BEATS }).added).toEqual([
+      "Ben's Lizard also beats Scissors this match",
+    ]);
+    expect(describeBeatsGraph({}, undefined, { theirs: CHIMERA_BEATS }).added).toEqual([
+      'Their Lizard also beats Scissors this match',
+    ]);
+  });
+
+  it('leaves the five shared lines word for word as they were', () => {
+    expect(describeBeatsGraph({}, undefined, { mine: CHIMERA_BEATS }).edges).toEqual(
+      describeBeatsGraph({}).edges,
+    );
+  });
+});
+
+describe('cooldownReason (JQ-151)', () => {
+  const duel: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
+  const event = (over: Partial<MarkEvent>): MarkEvent => ({
+    round: 0,
+    side: 'a',
+    move: 'rock',
+    amount: 2,
+    cause: { kind: 'choice' },
+    ...over,
+  });
+
+  it('falls back to the duel wording with no ledger at all', () => {
+    expect(cooldownReason('rock', ['rock'], duel)).toBe('You played Rock last round');
+  });
+
+  it('blames your own pick when your own pick is what did it', () => {
+    expect(cooldownReason('rock', ['rock'], duel, [event({})])).toBe('You played Rock last round');
+  });
+
+  // The headline case: a move you never touched, down because they put it down.
+  it('names the opponent and the card when they inflicted it', () => {
+    const ledger = [event({ move: 'paper', cause: { kind: 'helper', helperId: 'quarantine', mine: false } })];
+    expect(cooldownReason('paper', ['rock'], duel, ledger)).toBe(
+      'Their Quarantine put 2 marks on Paper',
+    );
+  });
+
+  it('names your own card when the marks are your own doing', () => {
+    const ledger = [event({ move: 'robot', cause: { kind: 'helper', helperId: 'feint', mine: true } })];
+    expect(cooldownReason('robot', [], duel, ledger)).toBe('Your Feint put 2 marks on Robot');
+  });
+
+  it('agrees on the singular', () => {
+    const ledger = [event({ move: 'paper', amount: 1, cause: { kind: 'helper', helperId: 'rust', mine: false } })];
+    expect(cooldownReason('paper', [], duel, ledger)).toBe('Their Rust put 1 mark on Paper');
+  });
+
+  it('reads the most recent cause, not the first', () => {
+    const ledger = [
+      event({ round: 0, move: 'paper', cause: { kind: 'helper', helperId: 'rust', mine: false } }),
+      event({ round: 1, move: 'paper', cause: { kind: 'choice' } }),
+    ];
+    expect(cooldownReason('paper', ['paper'], duel, ledger)).toBe('You played Paper last round');
+  });
+
+  // Flywheel taking a mark off is not why the move is still down.
+  it('ignores removals, which explain nothing about a move still on cooldown', () => {
+    const ledger = [
+      event({ move: 'paper', cause: { kind: 'helper', helperId: 'quarantine', mine: false } }),
+      event({ round: 1, move: 'paper', amount: -1, cause: { kind: 'helper', helperId: 'flywheel', mine: true } }),
+    ];
+    expect(cooldownReason('paper', [], duel, ledger)).toBe('Their Quarantine put 2 marks on Paper');
+  });
+
+  it('blames the opening only where the opening is what put the marks there', () => {
+    const ledger = [event({ move: 'robot', amount: 2, cause: { kind: 'opening' } })];
+    expect(cooldownReason('robot', ['rock'], duel, ledger)).toBe('Robot starts the match on cooldown');
+  });
+
+  it('says nothing about a move the ledger has no cause for', () => {
+    expect(cooldownReason('robot', ['rock', 'paper', 'scissors'], duel, [event({})])).toBe(
+      'Robot is on cooldown',
+    );
+  });
+});
+
+describe('backInPhrase (JQ-151)', () => {
+  it('counts turns when nothing can stop the decrement', () => {
+    expect(backInPhrase(2)).toBe('back in 2 turns');
+    expect(backInPhrase(1)).toBe('back in 1 turn');
+  });
+
+  // Freeze stops marks coming off for a round, so "back in 2 turns" becomes wrong
+  // the moment it lands. Loadouts are public, so whether that is even possible is
+  // knowable — and where it is, the sentence states marks instead of promising turns.
+  it('states marks instead of promising turns against a Freeze holder', () => {
+    expect(backInPhrase(2, true)).toBe('2 marks to clear');
+    expect(backInPhrase(1, true)).toBe('1 mark to clear');
+  });
+
+  it('reads Freeze off the loadout rather than guessing', () => {
+    expect(holdsFreeze(['freeze', 'chimera'])).toBe(true);
+    expect(holdsFreeze(['chimera', 'ferrus'])).toBe(false);
+    expect(holdsFreeze(null)).toBe(false);
   });
 });

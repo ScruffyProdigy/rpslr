@@ -675,6 +675,43 @@ button.ghost {
   }
 }
 
+/* An edge a loadout added, and the only curved line on the board.
+   Shape is the channel that says "extra": the ten shared edges are all straight,
+   so a curve reads as an addition before any colour is decoded — which matters
+   because it is drawn in the same two role colours the winning edge uses, and
+   colour alone would make it one more thing to look up. Dashed for the same
+   reason and against the same risk: three channels, none of them load-bearing
+   alone (JQ-151).
+
+   The line width sits between a shared edge and a winning one, so it reads as
+   present rather than as a result. */
+.beat-arrow--added {
+  stroke-width: 3;
+  stroke-opacity: 0.95;
+  stroke-dasharray: 9 5;
+}
+.beat-arrow--added-you {
+  stroke: var(--you);
+}
+.beat-arrow--added-opp {
+  stroke: var(--opp);
+}
+/* The faded state still applies: an edge of theirs off a move they cannot play
+   this round is as dead as any other, and must not read as a live threat. */
+.beat-arrow--added.beat-arrow--opp-off {
+  stroke-opacity: 0.3;
+}
+/* The legend's swatch: the same curve, small. Drawn rather than described so the
+   entry costs one line rather than a sentence explaining what "curved" means. */
+.graph-legend__added {
+  display: inline-block;
+  width: 1.6rem;
+  height: 0.7rem;
+  vertical-align: middle;
+  border-top: 2px dashed var(--you);
+  border-radius: 60% / 100% 100% 0 0;
+}
+
 /* Preview emphasis wins over the faded state; the caption carries the rest. */
 .beat-arrow--preview {
   stroke: var(--you);
@@ -884,6 +921,20 @@ button.ghost {
   background: color-mix(in srgb, var(--opp) 22%, var(--surface-2));
   border: 1px solid color-mix(in srgb, var(--opp) 65%, transparent);
   color: var(--opp);
+}
+/* With a count in it the badge stops being a circle and becomes a pill: at a
+   360px board the circle is ~1.05rem across, which fits an hourglass and nothing
+   else. Widening only when there is a number keeps the duel badge exactly as it
+   was — this is the same "helpers pay for what helpers need" line the numbers
+   themselves are drawn on (JQ-151). */
+.opp-cooldown-mark--counted {
+  width: auto;
+  min-width: clamp(1.05rem, 5.2cqw, 1.35rem);
+  padding: 0 4px;
+  gap: 2px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 .opp-cooldown-mark--legend {
   position: static;

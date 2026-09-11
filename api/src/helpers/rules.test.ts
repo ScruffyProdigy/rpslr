@@ -7,6 +7,8 @@ import {
   INITIAL_DELAYS,
   replayMatch,
   resolveRound,
+  type AttributedMark,
+  type MarkAdjustment,
   type Move,
   type PlayerOutcome,
 } from '../game.js';
@@ -16,6 +18,9 @@ import type { Loadout } from './loadout.js';
 const INERT = 'old-habits';
 
 const load = (id: string): Loadout => [id, INERT] as Loadout;
+
+/** An empty board, for building one up from the ledger. */
+const ZERO: Record<Move, number> = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
 
 const cost = (loadout: Loadout, move: Move, outcome: PlayerOutcome, roundIndex = 2) =>
   rulesFor(loadout).delayOnChoice({ move, outcome, roundIndex });
@@ -32,7 +37,27 @@ const outcome = (
     lossesSoFar: ctx.lossesSoFar ?? 0,
   });
 
-const marks = (
+/**
+ * An adjustment folded back to move → total.
+ *
+ * Since JQ-151 an adjustment is a list of marks each naming the card that caused
+ * it, so the board can say *why* a move is down. Nearly every test here is about
+ * how many marks land and where, not about attribution, so they read the total —
+ * and the ones that are about attribution read the list itself.
+ */
+const totals = (entries: readonly AttributedMark[]): Partial<Record<Move, number>> => {
+  const out: Partial<Record<Move, number>> = {};
+  for (const { move, amount } of entries) out[move] = (out[move] ?? 0) + amount;
+  return out;
+};
+
+/** Both sides of an adjustment or firing effect, as totals. */
+const both = (adj: MarkAdjustment) => ({
+  own: totals(adj.own),
+  opponent: totals(adj.opponent),
+});
+
+const adjust = (
   loadout: Loadout,
   ctx: { own: Move; opponent: Move; outcome: PlayerOutcome; lossesSoFar?: number },
 ) =>
@@ -43,6 +68,11 @@ const marks = (
     roundIndex: 1,
     lossesSoFar: ctx.lossesSoFar ?? 0,
   });
+
+const marks = (
+  loadout: Loadout,
+  ctx: { own: Move; opponent: Move; outcome: PlayerOutcome; lossesSoFar?: number },
+) => both(adjust(loadout, ctx));
 
 describe('duel is the null loadout', () => {
   it('reproduces duel exactly', () => {
@@ -535,11 +565,14 @@ describe('Flywheel — every move on cooldown loses a mark', () => {
     });
 
   it('takes one off each blocked move and skips the clear ones', () => {
-    expect(fire().marks).toEqual({ own: { paper: -1, scissors: -1, robot: -1 }, opponent: {} });
+    expect(both(fire().marks)).toEqual({
+      own: { paper: -1, scissors: -1, robot: -1 },
+      opponent: {},
+    });
   });
 
   it('reaches across to nothing of theirs — it is relief, not denial', () => {
-    expect(fire().marks.opponent).toEqual({});
+    expect(fire().marks.opponent).toEqual([]);
     expect(fire().freezesOpponentDecay).toBe(false);
   });
 });
@@ -561,16 +594,16 @@ describe('Feint — this round\'s marks land on a move you name', () => {
    * the game rather than a rule, and nothing else on the roster leans on it.
    */
   it('credits the played move back and charges the named one instead', () => {
-    expect(fire('robot').marks).toEqual({ own: { rock: -2, robot: 2 }, opponent: {} });
+    expect(both(fire('robot').marks)).toEqual({ own: { rock: -2, robot: 2 }, opponent: {} });
   });
 
   it('does nothing when it names the move being played', () => {
     // Otherwise it would cancel its own credit and read as a free round.
-    expect(fire('rock').marks).toEqual({ own: {}, opponent: {} });
+    expect(both(fire('rock').marks)).toEqual({ own: {}, opponent: {} });
   });
 
   it('never touches their board', () => {
-    expect(fire('robot').marks.opponent).toEqual({});
+    expect(fire('robot').marks.opponent).toEqual([]);
   });
 });
 
@@ -774,7 +807,7 @@ describe('two abilities fired by one seat in one round', () => {
       ownDelays: { rock: 0, paper: 0, scissors: 2, lizard: 2, robot: 0 },
       opponentDelays: { rock: 0, paper: 0, scissors: 2, lizard: 0, robot: 0 },
     });
-    expect(effect.marks).toEqual({ own: { lizard: -1 }, opponent: { scissors: 2 } });
+    expect(both(effect.marks)).toEqual({ own: { lizard: -1 }, opponent: { scissors: 2 } });
   });
 
   it('floors the combined adjustment at zero when the source decremented away', () => {
@@ -880,5 +913,175 @@ describe('Sacrifice', () => {
     const copycat = rulesFor(load('copycat'));
     const { b } = replayMatch([round], firer, copycat);
     expect(b.paper).toBe(1);
+  });
+});
+
+/**
+ * The ledger (JQ-151).
+ *
+ * A mark that does not say where it came from is a mark the board can only guess
+ * about, and in helpers mode the guess is wrong often enough to matter: "You
+ * played Rock last round" is a lie over a Quarantine, a Rust or a Grudge. So
+ * every adjustment names its card, and these hold that naming to the card that
+ * actually produced it rather than to whichever one the loadout happened to list
+ * first.
+ */
+describe('marks name the card that caused them', () => {
+  it('attributes an end-of-round mark to its own card, not to the loadout', () => {
+    expect(adjust(['ferrus', 'grudge'], { own: 'robot', opponent: 'paper', outcome: 'loss', lossesSoFar: 2 }).opponent)
+      .toEqual([
+        { move: 'paper', amount: 1, helperId: 'ferrus' },
+        { move: 'paper', amount: 1, helperId: 'grudge' },
+      ]);
+  });
+
+  it('keeps two cards marking one move as two entries, so neither is hidden', () => {
+    const entries = adjust(['ferrus', 'grudge'], {
+      own: 'robot',
+      opponent: 'paper',
+      outcome: 'loss',
+      lossesSoFar: 2,
+    }).opponent;
+    expect(entries).toHaveLength(2);
+    expect(totals(entries)).toEqual({ paper: 2 });
+  });
+
+  it('attributes a firing to the ability fired', () => {
+    const effect = rulesFor(['quarantine', INERT]).fireEffects({
+      firings: [{ id: 'quarantine', target: 'paper' }],
+      own: 'rock',
+      opponent: 'paper',
+      opponentDelays: { ...INITIAL_DELAYS },
+      ownDelays: { ...INITIAL_DELAYS },
+    });
+    expect(effect.marks.opponent).toEqual([{ move: 'paper', amount: 2, helperId: 'quarantine' }]);
+  });
+
+  it("names Thief on both the mark it lifts and the one it plants", () => {
+    const effect = rulesFor(['thief', INERT]).fireEffects({
+      firings: [{ id: 'thief', source: 'lizard', target: 'scissors' }],
+      own: 'rock',
+      opponent: 'paper',
+      opponentDelays: { ...INITIAL_DELAYS },
+      ownDelays: { rock: 0, paper: 0, scissors: 0, lizard: 2, robot: 0 },
+    });
+    expect(effect.marks.own).toEqual([{ move: 'lizard', amount: -1, helperId: 'thief' }]);
+    expect(effect.marks.opponent).toEqual([{ move: 'scissors', amount: 1, helperId: 'thief' }]);
+  });
+});
+
+describe('replayMatch writes a ledger of why each mark landed', () => {
+  it('records the opening marks a loadout brought, before any round', () => {
+    // Chimera binds lizard at 2; the inert Trinket binds nothing.
+    const { events } = replayMatch([], rulesFor(['chimera', INERT]), DUEL_RULES);
+    expect(events.filter((e) => e.side === 'a')).toEqual([
+      { round: -1, side: 'a', move: 'lizard', amount: 2, cause: { kind: 'opening' } },
+    ]);
+  });
+
+  it('records a played move as a choice, on the seat that played it', () => {
+    const { events } = replayMatch([{ a: 'rock', b: 'paper' }], DUEL_RULES, DUEL_RULES);
+    expect(events.filter((e) => e.round === 0 && e.cause.kind === 'choice')).toEqual([
+      { round: 0, side: 'a', move: 'rock', amount: 2, cause: { kind: 'choice' } },
+      { round: 0, side: 'b', move: 'paper', amount: 2, cause: { kind: 'choice' } },
+    ]);
+  });
+
+  it("marks a helper's reach across the table as theirs, not the holder's", () => {
+    // A plays Robot; Ferrus puts a mark on B's Paper. From B's board that mark is
+    // the opponent's doing, which is exactly what `mine: false` records — and what
+    // lets the board say who did it rather than blaming B's own last pick.
+    const { events } = replayMatch(
+      [{ a: 'robot', b: 'paper' }],
+      rulesFor(['ferrus', INERT]),
+      DUEL_RULES,
+    );
+    expect(events).toContainEqual({
+      round: 0,
+      side: 'b',
+      move: 'paper',
+      amount: 1,
+      cause: { kind: 'helper', helperId: 'ferrus', mine: false },
+    });
+  });
+
+  it('records a mark from your own card as yours', () => {
+    // Feint moves this round's cost onto a move you name: both entries land on the
+    // firer's own board, so both are `mine`.
+    const { events } = replayMatch(
+      [{ a: 'rock', b: 'paper', firedA: [{ id: 'feint', target: 'robot' }] }],
+      rulesFor(['feint', INERT]),
+      DUEL_RULES,
+    );
+    const feint = events.filter(
+      (e) => e.cause.kind === 'helper' && e.cause.helperId === 'feint',
+    );
+    expect(feint).toEqual([
+      { round: 0, side: 'a', move: 'rock', amount: -2, cause: { kind: 'helper', helperId: 'feint', mine: true } },
+      { round: 0, side: 'a', move: 'robot', amount: 2, cause: { kind: 'helper', helperId: 'feint', mine: true } },
+    ]);
+  });
+
+  it('leaves a duel with nothing but openings and choices to explain', () => {
+    const { events } = replayMatch(
+      [{ a: 'rock', b: 'paper' }, { a: 'scissors', b: 'lizard' }],
+      DUEL_RULES,
+      DUEL_RULES,
+    );
+    expect(new Set(events.map((e) => e.cause.kind))).toEqual(new Set(['opening', 'choice']));
+  });
+
+  it('records Sacrifice wiping its owner’s board as a removal it caused', () => {
+    const { events } = replayMatch(
+      [
+        { a: 'rock', b: 'paper' },
+        { a: 'scissors', b: 'lizard', firedA: [{ id: 'sacrifice' }] },
+      ],
+      rulesFor(['sacrifice', INERT]),
+      DUEL_RULES,
+    );
+    const wipe = events.filter((e) => e.cause.kind === 'sacrifice');
+    expect(wipe.length).toBeGreaterThan(0);
+    expect(wipe.every((e) => e.side === 'a' && e.amount < 0)).toBe(true);
+  });
+
+  /**
+   * Completeness: nothing lands on a board without the ledger saying so.
+   *
+   * Decay is the one change deliberately left out of it — it happens to every move
+   * every round and explains nothing about a particular one — so replaying decay
+   * alongside the ledger has to reproduce the engine's own board exactly. A mark
+   * added by a path that forgot to record itself shows up here as a mismatch.
+   *
+   * The fixture holds no subtractive card and no Freeze, so no `Math.max(0, …)`
+   * fires and the two arithmetics are comparable term by term.
+   */
+  it('accounts for every mark on the board, decay aside', () => {
+    const rulesA = rulesFor(['ferrus', 'grudge']);
+    const rulesB = rulesFor(['chimera', 'echo-chamber']);
+    const rounds = [
+      { a: 'robot' as const, b: 'paper' as const },
+      { a: 'rock' as const, b: 'rock' as const },
+      { a: 'robot' as const, b: 'scissors' as const },
+    ];
+    const { a, b, events } = replayMatch(rounds, rulesA, rulesB);
+
+    const rebuilt = { a: { ...ZERO }, b: { ...ZERO } };
+    const at = (round: number) =>
+      events.filter((e) => e.round === round).forEach((e) => {
+        rebuilt[e.side][e.move] += e.amount;
+      });
+    at(-1);
+    rounds.forEach((_, i) => {
+      for (const side of ['a', 'b'] as const) {
+        for (const m of Object.keys(ZERO) as Move[]) {
+          rebuilt[side][m] = Math.max(0, rebuilt[side][m] - 1);
+        }
+      }
+      at(i);
+    });
+
+    expect(rebuilt.a).toEqual(a);
+    expect(rebuilt.b).toEqual(b);
   });
 });

@@ -138,7 +138,9 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
   // scoreline, the winning arrow and the commentary all read its outcome, and
   // any of them would answer the question before it was asked.
   const settled = !awaiting && playback.beat !== 'reveal';
-  const edge = settled ? winningEdgeOf(frame.a.move, frame.b.move) : null;
+  const edge = settled
+    ? winningEdgeOf(frame.a.move, frame.b.move, { mine: frame.a.beats, theirs: frame.b.beats })
+    : null;
   // A round with a missing pick is skipped by buildReplay, so a round number is
   // not an index — look it up rather than assume they line up.
   const jumpToRound = (round: number) => {
@@ -230,6 +232,11 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           round={frame.round}
           myRecentMoves={frame.a.recentMoves}
           myOpeningDelays={frame.a.openingDelays}
+          myBeats={frame.a.beats}
+          oppBeats={frame.b.beats}
+          myLedger={frame.a.ledger}
+          showOppCooldownCounts={replay.hasLoadouts}
+          oppCanFreeze={frame.b.canFreeze}
           onPlay={(move) => {
             playAlong.call(frame.round, move);
             playback.resume();

@@ -1,6 +1,6 @@
 import type { MatchEndReason, MatchState, Move, RoundResult, Seat } from './api';
 import { seatIdentity, type Identity } from './lib/seatProfile';
-import { ALL_MOVES, threatsTo } from './moves';
+import { ALL_MOVES, holdsFreeze, threatsTo, type BeatsMap } from './moves';
 import {
   boardsThroughMatch,
   playedRoundsFrom,
@@ -9,7 +9,7 @@ import {
   type Board,
   type ReconstructionSeat,
 } from '@game/replayBoard';
-import type { DelayMap } from '@game/game';
+import { replayMatch, type DelayMap, type MarkEvent } from '@game/game';
 
 /**
  * Rebuilding a finished match, round by round, from nothing but what
@@ -58,6 +58,19 @@ export interface ReplaySide {
   recentMoves: Move[];
   /** The server chose this move because the player ran out of time. */
   autoPicked: boolean;
+  /**
+   * This side's own "what beats what". Per-side because a helper may grant one
+   * player an edge the other does not have (JQ-151).
+   */
+  beats: BeatsMap;
+  /**
+   * Why this side's marks are where they are, entering the round — every mark
+   * event up to and including the previous round. Read to explain a cooldown that
+   * the player's own last two picks cannot account for.
+   */
+  ledger: readonly MarkEvent[];
+  /** Whether this side can stop the *other* side's marks coming off. */
+  canFreeze: boolean;
 }
 
 export interface ReplayFrame {
@@ -135,8 +148,16 @@ export function buildReplay(state: MatchState): Replay {
   const b = reconstructionSeat(seatB);
 
   const rounds = playedRoundsFrom(state.results, state.abilityFirings ?? [], a, b);
-  const boards = boardsThroughMatch(rounds, ...rulesForSeats(seatA, seatB));
+  const [rulesA, rulesB] = rulesForSeats(seatA, seatB);
+  const boards = boardsThroughMatch(rounds, rulesA, rulesB);
   const [opening] = boards;
+  // One walk for the whole match; each frame takes the prefix that produced the
+  // board it was entered on. `boardsThroughMatch` re-walks per prefix for the
+  // marks, but the ledger is a list rather than a fold, so slicing is enough.
+  const { events } = replayMatch(rounds, rulesA, rulesB);
+  const ledgerBefore = (side: 'a' | 'b', index: number) =>
+    events.filter((e) => e.side === side && e.round < index);
+  const canFreeze = { a: holdsFreeze(a.loadout), b: holdsFreeze(b.loadout) };
 
   // The rounds the boards were built from, in the same order, so a round the
   // reconstruction discarded for want of a pick is discarded from the strip too
@@ -173,11 +194,17 @@ export function buildReplay(state: MatchState): Replay {
         delaysBefore: before.a,
         delaysAfter: after.a,
         openingDelays: opening.a,
-        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.b).safe),
+        // Their graph decides what can beat A, and a helper may have handed them
+        // an edge the shared one does not have — so a move A reads as safe has to
+        // be safe against the graph B is actually playing (JQ-151).
+        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.b, rulesB.beats).safe),
         score: scoreA,
         scoreBefore: beforeA,
         recentMoves: [...playedA].reverse(),
         autoPicked: autoPicked.includes(a.playerId),
+        beats: rulesA.beats,
+        ledger: ledgerBefore('a', index),
+        canFreeze: canFreeze.a,
       },
       b: {
         seatKey: seatB.seatKey,
@@ -186,11 +213,14 @@ export function buildReplay(state: MatchState): Replay {
         delaysBefore: before.b,
         delaysAfter: after.b,
         openingDelays: opening.b,
-        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.a).safe),
+        safeMoves: ALL_MOVES.filter((m) => threatsTo(m, before.a, rulesA.beats).safe),
         score: scoreB,
         scoreBefore: beforeB,
         recentMoves: [...playedB].reverse(),
         autoPicked: autoPicked.includes(b.playerId),
+        beats: rulesB.beats,
+        ledger: ledgerBefore('b', index),
+        canFreeze: canFreeze.b,
       },
     };
 

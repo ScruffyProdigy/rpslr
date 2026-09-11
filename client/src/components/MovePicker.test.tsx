@@ -5,7 +5,8 @@ import type { DelayMap } from '@game/game';
 import { MovePicker } from './MovePicker';
 import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
-import { threatsTo } from '../moves';
+import { SHARED_BEATS, threatsTo, type BeatsMap } from '../moves';
+import type { MarkEvent } from '@game/game';
 
 /** What a duel opens on; every fixture here is a duel unless it says otherwise. */
 const DUEL_OPENING: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
@@ -21,8 +22,13 @@ function renderPicker(
     myRecentMoves?: Move[];
     myOpeningDelays?: DelayMap;
     onPlay?: (m: Move) => void;
-    winningEdge?: { from: Move; to: Move; role: 'you' | 'opp' } | null;
+    winningEdge?: { from: Move; to: Move; role: 'you' | 'opp'; added: boolean } | null;
     secondsLeft?: number | null;
+    myBeats?: BeatsMap;
+    oppBeats?: BeatsMap;
+    myLedger?: readonly MarkEvent[];
+    showOppCooldownCounts?: boolean;
+    oppCanFreeze?: boolean;
   } = {},
 ) {
   const onPlay = over.onPlay ?? vi.fn();
@@ -39,6 +45,11 @@ function renderPicker(
       onPlay={onPlay}
       secondsLeft={over.secondsLeft ?? null}
       winningEdge={over.winningEdge ?? null}
+      myBeats={over.myBeats ?? SHARED_BEATS}
+      oppBeats={over.oppBeats ?? SHARED_BEATS}
+      myLedger={over.myLedger ?? []}
+      showOppCooldownCounts={over.showOppCooldownCounts ?? false}
+      oppCanFreeze={over.oppCanFreeze ?? false}
     />,
   );
   return { ...utils, onPlay };
@@ -358,7 +369,7 @@ describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
 describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
   it('lights only the arrow the round was won on', () => {
     const { container } = renderPicker({
-      winningEdge: { from: 'rock', to: 'scissors', role: 'you' },
+      winningEdge: { from: 'rock', to: 'scissors', role: 'you', added: false },
     });
     expect(arrow(container, 'rock', 'scissors')).toHaveClass('beat-arrow--won');
     expect(container.querySelectorAll('.beat-arrow--won')).toHaveLength(1);
@@ -366,7 +377,7 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
 
   it('carries the winner’s role so the arrow takes their colour', () => {
     const { container } = renderPicker({
-      winningEdge: { from: 'robot', to: 'rock', role: 'opp' },
+      winningEdge: { from: 'robot', to: 'rock', role: 'opp', added: false },
     });
     expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--won-opp');
   });
@@ -376,7 +387,7 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
   it('outranks the opponent-cooldown fade', () => {
     const { container } = renderPicker({
       oppDelays: { robot: 2 },
-      winningEdge: { from: 'robot', to: 'rock', role: 'opp' },
+      winningEdge: { from: 'robot', to: 'rock', role: 'opp', added: false },
     });
     const won = arrow(container, 'robot', 'rock');
     expect(won).toHaveClass('beat-arrow--won');
@@ -392,7 +403,7 @@ describe('<MovePicker> winning arrow replay (JQ 3.1)', () => {
   // The rest of the graph steps back for the beat — but only for that beat.
   it('fades the rest of the graph only while the winning edge is lit', () => {
     const { container, rerender } = renderPicker({
-      winningEdge: { from: 'rock', to: 'scissors', role: 'you' },
+      winningEdge: { from: 'rock', to: 'scissors', role: 'you', added: false },
     });
     expect(container.querySelector('.move-arrows--strike')).toBeInTheDocument();
     rerender(
@@ -770,5 +781,215 @@ describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
     expect(container.querySelector('.picker-center--waiting')).toBeInTheDocument();
     expect(container.querySelector('.picker-center__forced')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Lock in/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The sixth edge, and the numbers on their marks (JQ-151).
+ *
+ * The comprehension risk this ticket names is that a conditional graph makes every
+ * arrow ask "whose?". These hold the answer to that question visible: the extra
+ * edge is drawn, attributed, and drawn on *both* screens — the opponent has to be
+ * able to see the rule they are playing against.
+ */
+const CHIMERA_BEATS = { ...SHARED_BEATS, lizard: ['robot', 'paper', 'scissors'] as Move[] };
+
+/** The `<path>` for an added edge, e.g. lizard → scissors. */
+function addedArrow(container: HTMLElement, from: Move, to: Move): SVGPathElement | null {
+  return container.querySelector<SVGPathElement>(
+    `path[data-added-from="${from}"][data-added-to="${to}"]`,
+  );
+}
+
+describe('an edge a loadout added', () => {
+  it('draws none at all in a duel, leaving the ten shared edges alone', () => {
+    const { container } = renderPicker();
+    expect(container.querySelectorAll('path[data-added-from]')).toHaveLength(0);
+    expect(container.querySelectorAll('line[data-from]')).toHaveLength(10);
+  });
+
+  it('draws the owner’s extra edge in their own role colour', () => {
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
+    const edge = addedArrow(container, 'lizard', 'scissors');
+    expect(edge).not.toBeNull();
+    expect(edge).toHaveClass('beat-arrow--added', 'beat-arrow--added-you');
+    expect(edge?.getAttribute('marker-end')).toBe('url(#rps-arrow-you)');
+  });
+
+  // The whole point of the ticket: a rule you are playing against is no use to you
+  // unrendered. It appears on the opponent's screen too, in *their* colour.
+  it('draws it on the opponent’s screen as well, marked as theirs', () => {
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS });
+    const edge = addedArrow(container, 'lizard', 'scissors');
+    expect(edge).toHaveClass('beat-arrow--added-opp');
+    expect(edge?.getAttribute('marker-end')).toBe('url(#rps-arrow-opp)');
+  });
+
+  // Straight, it would land exactly on `scissors → lizard` and the board would
+  // show one line with a head at each end — "these two beat each other".
+  it('curves, so it does not sit on the arrow pointing the other way', () => {
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
+    expect(addedArrow(container, 'lizard', 'scissors')?.getAttribute('d')).toMatch(/^M .* Q .*/);
+    // And the shared edge it reverses is still there, still straight.
+    expect(arrow(container, 'scissors', 'lizard')).toBeTruthy();
+  });
+
+  it('fades an edge of theirs off a move they cannot play this round', () => {
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS, oppDelays: { lizard: 2 } });
+    expect(addedArrow(container, 'lizard', 'scissors')).toHaveClass('beat-arrow--opp-off');
+  });
+
+  it('lights the curve when the round was won on it', () => {
+    const { container } = renderPicker({
+      myBeats: CHIMERA_BEATS,
+      winningEdge: { from: 'lizard', to: 'scissors', role: 'you', added: true },
+    });
+    expect(addedArrow(container, 'lizard', 'scissors')).toHaveClass('beat-arrow--won');
+  });
+
+  it('previews the extra target along with the two shared ones', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
+    await user.click(screen.getByRole('button', { name: /^Lizard/ }));
+    for (const target of ['Paper', 'Robot', 'Scissors']) {
+      expect(screen.getByRole('button', { name: new RegExp(`^${target}`) })).toHaveClass(
+        'move-btn--target',
+      );
+    }
+    expect(center(container)).toHaveTextContent('Lizard eats Paper, poisons Robot & beats Scissors');
+  });
+
+  it('says the extra edge out loud for anyone who cannot see it', () => {
+    renderPicker({ myBeats: CHIMERA_BEATS });
+    const graph = screen.getByRole('region', { name: 'What beats what' });
+    expect(within(graph).getByText('Your Lizard also beats Scissors this match')).toBeTruthy();
+  });
+});
+
+describe('the legend gains at most one entry', () => {
+  const legend = (container: HTMLElement) =>
+    container.querySelector('.graph-legend') as HTMLElement;
+
+  it('stays at two entries in a duel', () => {
+    const { container } = renderPicker();
+    expect(legend(container).querySelector('.graph-legend__added')).toBeNull();
+    expect(legend(container)).not.toHaveTextContent('curved');
+  });
+
+  it('gains exactly one when a loadout added an edge', () => {
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
+    expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
+    expect(legend(container)).toHaveTextContent('curved = an extra rule');
+  });
+
+  // Two added edges, one each — still one legend entry, because the entry explains
+  // the *shape*, and the colour is the channel that says whose.
+  it('does not gain a second when both players have one', () => {
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS, oppBeats: CHIMERA_BEATS });
+    expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
+  });
+
+  /**
+   * `TEXT.legend` in boardFit.test.ts is a Chromium measurement of this copy at two
+   * lines. jsdom does no layout, so the guard here is the copy itself: growing it
+   * means re-measuring that constant, and a third line pushes the board off a
+   * 360px screen.
+   */
+  it('holds the measured copy, so a third line cannot arrive unnoticed', () => {
+    const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
+    expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'N your cooldown · opponent cooldown (faded arrows = attacks they can’t make) · curved = an extra rule',
+    );
+  });
+});
+
+describe('opponent cooldowns carry their count in helpers mode', () => {
+  const badge = (container: HTMLElement) =>
+    container.querySelector('.opp-cooldown-mark') as HTMLElement;
+
+  // In a duel their marks are only ever (1, 2), so a number would restate which of
+  // two moves they played most recently — which the history strip already says.
+  it('shows the marker alone in a duel', () => {
+    const { container } = renderPicker({ oppDelays: { rock: 2 } });
+    expect(badge(container)).not.toHaveClass('opp-cooldown-mark--counted');
+    expect(badge(container).textContent?.trim()).toBe('');
+  });
+
+  it('shows the number once helpers are in play', () => {
+    const { container } = renderPicker({ oppDelays: { rock: 4 }, showOppCooldownCounts: true });
+    expect(badge(container)).toHaveClass('opp-cooldown-mark--counted');
+    expect(badge(container).textContent).toContain('4');
+  });
+
+  // The button's own label has always carried the count; turning the number on is
+  // about the sighted board catching up with what a screen reader already got.
+  it('leaves the spoken label saying the same thing either way', () => {
+    for (const showOppCooldownCounts of [false, true]) {
+      const { unmount } = renderPicker({ oppDelays: { rock: 4 }, showOppCooldownCounts });
+      expect(screen.getByRole('button', { name: /opponent cooldown, 4 turns/ })).toBeTruthy();
+      unmount();
+    }
+  });
+});
+
+describe('a cooldown says what actually caused it', () => {
+  const why = (container: HTMLElement) =>
+    container.querySelector('.picker-center__why')?.textContent?.replace(/\s+/g, ' ').trim();
+
+  it('blames your own pick when that is what did it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({ myDelays: { rock: 2 }, myRecentMoves: ['rock'] });
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(why(container)).toBe('You played Rock last round — back in 2 turns');
+  });
+
+  // The lie this ticket exists to remove: Paper is down because they put it down,
+  // and "You played Paper last round" over the top of that is confidently wrong.
+  it('names the opponent and their card when they inflicted it', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({
+      myDelays: { paper: 2 },
+      myRecentMoves: ['rock'],
+      myLedger: [
+        {
+          round: 0,
+          side: 'a',
+          move: 'paper',
+          amount: 2,
+          cause: { kind: 'helper', helperId: 'quarantine', mine: false },
+        },
+      ],
+    });
+    await user.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(why(container)).toBe('Their Quarantine put 2 marks on Paper — back in 2 turns');
+  });
+
+  // Freeze stops marks coming off, so nothing promises a turn count against a
+  // loadout that holds it.
+  it('stops promising turns when the opponent can freeze the decrement', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPicker({
+      myDelays: { rock: 2 },
+      myRecentMoves: ['rock'],
+      oppCanFreeze: true,
+    });
+    await user.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(why(container)).toBe('You played Rock last round — 2 marks to clear');
+  });
+
+  it('carries the same cause into the spoken label', () => {
+    renderPicker({
+      myDelays: { paper: 2 },
+      myLedger: [
+        {
+          round: 0,
+          side: 'a',
+          move: 'paper',
+          amount: 2,
+          cause: { kind: 'helper', helperId: 'rust', mine: false },
+        },
+      ],
+    });
+    expect(screen.getByRole('button', { name: /their rust put 2 marks on paper/ })).toBeTruthy();
   });
 });
