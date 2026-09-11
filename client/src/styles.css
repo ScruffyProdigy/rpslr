@@ -1859,6 +1859,13 @@ ul.history-strip {
   color: var(--muted);
   font-style: italic;
 }
+/* The slot is in the DOM before there is a verb line to put in it, so the line
+   announces as a change rather than as a new region (JQ-194). `:empty` rather
+   than `display: none`, which would take it out of the accessibility tree and
+   undo the whole point; with no content and no margin it occupies nothing. */
+.history-strip__detail:empty {
+  margin: 0;
+}
 .history-full {
   margin-top: 12px;
 }

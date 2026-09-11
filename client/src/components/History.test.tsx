@@ -72,12 +72,20 @@ describe('<History> compact strip (JQ 3.4)', () => {
   it('reveals the verb line when a chip is tapped', async () => {
     const user = userEvent.setup();
     const { container } = renderHistory();
-    expect(container.querySelector('.history-strip__detail')).not.toBeInTheDocument();
+    // The slot is here before the tap and stays after it, holding nothing: it
+    // is a live region, and one that arrives with its content already in it is
+    // the case screen readers are least reliable about (JQ-157, JQ-194). Empty
+    // it costs no height — `:empty` drops its margin.
+    const detail = () => container.querySelector('.history-strip__detail') as HTMLElement;
+    expect(detail()).toBeInTheDocument();
+    expect(detail()).toBeEmptyDOMElement();
+
     await user.click(screen.getByRole('button', { name: /^Round 1:/ }));
-    const detail = container.querySelector('.history-strip__detail') as HTMLElement;
-    expect(detail).toHaveTextContent('Paper disproves Robot');
+    expect(detail()).toHaveTextContent('Paper disproves Robot');
+
     await user.click(screen.getByRole('button', { name: /^Round 1:/ }));
-    expect(container.querySelector('.history-strip__detail')).not.toBeInTheDocument();
+    expect(detail()).toBeInTheDocument();
+    expect(detail()).toBeEmptyDOMElement();
   });
 
   it('keeps the full list behind a disclosure', () => {

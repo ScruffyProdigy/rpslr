@@ -56,6 +56,20 @@ in-memory repository), the HTTP routes (via supertest), the **WebSocket
 transport** (a real server with two clients verifying a move broadcasts to
 subscribers), and the client (env/ws-URL config, move helpers, a component render).
 
+Four client suites are ledgers rather than ordinary tests: they read
+`styles.css` and the shipped components off disk, because jsdom has no cascade
+and cannot see a media query, a composite or a container query at all. They are
+also where the reasoning behind each decision is written down, so read the one
+that covers what you are about to change:
+
+| Suite | Holds |
+| --- | --- |
+| `boardFit.test.ts` | The board's height and width budget, and the ledger of which board states are not carried by colour alone |
+| `contrast.test.ts` | Measured contrast ratios — composited, not read off the tokens |
+| `designSystem.test.ts` | Every colour is a named token; every glyph is drawn |
+| `liveRegions.test.ts` | Every live region in the client, and why each one is the shape it is |
+| `motionSafety.test.ts` | `prefers-reduced-motion` may remove motion, never meaning |
+
 ## Real-time transport
 
 Live gameplay uses a WebSocket at `<API>/api/v1/ws` (the client derives the URL

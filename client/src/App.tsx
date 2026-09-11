@@ -896,29 +896,28 @@ export function Board({
           </p>
           {/* The slot is always here even when empty. The pentagon is the tap
               surface, so anything that appears above it mid-decision would
-              shift the board under the player's thumb. */}
-          <div className="board-status">
+              shift the board under the player's thumb.
+
+              Which also makes it the right thing to carry the live region, and
+              the reason it does (JQ-194). Each hint below is rendered only
+              while its condition holds, so a region on the hint itself is
+              mounted in the same tick as its content — the case JQ-157 found
+              screen readers are least reliable about, and the one the picker's
+              centre slot was restructured to avoid. The permanent wrapper has
+              no such tick: it is there before there is anything to say, so the
+              hint arriving is a change to a region that already exists. */}
+          <div className="board-status" role="status">
             {opponentAway && !revealingNow && (
-              <p className="hint" role="status">
-                Waiting for {opponent.name} to reconnect…
-              </p>
+              <p className="hint">Waiting for {opponent.name} to reconnect…</p>
             )}
             {!youMovedThisRound && opponentLockedIn && !revealingNow && (
-              <p className="hint opponent-ready" role="status">
-                Opponent has locked in — pick your move!
-              </p>
+              <p className="hint opponent-ready">Opponent has locked in — pick your move!</p>
             )}
-            {resolvingWithoutMe && (
-              <p className="hint" role="status">
-                Both locked in — the round is resolving.
-              </p>
-            )}
+            {resolvingWithoutMe && <p className="hint">Both locked in — the round is resolving.</p>}
             {/* Only once the sheet is gone: while it is up it is saying this
                 already, and a hint underneath a modal is talking to nobody. */}
             {beforeRoundOne && !revealLoadouts && (
-              <p className="hint" role="status">
-                Round 1 starts once you have both read the loadouts.
-              </p>
+              <p className="hint">Round 1 starts once you have both read the loadouts.</p>
             )}
           </div>
           <MovePicker
