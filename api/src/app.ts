@@ -21,6 +21,13 @@ import {
   type GameService,
 } from './service.js';
 import { registerReplayCardRoutes } from './replayCard/routes.js';
+import {
+  clearSeatBindingCookie,
+  decodeSeatBinding,
+  readCookie,
+  seatBindingCookie,
+  SEAT_BINDING_COOKIE,
+} from './seatBinding.js';
 import { createTokenVerifier, TokenError, type TokenVerifier } from './tokens.js';
 
 /**
@@ -176,7 +183,24 @@ export function createApp(
           claims,
           req.body?.playerName,
         );
-        return res.status(201).json(result);
+        // Recovery path 1: the game writes down browser → seat on its own
+        // origin, so a refresh or a tab crash comes back here with no token and
+        // no Lobby round trip. See `GET /resume` below.
+        res.setHeader(
+          'Set-Cookie',
+          seatBindingCookie(
+            {
+              externalMatchId: claims.externalMatchId,
+              seatKey: result.you.seatKey,
+              lobbyUserId: claims.lobbyUserId,
+              playerId: result.you.playerId,
+            },
+            { secure: config.cookieSecure },
+          ),
+        );
+        // 200 for a re-claim, 201 for a first sitting: the player who already
+        // holds this seat is reconnecting, and nothing was created for them.
+        return res.status(result.reclaimed ? 200 : 201).json(result);
       }
 
       if (config.requireLobbyAuth) {
@@ -197,7 +221,34 @@ export function createApp(
         name: playerName?.trim() || 'Challenger',
         lobbyUserId: lobbyUserId ?? null,
       });
-      return res.status(201).json(result);
+      return res.status(result.reclaimed ? 200 : 201).json(result);
+    }),
+  );
+
+  // Recovery path 1: resume this browser's seat from the game's own binding.
+  //
+  // No token, no Lobby request, nothing but a cookie this API set on its own
+  // origin — which is the point: it is the path that still works when Lobby is
+  // unreachable or the player's Lobby session is gone. The other half (the
+  // Rejoin button) is Lobby's, and the two fail independently on purpose.
+  //
+  // The binding names a seat; the match decides. A cookie naming a finished
+  // match, or a seat someone else now holds, resumes nothing and is cleared, so
+  // the browser stops presenting a binding that can never work again.
+  //
+  // @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+  api.get(
+    '/resume',
+    asyncHandler(async (req: Request, res: Response) => {
+      const binding = decodeSeatBinding(readCookie(req.header('cookie'), SEAT_BINDING_COOKIE));
+      if (!binding) return res.status(404).json({ error: 'no seat binding' });
+
+      const result = await service.resumeFromBinding(binding);
+      if (!result) {
+        res.setHeader('Set-Cookie', clearSeatBindingCookie({ secure: config.cookieSecure }));
+        return res.status(404).json({ error: 'no resumable seat' });
+      }
+      return res.json(result);
     }),
   );
 

@@ -34,6 +34,20 @@ export interface ClaimSeatInput {
 }
 
 /**
+ * The outcome of a claim. `reclaimed` is the whole re-claim rule in one flag:
+ * the player already in this seat coming back is a reconnect, not a conflict,
+ * and the transport turns it into a `200` where a first claim is a `201`.
+ *
+ * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+ */
+export interface ClaimSeatResult {
+  seat: Seat;
+  player: SeatPlayer;
+  /** True when the claim returned a seat this player already held. */
+  reclaimed: boolean;
+}
+
+/**
  * Storage abstraction for the generalized match/seat model. A Postgres
  * implementation backs production and `dev.sh`; an in-memory implementation
  * backs unit tests and a standalone fallback.
@@ -47,7 +61,7 @@ export interface GameRepository {
   ): Promise<void>;
   listSeats(matchId: string): Promise<Seat[]>;
   /** Idempotent per (matchId, lobbyUserId): re-claiming returns the existing seat. */
-  claimSeat(input: ClaimSeatInput): Promise<{ seat: Seat; player: SeatPlayer }>;
+  claimSeat(input: ClaimSeatInput): Promise<ClaimSeatResult>;
   setMatchStatus(matchId: string, status: MatchStatus): Promise<void>;
   setMatchProgress(matchId: string, currentRound: number, status: MatchStatus): Promise<void>;
   /** Put a phase on the clock, or clear it by passing nulls. */

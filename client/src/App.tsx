@@ -216,6 +216,15 @@ function Game({
   const [lockedMove, setLockedMove] = useState<Move | null>(null);
   const socketRef = useRef<MatchSocket | null>(null);
   const claimedRef = useRef(false);
+  const resumedRef = useRef(false);
+  /**
+   * Recovery path 1 is in flight: no token in the URL, so we are asking the
+   * game whether this browser already holds a seat. Nothing is rendered while
+   * it settles — a returning player would otherwise see the standalone lobby
+   * flash past on the way to their own board, and a first-time visitor would
+   * see "Joining your match…" for a match that does not exist.
+   */
+  const [resuming, setResuming] = useState(!lobbyLink.token);
 
   const enterMatch = useCallback(
     (result: { state: MatchState; you: { playerId: string; seatKey: string } }) => {
@@ -242,6 +251,31 @@ function Game({
       .then(enterMatch)
       .catch((err) => setError(err.message))
       .finally(() => setBusy(false));
+  }, [enterMatch]);
+
+  /**
+   * Recovery path 1: pick our own seat back up from the game's own origin.
+   *
+   * A refresh, the back button, or a tab that crashed arrives with no `?token=`,
+   * and the game wrote down which seat this browser holds when it claimed. No
+   * Lobby request is involved, which is the point — this is the path that still
+   * works when Lobby is unreachable or the player's Lobby session is gone.
+   *
+   * A failure here is not an error worth showing: "nothing to resume" is the
+   * ordinary answer for anyone arriving for the first time.
+   *
+   * @see docs/lobby-protocol-handoff.md#reconnecting-a-player
+   */
+  useEffect(() => {
+    // The token path claims instead, and lands on the re-claim rule.
+    if (lobbyLink.token) return;
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    api
+      .resume()
+      .then(enterMatch)
+      .catch(() => {})
+      .finally(() => setResuming(false));
   }, [enterMatch]);
 
   // Live updates over WebSocket (replaces polling). Opens once we're in a match.
@@ -410,6 +444,9 @@ function Game({
   if (claiming) {
     return <ClaimScreen error={error} lobbyReturnUrl={lobbyReturnUrl} />;
   }
+
+  // One request long, and only before anything has been shown. See `resuming`.
+  if (resuming && phase === 'lobby') return null;
 
   if (phase === 'lobby') {
     return <Lobby busy={busy} error={error} onCreate={handleCreate} onJoin={handleJoin} />;
@@ -631,6 +668,10 @@ export function Board({
   const submitted =
     state.submittedPlayerIds ?? Object.keys(state.currentRoundMoves ?? {});
   const opponentLockedIn = submitted.some((id) => id !== myPlayerId);
+  // Their seat is held while they are away; the round is simply waiting on
+  // them. Not worth saying once they have locked in — the round is not waiting
+  // on a player whose move is already committed.
+  const opponentAway = oppSeat?.player?.connected === false && !opponentLockedIn;
   // Lobby players never see the create card, so round 1 is the only chance to
   // tell them the rules. Before the opponent arrives the how-to-play panels
   // say all of this and more, so the one-liner would only repeat them.
@@ -741,6 +782,11 @@ export function Board({
               surface, so anything that appears above it mid-decision would
               shift the board under the player's thumb. */}
           <div className="board-status">
+            {opponentAway && !revealingNow && (
+              <p className="hint" role="status">
+                Waiting for {opponent.name} to reconnect…
+              </p>
+            )}
             {!youMovedThisRound && opponentLockedIn && !revealingNow && (
               <p className="hint opponent-ready" role="status">
                 Opponent has locked in — pick your move!
@@ -915,6 +961,9 @@ function SeatCard({
   const reserved = Boolean(seat.reservedForLobbyUser);
   const waiting = !seated && reserved;
   const open = !seated && !reserved;
+  // Only an explicit `false` means away: a player on the REST path holds no
+  // socket, and drawing them as gone on that would be a lie about a live seat.
+  const away = seat.player?.connected === false;
   const wins = seat.player?.score ?? 0;
   const identity = seatIdentity(seat, open ? 'Open seat' : mine ? 'You' : 'Opponent');
 
@@ -944,6 +993,9 @@ function SeatCard({
         </span>
         <span className="player-name">{identity.name}</span>
         {waiting && <span className="player-status">on their way</span>}
+        {/* Their seat is held, not forfeited — say so rather than leaving the
+            other player staring at a board that has silently stopped. */}
+        {away && !waiting && <span className="player-status">reconnecting…</span>}
         <WinProgress wins={wins} needed={needed} justWon={justWon} />
       </div>
     </>
