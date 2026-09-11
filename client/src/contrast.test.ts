@@ -216,3 +216,80 @@ describe('text on the board clears 4.5:1 (JQ-192)', () => {
     expect(colour(declaration('.board', 'background'))).toEqual(CARD);
   });
 });
+
+/* ---- 1.4.11: non-text ----------------------------------------------------- */
+
+describe("the board's graphics clear 3:1 (JQ-193)", () => {
+  const CARD = token('--card');
+  /** The seat card, which is what the win pips are drawn on. */
+  const SEAT = colour(declaration('.player', 'background'));
+
+  /** A stroke at its `stroke-opacity`, composited onto the board. */
+  function stroke(selector: string, backdrop = CARD) {
+    return composite(
+      colour(declaration(selector, 'stroke')),
+      backdrop,
+      Number(declaration(selector, 'stroke-opacity')),
+    );
+  }
+
+  /** A rule's border colour, whether it is declared long-hand or in the shorthand. */
+  function borderColour(selector: string, backdrop: Rgb): Rgb {
+    const value = declares(selector, 'border-color')
+      ? declaration(selector, 'border-color')
+      : declaration(selector, 'border').replace(/^[\d.]+px\s+\w+\s+/, '');
+    return colour(value, backdrop);
+  }
+
+  it.each([
+    // Fixed by this ticket, with what it measured before for the next reader.
+    ['the move button, the tap target itself — was 1.73:1', '.move-btn', CARD],
+    ['a move on cooldown, still focusable — was 1.48:1', '.move-btn--cooldown', CARD],
+    ['an unfilled win pip, the only mark a round-not-won gets — was 1.91:1', '.win-pip.empty', SEAT],
+    // Already passing. Recorded so the next audit starts from a baseline
+    // instead of deriving one again.
+    ['the move you are inspecting', '.move-btn--preview', CARD],
+    ['one you cannot play, inspected', '.move-btn--cooldown.move-btn--preview', CARD],
+    ['the move you locked in', '.move-btn--selected', CARD],
+    ['a move your preview beats', '.move-btn--target', CARD],
+    ['a move the floor puts on offer anyway', '.move-btn--forced', CARD],
+    ['a filled win pip', '.win-pip.filled', SEAT],
+  ])('%s', (_what, selector, backdrop) => {
+    const b = backdrop as Rgb;
+    expect(ratio(borderColour(selector as string, b), b)).toBeGreaterThanOrEqual(AA_GRAPHIC);
+  });
+
+  it('draws the beats arrows visibly enough to be the graph', () => {
+    // Was 2.96:1 at `stroke-opacity: 0.7`. A near miss is still a miss, and the
+    // arrows are the only thing on the pentagon that says what beats what.
+    expect(ratio(stroke('.beat-arrow'), CARD)).toBeGreaterThanOrEqual(AA_GRAPHIC);
+  });
+
+  it('starts the winning edge’s flare from the resting weight it leaves', () => {
+    // `arrow-strike` opens at the values `.beat-arrow` rests at, so raising one
+    // without the other makes the animation jump on its first frame.
+    const keyframe = /@keyframes arrow-strike \{\s*0% \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const opening = /stroke-opacity:\s*([\d.]+)/.exec(keyframe)?.[1];
+    expect(Number(opening)).toBe(Number(declaration('.beat-arrow', 'stroke-opacity')));
+  });
+
+  it('leaves a dead opponent edge faint, and says why in the stylesheet', () => {
+    // The recorded exception. 1.89:1, held on purpose: the faintness *is* the
+    // information — this edge is the one not in play — so 1.4.11's essential-
+    // presentation carve-out applies. What the test holds is the thing that
+    // would actually break it: the non-colour cue that carries the same fact.
+    expect(ratio(stroke('.beat-arrow--opp-off'), CARD)).toBeLessThan(AA_GRAPHIC);
+    expect(declaration('.beat-arrow--opp-off', 'stroke-dasharray')).toBe('5 5');
+    const rule = /\.beat-arrow--opp-off[\s\S]{0,400}?\{/.exec(css)?.index ?? 0;
+    expect(css.slice(Math.max(0, rule - 900), rule)).toMatch(/essential/);
+  });
+
+  it('keeps a control’s outline below a border carrying state', () => {
+    // --line-control is not a step on the seam ladder — `designSystem.test.ts`
+    // holds that one's order — but it still has to sit under --line-4, or a
+    // resting move button shouts as loudly as a hovered or ready one.
+    const light = (name: string) => relativeLuminance(token(name));
+    expect(light('--line-control')).toBeGreaterThan(light('--line-3'));
+    expect(light('--line-control')).toBeLessThan(light('--line-4'));
+  });
+});
