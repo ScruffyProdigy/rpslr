@@ -102,11 +102,20 @@ export function RoundStrip({
         })}
       </ul>
 
-      {open && openMoves?.myMove && openMoves.oppMove && (
-        <p className="history-strip__detail" role="status">
-          {describeRoundMatchup(openMoves.myMove, openMoves.oppMove)}
-        </p>
-      )}
+      {/* Always rendered, empty when no chip is open (JQ-194).
+          This is the third instance of the mount-with-content shape JQ-157
+          found unreliable, and the one with the best excuse: it appears in
+          answer to a deliberate tap, so a player who misses the announcement
+          has the chip's own label to fall back on. It is still cheaper to make
+          it reliable than to write down why it need not be — the region costs
+          one empty paragraph, collapsed to nothing by `:empty` in the
+          stylesheet, and the verb line then arrives as a change to a region the
+          tap did not create. */}
+      <p className="history-strip__detail" role="status">
+        {open && openMoves?.myMove && openMoves.oppMove
+          ? describeRoundMatchup(openMoves.myMove, openMoves.oppMove)
+          : ''}
+      </p>
     </>
   );
 }

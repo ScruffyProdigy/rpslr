@@ -41,6 +41,16 @@
   --line-2: #333a4c;
   --line-3: #3d4458;
   --line-4: #6c7488;
+  /* Not a step on that ladder, and deliberately outside it: the ladder is tuned
+     for seams, and no step on it clears WCAG 1.4.11's 3:1 against --card, which
+     is the surface every control on the board is drawn on. --line-3 measures
+     1.73:1 there — fine for the seam between two cards, not enough for the
+     boundary that says where a tap target ends (JQ-193).
+
+     So this is the one a control's own outline uses: 3.23:1 on --card, 3.56:1
+     on --surface-2. It sits below --line-4 on purpose, so a border carrying
+     state is still the louder of the two. */
+  --line-control: #626c8a;
   /* The older names, kept because they read better at the call site. */
   --bg: var(--surface-1);
   --card: var(--surface-4);
@@ -467,9 +477,13 @@ button.ghost {
   border-color: var(--win);
   box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.25);
 }
+/* Outline versus fill, not two colours — so the score reads without hue. That
+   only works while the outline is visible: on --line-3 it measured 1.91:1
+   against the seat card, which left an unfilled pip identifiable by nothing at
+   all (JQ-193). */
 .win-pip.empty {
   background: transparent;
-  border-color: var(--line-3);
+  border-color: var(--line-control);
 }
 .player.you .win-pip.filled {
   box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.45);
@@ -659,10 +673,13 @@ button.ghost {
   pointer-events: none;
   z-index: 0;
 }
+/* The arrows are the graph, so they are 1.4.11 graphics rather than decoration.
+   0.7 put them at 2.96:1 against the board — a near miss, and the kind that only
+   shows up once you composite the opacity rather than reading the token. */
 .beat-arrow {
   stroke: var(--graph);
   stroke-width: 2;
-  stroke-opacity: 0.7;
+  stroke-opacity: 0.75;
   transition: stroke 0.15s ease, stroke-opacity 0.15s ease, stroke-width 0.15s ease,
     opacity 0.25s ease;
 }
@@ -674,7 +691,15 @@ button.ghost {
   opacity: 0.18;
 }
 /* An attack the opponent can't make this round. A node with no solid incoming
-   arrow is therefore a move that cannot lose. */
+   arrow is therefore a move that cannot lose.
+
+   Held at 0.3 — 1.89:1 — deliberately, and this is the decision JQ-193 asked
+   for rather than an oversight. The faintness is the meaning: this edge is the
+   one that is *not* in play, and lifting it to 3:1 would make an absent threat
+   look like a live one, which is 1.4.11's own "essential presentation"
+   exception. It is also not the only way to learn the fact — the dash carries
+   it without colour, and since JQ-157 there is a text equivalent below the
+   board. The arrows that do carry live information are held to 3:1 above. */
 .beat-arrow--opp-off {
   stroke: var(--opp);
   stroke-opacity: 0.3;
@@ -699,7 +724,7 @@ button.ghost {
 @keyframes arrow-strike {
   0% {
     stroke-width: 2;
-    stroke-opacity: 0.7;
+    stroke-opacity: 0.75;
   }
   35% {
     stroke-width: 6;
@@ -787,7 +812,9 @@ button.ghost {
   gap: 2px;
   border-radius: 50%;
   background: var(--surface-3);
-  border: 2px solid var(--line-3);
+  /* 1.4.11's central case: this is the tap target's boundary against the board.
+     On --line-3 it measured 1.73:1 (JQ-193). */
+  border: 2px solid var(--line-control);
   color: var(--text);
   box-shadow: none;
   z-index: 1;
@@ -796,7 +823,7 @@ button.ghost {
     transform 0.15s ease,
     border-color 0.15s ease,
     box-shadow 0.15s ease,
-    opacity 0.15s ease;
+    color 0.15s ease;
 }
 .move-btn__emoji {
   font-size: clamp(1.75rem, 12.05cqw, 2.86rem);
@@ -828,7 +855,12 @@ button.ghost {
    the state survives a contrast or colour-blindness check on its own. */
 .move-btn--cooldown {
   background: var(--surface-2);
-  border-color: var(--line-2);
+  /* A move on cooldown is `aria-disabled`, not `disabled`: it is still
+     focusable and still answers a tap with an explanation, so it is an active
+     control and 1.4.11 applies to it exactly as it does to a playable one. It
+     was on --line-2, 1.48:1. The dash is what says "unavailable" — the colour
+     never was, and it does not have to recede for the dash to read. */
+  border-color: var(--line-control);
   border-style: dashed;
   color: var(--muted);
 }
@@ -849,7 +881,7 @@ button.ghost {
    alone. No transition or transform, so `prefers-reduced-motion` needs no new
    rule here (JQ-215). */
 .move-btn--forced {
-  border-color: color-mix(in srgb, var(--warn) 60%, var(--line-3));
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line-control));
 }
 .move-btn--forced .cooldown-pill {
   color: var(--surface-0);
@@ -880,17 +912,55 @@ button.ghost {
   border-color: var(--line-4);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--muted) 16%, transparent);
 }
+/* The moves your preview beats. Colour is the whole of this ring, and JQ-195
+   looked at whether it needs a shape or an icon beside it. It does not, and the
+   reason is recorded here rather than left for the next reviewer to re-derive:
+   the fact this ring restates is already on the board twice without colour.
+
+   The graph says it in weight — `.beat-arrow--preview` goes to 3.5 from the
+   resting 2 and drops its faded state, so the edges out of the previewed move
+   thicken and point at exactly these nodes. The centre says it in words, which
+   is the stronger of the two: `describeBeatsOf` writes "Rock crushes Scissors &
+   Lizard" into the picker caption for whatever is previewed, so the set this
+   ring marks is named in the middle of the board while the ring is on.
+
+   A third channel on the buttons themselves would be a third thing to decode
+   for a fact that is already stated. The arrow weight is pinned below in
+   `boardFit.test.ts`, because it is the one carrying it without colour. */
 .move-btn--target {
-  border-color: color-mix(in srgb, var(--you) 55%, var(--line-3));
+  border-color: color-mix(in srgb, var(--you) 55%, var(--line-control));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 16%, transparent);
 }
 .move-btn--selected {
   border-color: var(--you);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--you) 45%, transparent);
 }
-/* Only once the round is decided does anything fade out. */
+/* Once the round is decided, the moves you did not take step back — and they do
+   it without fading, which is what JQ-192 came to fix. `opacity: 0.45` composites
+   the foreground and the background toward each other in one move, so it takes
+   the label down with the surface: the move name measured 3.86:1, and a name
+   that was already --muted — a move on cooldown — measured 2.48:1, the worst
+   text on the board. No value of the number fixes that, because the fade is the
+   mechanism; only leaving the text out of it does.
+
+   So the state moves onto channels that can carry it at full legibility: the
+   border recedes to a seam, the label and its glyph step from --text to --muted
+   (6.7:1 on the button's own surface), and the cooldown pill steps with them.
+   Three channels, all measured in `contrast.test.ts`, none of them opacity.
+
+   The receded border is not a contrast regression: `disabled` is true for the
+   whole time this class is on a button (App passes `youMovedThisRound`), so it
+   is an inactive control and outside 1.4.11. The borders that are inside it are
+   JQ-193's. */
 .move-btn--dimmed {
-  opacity: 0.45;
+  border-color: var(--line-1);
+  color: var(--muted);
+}
+/* The pill carries a turn count, so it steps back with the button rather than
+   fading out from under the number: --muted on --surface-3 is 6.7:1. */
+.move-btn--dimmed .cooldown-pill {
+  color: var(--muted);
+  background: var(--surface-3);
 }
 .move-btn__check {
   position: absolute;
@@ -1788,6 +1858,13 @@ ul.history-strip {
   font-size: 0.82rem;
   color: var(--muted);
   font-style: italic;
+}
+/* The slot is in the DOM before there is a verb line to put in it, so the line
+   announces as a change rather than as a new region (JQ-194). `:empty` rather
+   than `display: none`, which would take it out of the accessibility tree and
+   undo the whole point; with no content and no margin it occupies nothing. */
+.history-strip__detail:empty {
+  margin: 0;
 }
 .history-full {
   margin-top: 12px;

@@ -96,7 +96,20 @@ export function HowToPlayGraph() {
         })}
       </svg>
 
-      <p className="htp-graph__caption" role="status">
+      {/* Live only while the player is driving it (JQ-194).
+          With `role="status"` on it unconditionally, the interval below made
+          this a region that re-announced the whole caption every 2.5 seconds,
+          for as long as the pre-match wait lasted — the panels sit there
+          unattended until both seats fill. `prefers-reduced-motion` already
+          pauses the carousel, but that is a different preference and cannot be
+          what carries this.
+          `paused` is the honest condition instead: it is set by reaching the
+          dots at all, and while it holds the graph does not advance, so every
+          announcement answers something the player just did.
+          `role="status"` stays: an explicit `aria-live` overrides a role's
+          implicit liveness, so the caption is still a status region to navigate
+          to and read on demand — it just stops talking on a timer. */}
+      <p className="htp-graph__caption" role="status" aria-live={paused ? 'polite' : 'off'}>
         {describeBeatsOf(active)}
       </p>
 
@@ -108,6 +121,15 @@ export function HowToPlayGraph() {
             className={`htp-graph__dot${i === index ? ' htp-graph__dot--on' : ''}`}
             aria-label={`Show what ${MOVE_META[move].label} beats`}
             aria-current={i === index}
+            // Both of these land a commit before the click that moves the
+            // graph, so the caption is already live when its text changes —
+            // flipping `aria-live` and the content together would put the first
+            // announcement back on the unreliable path. `onFocus` is the
+            // keyboard half: a dot must be focused before it can be pressed,
+            // and reaching for it is the same "reading at my own pace" the
+            // pointer version means.
+            onFocus={() => setPaused(true)}
+            onPointerDown={() => setPaused(true)}
             onClick={() => {
               setPaused(true);
               setIndex(i);

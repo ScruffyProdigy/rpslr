@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { MatchEndReason, RoundResult } from '../api';
 import type { Identity } from '../lib/seatProfile';
 import type { GuessScore } from '../lib/usePlayAlong';
@@ -86,6 +87,30 @@ export function MatchEndCard({
             : `${youLabel(voice)} ran out of time twice in a row.`
           : null;
 
+  // Phase 6 names the match result alongside the round result as the two things
+  // that must be announced, and this card carried no live region at all — no
+  // `role`, no `aria-live`, anywhere in it. It replaces the entire board when a
+  // match ends, so the result arrived with a whole new screen and nothing said
+  // it (JQ-194).
+  //
+  // It cannot borrow the board's region the way `RevealCard` does: that region
+  // lives inside the picker, and the picker is precisely what this card is
+  // rendered instead of. So the verdict line becomes the region itself — one
+  // element, so nothing is said twice to anyone reading the card rather than
+  // listening to it.
+  //
+  // The text arrives a commit after the region does, which is JQ-157's finding
+  // applied where no permanent parent exists to inherit it from: a region that
+  // appears with its content already in it is the case screen readers are least
+  // reliable about, and what makes the difference is the text being a change to
+  // a region rather than arriving with one. `useEffect` rather than
+  // `useLayoutEffect` on purpose — the two mutations have to land in separate
+  // tasks, or they can be coalesced back into the case this is avoiding.
+  const [said, setSaid] = useState('');
+  useEffect(() => {
+    setSaid(verdict);
+  }, [verdict]);
+
   return (
     <div className="match-end">
       {winner && (
@@ -102,7 +127,9 @@ export function MatchEndCard({
         </div>
       )}
 
-      <p className={`match-end__verdict ${drawn ? 'draw' : iWon ? 'win' : 'loss'}`}>{verdict}</p>
+      <p className={`match-end__verdict ${drawn ? 'draw' : iWon ? 'win' : 'loss'}`} role="status">
+        {said}
+      </p>
 
       {howItEnded && <p className="match-end__how">{howItEnded}</p>}
 

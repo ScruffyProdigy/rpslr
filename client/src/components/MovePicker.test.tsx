@@ -174,6 +174,26 @@ describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
     expect(container.querySelectorAll('.move-btn--dimmed')).toHaveLength(4);
     expect(screen.getByRole('button', { name: /^Rock/ })).toHaveClass('move-btn--selected');
   });
+
+  it('marks the move you locked in with a check, not just a colour (JQ-195)', () => {
+    // The ring is --you blue and the dimming around it is a colour step too, so
+    // without this the pick you committed to is a hue. The icon is the cue that
+    // survives not seeing the hue.
+    const { container } = renderPicker({ myChosenMove: 'rock', lockedIn: true, disabled: true });
+    const rock = screen.getByRole('button', { name: /^Rock/ });
+    expect(rock.querySelector('.move-btn__check')).not.toBeNull();
+    expect(container.querySelectorAll('.move-btn__check')).toHaveLength(1);
+  });
+
+  it('writes the turns left on a blocked move, not only its dash (JQ-195)', () => {
+    // The dashed border says "not this round". The pill says how many rounds,
+    // which is the part a border cannot carry — and it says it in a number,
+    // announced to assistive tech as a phrase rather than left to the glyph.
+    const { container } = renderPicker({ myDelays: { paper: 2 } });
+    const pill = container.querySelector('.move-btn--cooldown .cooldown-pill');
+    expect(pill?.textContent).toContain('2');
+    expect(pill?.getAttribute('aria-label')).toMatch(/2/);
+  });
 });
 
 describe('<MovePicker> opponent cooldown is drawn on the graph (JQ 2.3)', () => {
