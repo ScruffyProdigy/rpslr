@@ -261,3 +261,35 @@ Implementation points, in one pass:
 **Type consistency.** `Targeting`, `TargetingNote`, `AbilityTargeting` are defined once in Task 1 and referenced by those names in Tasks 2, 4 and 5. `FiringChoice` stays exported from `AbilityRail.tsx`, where it already lives, so Task 1 imports from there and Task 2 does not move it.
 
 **Known risk.** Task 4 is the largest and touches a file that is already 988 lines. If `MovePicker.tsx` passes ~1100 lines, split `TargetingCenter` (and only it) into `client/src/components/TargetingCenter.tsx` — it has no shared state with the picker beyond its props.
+
+---
+
+## What changed while building it
+
+The plan is kept as written; these are the deviations, so the next reader is not
+comparing it against a tree that no longer matches.
+
+- **`AbilityRail`'s props.** It takes `held` rather than `loadout` + `abilities`,
+  so `Board` builds the cards once and the rail cannot drift from the walk's
+  copy, and it takes no marks at all — the chip row was the only thing that read
+  them.
+- **The hook's marks.** `ownMarks` / `oppMarks` rather than a `MarksBySide`, so
+  the pair is built inside the hook and keeps a stable identity. Spelled inline
+  by `Board`, it gave the walk a fresh identity every render.
+- **`TargetingNote`** carries `helperId`, not `name` — the rail matches on id.
+- **The note outranks the blocked line** instead of giving way to it once the
+  server echo lands. "Rust fired, naming their Scissors" is the same fact as "you
+  have already fired Rust this round" with more in it.
+- **The note's live region moved.** `liveRegions.test.ts` — the ledger JQ-194
+  left behind — failed on a `role="status"` that mounts with its text already in
+  it, which is exactly JQ-157's finding. It is now one permanent hidden region
+  for the whole rail, with the visible line in the card left as a plain
+  paragraph.
+- **`TargetingCenter` is its own file**, as Task 4's "known risk" said it should
+  be: `MovePicker.tsx` reached 1217 lines before the split and 1157 after.
+- **The owner line costs 26px**, not the ~27.6 estimated — an 18px fixed line box
+  plus the rail's 8px gap.
+- **Two bugs the tests caught**, both now covered: focusing the first legal node
+  set `hovered`, and the hover outlived the walk and displaced the tentative pick;
+  and the round's own `disabled` closed the board to a step, which would have made
+  a seat that had locked its move unable to fire at all.

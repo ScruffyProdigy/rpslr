@@ -58,8 +58,11 @@ firing per slot per round, and a firing that is final once sent.
 The idle → name → confirm walk is `AbilityRail`'s local `firing` state today. The
 board has to render it now, and the rail and the picker are siblings under
 `Board`, so the walk moves into a new hook, `client/src/lib/useAbilityTargeting.ts`,
-owned by `Board`. `AbilityRail` keeps the cards, the charge words and
-`blockedBecause`; `MovePicker` receives a small read-only view-model:
+owned by `Board`. `AbilityRail` keeps the cards, the charge words and `blockedBecause`,
+and its props shrink with the chips: it takes `held` — built once by `Board` so
+it cannot drift from the walk's copy — and no marks at all, since the chip row
+was the only thing that read them. `MovePicker` receives a small read-only
+view-model:
 
 ```ts
 export interface Targeting {
@@ -171,13 +174,24 @@ the ticket's own Delivery section rules out backend changes, and JQ-220 settled
 that a firing is sent and final. What is missing is only that the board says so
 during the round-trip.
 
-So the hook holds a local `fired: { name, summary }` until the server's own
-`abilities` map catches up, and the rail card shows it — "Rust fired, naming
-their Rock" — after which `charge.available === false` makes
-`blockedBecause` say "You have already fired Rust this round", which is the
-server's answer and the durable one. One firing per slot per round and the
-two-charge-helper case are untouched: both are server state and neither is
-re-derived here.
+So the hook holds a note — `{ helperId, kind: 'fired' | 'cancelled', text }` —
+until the round moves on, and the rail card shows it: *"Rust fired, naming their
+Rock."* It **outranks** `blockedBecause`'s "You have already fired Rust this
+round" rather than giving way to it once the echo lands. Same fact, more in it,
+and the rail's height is measured — two lines saying one thing is that height
+spent twice.
+
+The note is announced from **one permanent, visually-hidden `role="status"` at
+the rail level**, not from the line inside the card. A region mounted in the same
+tick as its text is the case JQ-157 found screen readers least reliable about,
+and this is the sentence a player most needs: the charge they just spent, or the
+one the round took away. Hidden rather than visible because the card is already
+saying it where the eye is, and because an empty flex child with a box would cost
+the rail a gap it has measured and does not have. `liveRegions.test.ts` carries
+the ledger entry.
+
+One firing per slot per round and the two-charge-helper case are untouched: both
+are server state and neither is re-derived here.
 
 ## Re-picks
 
@@ -249,19 +263,22 @@ below the board, because it lives outside the tab panel. What it lacks is a
 visible owner, and with the opponent's board open above it an unlabelled row of
 cards can read as theirs.
 
-It gets one — `Your abilities`, or `<You>'s abilities` under a replay's `Voice`,
-as the section's own visible heading, with the same possessive added to each
-card's `role="group"` label.
+It gets one — `Your abilities`, as the section's own visible heading, with the
+same possessive on each card's `role="group"` label (`Your Rust — Ready`). No
+replay variant: a replay has no rail, so there is no second voice to serve.
 
 **It is visible at ≥360px and `sr-only` below that**, and that is measured rather
 than guessed. `boardFit.test.ts` holds the rail shorter than the board it serves;
 the headroom today is 72.6px at 390×844, 40.6px at 375×812 and **8.1px at
-320×568**. A heading row costs ~27.6px (a 19.6px line plus the rail's 8px gap),
-which fits on both phones JQ-165 promised a duel board would not scroll on and
+320×568**. A heading row costs ~26px, which fits on both phones JQ-165 promised a duel board would not scroll on and
 does not fit on the one screen where a duel board already scrolls. There the
 spoken name still carries it, which is the reading that was load-bearing anyway:
 a player who cannot see the heading is the player being told by their screen
 reader.
+
+As built the line costs **26px** — an 18px fixed line box plus the rail's 8px
+gap. The `line-height` is a fixed px rather than a ratio precisely so the budget
+model has a number to read instead of a font size to guess at.
 
 The rail also takes the you-role accent, the same hue as your tab's underline and
 your cooldown pills. That is reinforcement, not the signal — JQ-195's rule is
@@ -272,7 +289,13 @@ kept because the word is present in the accessible name at every width.
 New:
 
 - `client/src/lib/useAbilityTargeting.ts` — the walk, the staleness rules, the
-  fired/cancelled notes. Pure state over props; no fetch, no DOM.
+  fired/cancelled notes. Pure state over props; no fetch, no DOM. It takes each
+  side's marks as its own prop and pairs them internally, so the pair has a
+  stable identity — `Board` spelling it inline would hand the walk a fresh
+  identity every render.
+- `client/src/components/TargetingCenter.tsx` — the targeting centre. Split out
+  rather than left in `MovePicker.tsx`, which the rest of this work took to 1217
+  lines; it shares no state with the picker beyond its props.
 
 Changed:
 
@@ -281,13 +304,14 @@ Changed:
   owner heading.
 - `client/src/components/MovePicker.tsx` — `targeting` and `demandOwnBoard`
   props, the derived view, the targeting branch in `handleClick`, the
-  suppressions, `TargetingCenter`.
+  suppressions.
 - `client/src/components/PickerTabs.tsx` — `locked`.
 - `client/src/App.tsx` — `Board` owns the hook and wires the three components
   together; `idleCaption` during a window.
 - `client/src/styles.css` — the targeting board mode, the centre, the rail
   heading and accent.
 - `client/src/boardFit.test.ts` — the heading counted in `railHeight`.
+- `client/src/liveRegions.test.ts` — the rail's one new region, ledgered.
 
 `client/src/abilities.ts` is unchanged. That is the "do not build a second
 ability system" check: if this design needed a new legality rule, it would be
@@ -306,12 +330,15 @@ wrong.
   per window and not on an ordinary refresh.
 - `AbilityRail.test.tsx` — existing cases keep passing with the state lifted; the
   card reads as in-progress while targeting; the fired line appears before the
-  server echo and gives way to it; a cancelled note names its reason.
+  server echo and keeps standing after it, in place of the vaguer line; a
+  cancelled note names its reason and lands on its own card, not its slot-mate's.
 - `Board.test.tsx` — a duel board is still unchanged and still has no rail; a
   window opening on the opponent tab lands the player on their own board with the
   prompt visible.
-- `board.browser.test.tsx` — target an opponent move and cancel, at 360px and at
-  390×844, with the rail present.
+- `board.browser.test.tsx` — layout only, which is what that suite is for: a
+  targeting board does not overflow at 320/360/390, opening one does not move the
+  pentagon by a pixel, the one legal node still clears its tap floor, and the
+  owner line takes its own row above the cards and goes out of flow at 320px.
 - `boardFit.test.ts` — the heading is inside the budget at both of JQ-165's
   phones and absent from the 320px measurement.
 - Standing guards unchanged: `designSystem`, `motionSafety`, `liveRegions`.

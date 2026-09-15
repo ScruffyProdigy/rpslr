@@ -24,7 +24,11 @@ import { page } from '@vitest/browser/context';
 import { render, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MovePicker } from './components/MovePicker';
+import { AbilityRail } from './components/AbilityRail';
 import { RevealCard } from './components/RevealCard';
+import { heldAbilities, targetSteps } from './abilities';
+import type { Loadout } from '@game/helpers/loadout';
+import type { AbilityTargeting, Targeting } from './lib/useAbilityTargeting';
 import type { RoundResult } from './api';
 import './styles.css';
 
@@ -41,6 +45,34 @@ const TAP_FLOOR: Record<number, number> = { 320: 48, 360: 56, 390: 56 };
 const YOU = { profile: null, name: 'Ada', placeholder: false };
 const OPP = { profile: null, name: 'Grace', placeholder: false };
 const NO_DELAYS = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+/** One charge helper and a passive, which is what a helpers loadout brings. */
+const HELPERS = ['rust', 'echo-chamber'] as unknown as Loadout;
+/** The walk's handlers, which layout has no opinion about. */
+const NO_WALK: AbilityTargeting = {
+  targeting: null,
+  note: null,
+  isTargeting: () => false,
+  start: () => {},
+  name: () => {},
+  cancel: () => {},
+  confirm: () => {},
+};
+
+/** Rust naming one of their marked moves — the widest of the targeting panels. */
+function rustWalk(): Targeting {
+  const step = targetSteps('rust')[0];
+  return {
+    helperId: 'rust',
+    name: 'Rust',
+    step,
+    named: {},
+    side: 'opponent',
+    legal: ['scissors'],
+    instruction: 'Choose one of their moves for Rust',
+    prompt: step.prompt,
+    rejection: step.rejection,
+  };
+}
 
 /**
  * The board as `App` assembles it: the reserved status slot, then the picker,
@@ -52,10 +84,16 @@ function Board({
   opponentLockedIn = false,
   centerSlot,
   theirDelays = NO_DELAYS,
+  targeting = null,
+  rail = false,
 }: {
   opponentLockedIn?: boolean;
   centerSlot?: React.ReactNode;
   theirDelays?: Record<string, number>;
+  /** A walk holding the board, as `useAbilityTargeting` hands one over. */
+  targeting?: Targeting | null;
+  /** Whether this is a helpers board, which puts the rail under the pentagon. */
+  rail?: boolean;
 }) {
   return (
     <div className="app">
@@ -80,7 +118,15 @@ function Board({
           oppName={OPP.name}
           onPlay={() => {}}
           centerSlot={centerSlot}
+          targeting={targeting}
         />
+        {rail && (
+          <AbilityRail
+            held={heldAbilities(HELPERS, { rust: { marks: 0, available: true } })}
+            unavailable={null}
+            targeting={{ ...NO_WALK, targeting }}
+          />
+        )}
       </div>
     </div>
   );
@@ -272,5 +318,61 @@ describe('switching boards holds the layout', () => {
       // Wide enough to hit without aiming: half the strip, less its gap.
       expect(box.width, tab.textContent ?? '').toBeGreaterThanOrEqual(100);
     }
+  });
+});
+
+describe('naming a target holds the layout (JQ-325)', () => {
+  const MARKED = { rock: 0, paper: 0, scissors: 2, lizard: 0, robot: 0 };
+
+  it.each(WIDTHS)('does not overflow while an ability is naming at %ipx', async (width) => {
+    await at(width, <Board theirDelays={MARKED} targeting={rustWalk()} rail />);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    expect(escaping(document.querySelector<HTMLElement>('.board')!)).toEqual([]);
+  });
+
+  it.each(WIDTHS)('does not move the pentagon when targeting opens at %ipx', async (width) => {
+    // The instruction is in the centre slot rather than above the board for
+    // exactly this reason: a banner would shift the tap surface, and the page
+    // has 3.5px of slack at 375x812 to shift it into (JQ-324, JQ-325).
+    const { rerender } = await at(width, <Board theirDelays={MARKED} rail />);
+    const before = document.querySelector('.move-board')!.getBoundingClientRect();
+
+    rerender(<Board theirDelays={MARKED} targeting={rustWalk()} rail />);
+    await frame();
+    const during = document.querySelector('.move-board')!.getBoundingClientRect();
+    expect(during.top).toBe(before.top);
+    expect(during.height).toBe(before.height);
+  });
+
+  it.each(WIDTHS)('offers only the legal target at %ipx', async (width) => {
+    await at(width, <Board theirDelays={MARKED} targeting={rustWalk()} rail />);
+    const enabled = [...document.querySelectorAll<HTMLButtonElement>('.move-btn')].filter(
+      (b) => !b.disabled,
+    );
+    expect(enabled).toHaveLength(1);
+    expect(enabled[0].dataset.move).toBe('scissors');
+    // And it is still a target a thumb can hit.
+    expect(enabled[0].getBoundingClientRect().height).toBeGreaterThanOrEqual(TAP_FLOOR[width]);
+  });
+});
+
+describe('the rail says whose cards it holds (JQ-325)', () => {
+  it.each([360, 390] as const)('shows the owner line at %ipx', async (width) => {
+    await at(width, <Board rail />);
+    const owner = document.querySelector<HTMLElement>('.ability-rail__owner')!;
+    expect(owner.getBoundingClientRect().height).toBeGreaterThan(0);
+    // A row of its own, above the cards rather than beside them — which is what
+    // keeps the cards on the single row `boardFit` holds them to.
+    const card = document.querySelector('.ability-card')!.getBoundingClientRect();
+    expect(card.top).toBeGreaterThanOrEqual(owner.getBoundingClientRect().bottom);
+  });
+
+  it('takes it out of flow where the rail cannot afford it', async () => {
+    await at(320, <Board rail />);
+    const owner = document.querySelector<HTMLElement>('.ability-rail__owner')!;
+    // Out of flow, not gone: the section is still named for a screen reader.
+    expect(getComputedStyle(owner).position).toBe('absolute');
+    expect(owner.getBoundingClientRect().height).toBeLessThanOrEqual(1);
+    expect(document.querySelector('[aria-labelledby="ability-rail-owner"]')).not.toBeNull();
   });
 });
