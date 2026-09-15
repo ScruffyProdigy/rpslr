@@ -4,38 +4,56 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AbilityMap } from '@game/helpers/abilities';
 import type { Loadout } from '@game/helpers/loadout';
 import { getHelper } from '@game/helpers/roster';
+import { heldAbilities } from '../abilities';
+import type { AbilityTargeting, TargetingNote } from '../lib/useAbilityTargeting';
 import { AbilityRail } from './AbilityRail';
-
-const CLEAR = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
 
 function loadoutWith(majorId: string): Loadout {
   return [majorId, 'echo-chamber'] as unknown as Loadout;
+}
+
+/**
+ * A stand-in for the walk.
+ *
+ * The walk itself is `useAbilityTargeting`'s and is tested there; what the rail
+ * owes is that it reads this correctly — which card is naming, whose note is
+ * whose, and that pressing Fire hands over the card rather than a firing.
+ */
+function stubTargeting(over: Partial<AbilityTargeting> = {}): AbilityTargeting {
+  return {
+    targeting: null,
+    note: null,
+    isTargeting: () => false,
+    start: vi.fn(),
+    name: vi.fn(),
+    cancel: vi.fn(),
+    confirm: vi.fn(),
+    ...over,
+  };
 }
 
 function renderRail(
   over: {
     loadout?: Loadout | null;
     abilities?: AbilityMap;
-    myMarks?: Record<string, number>;
-    oppMarks?: Record<string, number>;
     unavailable?: string | null;
-    onFire?: ReturnType<typeof vi.fn>;
+    targeting?: AbilityTargeting;
   } = {},
 ) {
-  const onFire = over.onFire ?? vi.fn();
+  const targeting = over.targeting ?? stubTargeting();
   const utils = render(
     <AbilityRail
-      // `??` would swallow an explicit null, which is the duel case this file
-      // most needs to reach.
-      loadout={'loadout' in over ? (over.loadout ?? null) : loadoutWith('rust')}
-      abilities={over.abilities ?? { rust: { marks: 0, available: true } }}
-      myMarks={over.myMarks ?? CLEAR}
-      oppMarks={over.oppMarks ?? { ...CLEAR, scissors: 2 }}
+      held={heldAbilities(
+        // `??` would swallow an explicit null, which is the duel case this file
+        // most needs to reach.
+        'loadout' in over ? (over.loadout ?? null) : loadoutWith('rust'),
+        over.abilities ?? { rust: { marks: 0, available: true } },
+      )}
       unavailable={over.unavailable ?? null}
-      onFire={onFire}
+      targeting={targeting}
     />,
   );
-  return { ...utils, onFire };
+  return { ...utils, targeting };
 }
 
 /** The card for one ability, found by its accessible group name. */
@@ -62,8 +80,24 @@ describe('AbilityRail — presence (JQ-221)', () => {
   it('names the card and its blurb from the roster', () => {
     renderRail();
     // From the roster, not repeated here — see the note in abilities.test.ts.
-    expect(within(card('Rust')).getByText(getHelper('rust')!.blurb))
-      .toBeInTheDocument();
+    expect(within(card('Rust')).getByText(getHelper('rust')!.blurb)).toBeInTheDocument();
+  });
+});
+
+describe('AbilityRail — whose cards these are (JQ-325, AC #9)', () => {
+  /*
+   * The rail sits below a board that may be showing the opponent. Nothing about
+   * it changes when the tab does — it lives outside the tab panel — but an
+   * unlabelled row of cards under their pentagon can still read as theirs.
+   */
+  it('says whose abilities the rail holds', () => {
+    renderRail();
+    expect(screen.getByRole('region', { name: 'Your abilities' })).toBeInTheDocument();
+  });
+
+  it('puts the same possessive on each card, where a screen reader lands', () => {
+    renderRail();
+    expect(screen.getByRole('group', { name: 'Your Rust — Ready' })).toBeInTheDocument();
   });
 });
 
@@ -114,104 +148,111 @@ describe('AbilityRail — charge state (JQ-221)', () => {
     expect(within(card('Rust')).getByRole('button', { name: /fire rust/i })).toBeDisabled();
     expect(within(card('Thief')).getByRole('button', { name: /fire thief/i })).toBeEnabled();
   });
-});
 
-describe('AbilityRail — naming a target (JQ-221)', () => {
-  /*
-   * AC #2. Rust needs a move they have on cooldown; every other chip must be
-   * unclickable rather than merely discouraged.
-   */
-  it('offers only legal targets, and an illegal one cannot be submitted', async () => {
-    const user = userEvent.setup();
-    const { onFire } = renderRail({ oppMarks: { ...CLEAR, scissors: 2 } });
-    await user.click(within(card('Rust')).getByRole('button', { name: /fire rust/i }));
-
-    const scissors = screen.getByRole('button', { name: /^scissors/i });
-    const rock = screen.getByRole('button', { name: /^rock/i });
-    expect(scissors).toBeEnabled();
-    expect(rock).toBeDisabled();
-    expect(rock).toHaveAccessibleDescription(
-      /Rock is clear — Rust needs a move they have on cooldown/i,
-    );
-
-    await user.click(rock);
-    expect(onFire).not.toHaveBeenCalled();
-  });
-
-  it('walks Thief through a source and then a target', async () => {
-    const user = userEvent.setup();
-    const { onFire } = renderRail({
-      loadout: loadoutWith('thief'),
-      abilities: { thief: { marks: 0, available: true } },
-      myMarks: { ...CLEAR, rock: 1 },
-      oppMarks: CLEAR,
-    });
-    await user.click(within(card('Thief')).getByRole('button', { name: /fire thief/i }));
-
-    expect(screen.getByText(/take a mark from one of your moves/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^paper/i })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: /^rock/i }));
-
-    expect(screen.getByText(/put it on one of theirs/i)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^paper/i }));
-
-    await user.click(screen.getByRole('button', { name: /^fire$/i }));
-    expect(onFire).toHaveBeenCalledWith({ helperId: 'thief', source: 'rock', target: 'paper' });
-  });
-});
-
-describe('AbilityRail — the confirm step (JQ-221)', () => {
-  /*
-   * AC #3. JQ-220 settled it: a firing is final, there is no withdraw message, so
-   * the confirm step has to say so in words rather than imply it.
-   */
-  it('says plainly that a fired charge does not come back', async () => {
-    const user = userEvent.setup();
-    renderRail({
-      loadout: loadoutWith('freeze'),
-      abilities: { freeze: { marks: 0, available: true } },
-    });
-    await user.click(within(card('Freeze')).getByRole('button', { name: /fire freeze/i }));
-    expect(screen.getByText(/can't be taken back/i)).toBeInTheDocument();
-    expect(screen.getByText(/spent whether or not it lands/i)).toBeInTheDocument();
-  });
-
-  it('sends nothing when the unsent firing is cancelled', async () => {
-    const user = userEvent.setup();
-    const { onFire } = renderRail({
-      loadout: loadoutWith('freeze'),
-      abilities: { freeze: { marks: 0, available: true } },
-    });
-    await user.click(within(card('Freeze')).getByRole('button', { name: /fire freeze/i }));
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(onFire).not.toHaveBeenCalled();
-    expect(screen.queryByText(/can't be taken back/i)).not.toBeInTheDocument();
-  });
-
-  it('fires a targetless ability once', async () => {
-    const user = userEvent.setup();
-    const { onFire } = renderRail({
-      loadout: loadoutWith('freeze'),
-      abilities: { freeze: { marks: 0, available: true } },
-    });
-    await user.click(within(card('Freeze')).getByRole('button', { name: /fire freeze/i }));
-    await user.click(screen.getByRole('button', { name: /^fire$/i }));
-    expect(onFire).toHaveBeenCalledTimes(1);
-    expect(onFire).toHaveBeenCalledWith({ helperId: 'freeze', source: null, target: null });
-  });
-
-  /*
-   * Firing needs the socket or the REST route; with neither there is nothing to
-   * send, and a button that silently does nothing is worse than one that says why.
-   */
   /*
    * The round's reason, in the round's words. A boolean here once told a player
    * mid-Oracle that they were reconnecting — wrong, and nothing they could act on.
    */
-  it('blocks firing for the round\'s own reason, and says that reason', () => {
+  it("blocks firing for the round's own reason, and says that reason", () => {
     renderRail({ unavailable: 'The round is resolving.' });
     expect(within(card('Rust')).getByRole('button', { name: /fire rust/i })).toBeDisabled();
     expect(within(card('Rust')).getByText('The round is resolving.')).toBeInTheDocument();
     expect(within(card('Rust')).queryByText(/reconnecting/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('AbilityRail — handing the walk to the board (JQ-325)', () => {
+  /*
+   * AC #1. The rail starts a firing and stops there: the naming happens on the
+   * pentagon now, so pressing Fire hands over the card rather than a choice.
+   */
+  it('hands the card over rather than firing it', async () => {
+    const user = userEvent.setup();
+    const targeting = stubTargeting();
+    renderRail({ targeting });
+    await user.click(within(card('Rust')).getByRole('button', { name: /fire rust/i }));
+    expect(targeting.start).toHaveBeenCalledTimes(1);
+    expect(targeting.start).toHaveBeenCalledWith(expect.objectContaining({ id: 'rust' }));
+  });
+
+  it('replaces the button with a line pointing at the board while naming', () => {
+    renderRail({ targeting: stubTargeting({ isTargeting: (id) => id === 'rust' }) });
+    expect(within(card('Rust')).getByText('Naming a target on the board')).toBeInTheDocument();
+    expect(
+      within(card('Rust')).queryByRole('button', { name: /fire rust/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('leaves the other card alone while one is naming', () => {
+    renderRail({
+      loadout: ['rust', 'thief'] as unknown as Loadout,
+      abilities: {
+        rust: { marks: 0, available: true },
+        thief: { marks: 0, available: true },
+      },
+      targeting: stubTargeting({ isTargeting: (id) => id === 'rust' }),
+    });
+    expect(within(card('Thief')).getByRole('button', { name: /fire thief/i })).toBeEnabled();
+  });
+});
+
+describe('AbilityRail — what became of a walk (JQ-325)', () => {
+  const note = (over: Partial<TargetingNote>): TargetingNote => ({
+    helperId: 'rust',
+    kind: 'fired',
+    text: 'Rust fired, naming their Scissors.',
+    ...over,
+  });
+
+  /*
+   * AC #6. A firing is sent the moment it is confirmed and the server's own map
+   * catches up a round-trip later; without this the card goes blank for that gap,
+   * straight after the one action in the game that cannot be taken back.
+   */
+  it('says what was fired while the server echo is still in flight', () => {
+    renderRail({ targeting: stubTargeting({ note: note({}) }) });
+    expect(within(card('Rust')).getByText('Rust fired, naming their Scissors.')).toBeInTheDocument();
+  });
+
+  it('keeps saying it once the echo lands, instead of the vaguer line', () => {
+    renderRail({
+      abilities: { rust: { marks: 0, available: false } },
+      targeting: stubTargeting({ note: note({}) }),
+    });
+    expect(within(card('Rust')).getByText('Rust fired, naming their Scissors.')).toBeInTheDocument();
+    // The same fact, said with less in it. One line, not two — the rail's height
+    // is measured, and this one is the more specific.
+    expect(
+      within(card('Rust')).queryByText(/already fired Rust this round/i),
+    ).not.toBeInTheDocument();
+  });
+
+  /*
+   * AC #8. A walk taken away from the player is explained rather than simply
+   * gone, and nothing is submitted in its place.
+   */
+  it('names the reason a walk was taken away', () => {
+    renderRail({
+      unavailable: 'The round is resolving.',
+      targeting: stubTargeting({
+        note: note({ kind: 'cancelled', text: 'Rust was not fired — the round is resolving.' }),
+      }),
+    });
+    expect(
+      within(card('Rust')).getByText('Rust was not fired — the round is resolving.'),
+    ).toBeInTheDocument();
+  });
+
+  it("puts a note on its own card and not on its slot-mate's", () => {
+    renderRail({
+      loadout: ['rust', 'thief'] as unknown as Loadout,
+      abilities: {
+        rust: { marks: 0, available: false },
+        thief: { marks: 0, available: true },
+      },
+      targeting: stubTargeting({ note: note({}) }),
+    });
+    expect(within(card('Rust')).getByText(/Rust fired/)).toBeInTheDocument();
+    expect(within(card('Thief')).queryByText(/Rust fired/)).not.toBeInTheDocument();
   });
 });
