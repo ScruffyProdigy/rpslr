@@ -7,6 +7,8 @@ import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
 import { SHARED_BEATS, threatsTo, type BeatsMap } from '../moves';
 import { PLAYER_VOICE, spectatorVoice, type Voice } from '../lib/voice';
+import { targetSteps } from '../abilities';
+import type { Targeting } from '../lib/useAbilityTargeting';
 import type { Identity } from '../lib/seatProfile';
 import type { MarkEvent } from '@game/game';
 
@@ -34,6 +36,11 @@ type Over = {
   oppName?: string;
   you?: Identity;
   opponent?: Identity;
+  targeting?: Targeting | null;
+  onNameTarget?: (m: Move) => void;
+  onCancelTargeting?: () => void;
+  onConfirmTargeting?: () => void;
+  demandOwnBoard?: number | null;
 };
 
 function pickerEl(over: Over & { onPlay: (m: Move) => void }) {
@@ -59,6 +66,11 @@ function pickerEl(over: Over & { onPlay: (m: Move) => void }) {
       oppName={over.oppName ?? 'Robin'}
       you={over.you}
       opponent={over.opponent}
+      targeting={over.targeting ?? null}
+      onNameTarget={over.onNameTarget}
+      onCancelTargeting={over.onCancelTargeting}
+      onConfirmTargeting={over.onConfirmTargeting}
+      demandOwnBoard={over.demandOwnBoard ?? null}
     />
   );
 }
@@ -1414,5 +1426,220 @@ describe('<MovePicker> their board says nothing about yours (JQ-324)', () => {
       [...container.querySelectorAll('.move-btn--target')].map((b) => b.textContent),
     ).toEqual(['Rock', 'Robot']);
     expect(container.querySelector('.move-btn--selected')).toBeNull();
+  });
+});
+
+/**
+ * A walk, as `useAbilityTargeting` hands it over. Built from the real
+ * `targetSteps` so the prompt and the rejection are the card's own words rather
+ * than this file's guess at them.
+ */
+function rustTargeting(over: Partial<Targeting> = {}): Targeting {
+  const step = targetSteps('rust')[0];
+  return {
+    helperId: 'rust',
+    name: 'Rust',
+    step,
+    named: {},
+    side: 'opponent',
+    legal: ['scissors'],
+    instruction: 'Choose one of their moves for Rust',
+    prompt: step.prompt,
+    rejection: step.rejection,
+    ...over,
+  };
+}
+
+/** The open board, as the tabpanel reports it. */
+function openView(container: HTMLElement): string | null {
+  return container.querySelector('.move-board')!.getAttribute('data-view');
+}
+
+describe('<MovePicker> an ability naming a move takes the board (JQ-325)', () => {
+  /*
+   * AC #2. JQ-221 kept targeting off the pentagon because the pentagon was
+   * always the commit surface. JQ-324 made the opponent's board something else
+   * entirely, and this mode makes your own board something else too for as long
+   * as it runs — which is what makes the reversal safe rather than merely
+   * allowed.
+   */
+  it('opens the board the step names, whatever was open before', () => {
+    const { container } = renderPicker({ targeting: rustTargeting() });
+    expect(openView(container)).toBe('theirs');
+    expect(container.querySelector('.move-board')).toHaveAttribute('data-targeting');
+    expect(screen.getByText('Choose one of their moves for Rust')).toBeInTheDocument();
+  });
+
+  it("keeps the card's own words, which are the only place the pair differ", () => {
+    renderPicker({ targeting: rustTargeting() });
+    expect(screen.getByText(/name a move they have on cooldown/i)).toBeInTheDocument();
+  });
+
+  /* AC #5. */
+  it('holds the tabs, and a tap on one cannot move the board', async () => {
+    const { container } = renderPicker({ targeting: rustTargeting() });
+    for (const tab of tabs()) expect(tab).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(tabs()[0]);
+    expect(openView(container)).toBe('theirs');
+  });
+
+  it('follows the walk to the other board between steps', () => {
+    const source = targetSteps('thief')[0];
+    const { container, rerenderWith } = renderPicker({
+      myDelays: { rock: 1 },
+      targeting: {
+        helperId: 'thief',
+        name: 'Thief',
+        step: source,
+        named: {},
+        side: 'own',
+        legal: ['rock'],
+        instruction: 'Choose one of your moves for Thief',
+        prompt: source.prompt,
+        rejection: source.rejection,
+      },
+    });
+    expect(openView(container)).toBe('mine');
+
+    const target = targetSteps('thief')[1];
+    rerenderWith({
+      targeting: {
+        helperId: 'thief',
+        name: 'Thief',
+        step: target,
+        named: { source: 'rock' },
+        side: 'opponent',
+        legal: ['rock', 'paper', 'scissors', 'lizard', 'robot'],
+        instruction: 'Choose one of their moves for Thief',
+        prompt: target.prompt,
+        rejection: target.rejection,
+      },
+    });
+    expect(openView(container)).toBe('theirs');
+    expect(screen.getByText(/so far: taking a mark from your rock/i)).toBeInTheDocument();
+  });
+});
+
+describe('<MovePicker> a target is not a move (JQ-325, AC #3)', () => {
+  it('names the target and plays nothing', async () => {
+    const onNameTarget = vi.fn();
+    const { onPlay } = renderPicker({ targeting: rustTargeting(), onNameTarget });
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    expect(onNameTarget).toHaveBeenCalledWith('scissors');
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('refuses an illegal target and says why, out loud', async () => {
+    const onNameTarget = vi.fn();
+    renderPicker({ targeting: rustTargeting(), onNameTarget });
+    const rock = screen.getByRole('button', { name: /^Rock/ });
+    expect(rock).toBeDisabled();
+    expect(rock).toHaveAccessibleDescription(
+      /Rock is clear — Rust needs a move they have on cooldown/i,
+    );
+    await userEvent.click(rock);
+    expect(onNameTarget).not.toHaveBeenCalled();
+  });
+
+  it('offers no way to commit the round while it runs', () => {
+    renderPicker({ targeting: rustTargeting() });
+    expect(screen.queryByRole('button', { name: /Lock in/ })).not.toBeInTheDocument();
+  });
+
+  /*
+   * A seat that has locked its move may still fire — `firingUnavailable` says
+   * nothing about having picked — so the round's own `disabled` must not close
+   * the board to the step.
+   */
+  it('still takes a target after you have locked your move in', () => {
+    renderPicker({
+      disabled: true,
+      lockedIn: true,
+      myChosenMove: 'rock',
+      targeting: rustTargeting(),
+    });
+    expect(screen.getByRole('button', { name: /^Scissors/ })).toBeEnabled();
+  });
+
+  it('does not let the clock play your pick while a target is open', () => {
+    const { onPlay, rerenderWith } = renderPicker({ secondsLeft: 10 });
+    fireEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    rerenderWith({ targeting: rustTargeting(), secondsLeft: 1 });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+});
+
+describe('<MovePicker> cancelling and firing (JQ-325, AC #4, AC #6)', () => {
+  it('keeps your tentative pick right through a walk', () => {
+    const { rerenderWith } = renderPicker();
+    fireEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    rerenderWith({ targeting: rustTargeting() });
+    expect(screen.queryByRole('button', { name: /Lock in Rock/ })).not.toBeInTheDocument();
+    // Cancelled: the walk goes away and the board it was covering is still there,
+    // with the choice that was on it.
+    rerenderWith({ targeting: null });
+    expect(screen.getByRole('button', { name: /Lock in Rock/ })).toBeInTheDocument();
+  });
+
+  it('restores the board you came from, not your own', () => {
+    const { container, rerenderWith } = renderPicker();
+    fireEvent.click(tabs()[1]);
+    rerenderWith({ targeting: rustTargeting({ side: 'own', legal: ['rock'] }) });
+    expect(openView(container)).toBe('mine');
+    rerenderWith({ targeting: null });
+    expect(openView(container)).toBe('theirs');
+  });
+
+  it('cancels on Escape', async () => {
+    const onCancelTargeting = vi.fn();
+    renderPicker({ targeting: rustTargeting(), onCancelTargeting });
+    await userEvent.keyboard('{Escape}');
+    expect(onCancelTargeting).toHaveBeenCalledTimes(1);
+  });
+
+  it('says plainly on the confirm step that a fired charge does not come back', () => {
+    renderPicker({ targeting: rustTargeting({ step: null, named: { target: 'scissors' } }) });
+    expect(screen.getByText(/Fire Rust, naming their Scissors\?/)).toBeInTheDocument();
+    expect(screen.getByText(/can't be taken back/i)).toBeInTheDocument();
+    expect(screen.getByText(/spent whether or not it lands/i)).toBeInTheDocument();
+  });
+
+  it('fires once, and hands the board back to your own moves', async () => {
+    const onConfirmTargeting = vi.fn();
+    const { container, rerenderWith } = renderPicker({
+      targeting: rustTargeting({ step: null, named: { target: 'scissors' } }),
+      onConfirmTargeting,
+    });
+    await userEvent.click(screen.getByRole('button', { name: /^Fire$/ }));
+    expect(onConfirmTargeting).toHaveBeenCalledTimes(1);
+    rerenderWith({ targeting: null });
+    expect(openView(container)).toBe('mine');
+  });
+});
+
+describe('<MovePicker> a window takes the board back (JQ-325, AC #7)', () => {
+  it('opens your own moves when a window you may act in arrives', () => {
+    const { container, rerenderWith } = renderPicker();
+    fireEvent.click(tabs()[1]);
+    expect(openView(container)).toBe('theirs');
+    rerenderWith({ demandOwnBoard: 3 });
+    expect(openView(container)).toBe('mine');
+  });
+
+  it('does it once, not on every refresh of the same window', () => {
+    const { container, rerenderWith } = renderPicker();
+    rerenderWith({ demandOwnBoard: 3 });
+    // The player has looked at the window and gone back to read their board.
+    fireEvent.click(tabs()[1]);
+    expect(openView(container)).toBe('theirs');
+    rerenderWith({ demandOwnBoard: 3 });
+    expect(openView(container)).toBe('theirs');
+  });
+
+  it('leaves an ordinary inspection alone when no window is open', () => {
+    const { container, rerenderWith } = renderPicker();
+    fireEvent.click(tabs()[1]);
+    rerenderWith({ demandOwnBoard: null });
+    expect(openView(container)).toBe('theirs');
   });
 });

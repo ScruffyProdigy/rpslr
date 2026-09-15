@@ -88,7 +88,7 @@ function asClause(reason: string): string {
 }
 
 /** What each named move did, in the confirm step's own order and words. */
-function namedParts(named: Partial<FiringChoice>): string[] {
+export function namedParts(named: Partial<FiringChoice>): string[] {
   return [
     named.source ? `taking a mark from your ${MOVE_META[named.source].label}` : null,
     named.target ? `naming their ${MOVE_META[named.target].label}` : null,
