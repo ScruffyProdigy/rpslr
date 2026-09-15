@@ -51,9 +51,11 @@ const NO_DELAYS = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
 function Board({
   opponentLockedIn = false,
   centerSlot,
+  theirDelays = NO_DELAYS,
 }: {
   opponentLockedIn?: boolean;
   centerSlot?: React.ReactNode;
+  theirDelays?: Record<string, number>;
 }) {
   return (
     <div className="app">
@@ -65,7 +67,9 @@ function Board({
         </div>
         <MovePicker
           myDelays={NO_DELAYS}
-          oppDelays={NO_DELAYS}
+          oppDelays={theirDelays}
+          you={YOU}
+          opponent={OPP}
           myChosenMove={null}
           lockedIn={false}
           opponentLockedIn={opponentLockedIn}
@@ -216,6 +220,57 @@ describe('the reveal card holds its own contents', () => {
       expect(rect.right, part.className).toBeLessThanOrEqual(box.right + 0.5);
       expect(rect.top, part.className).toBeGreaterThanOrEqual(box.top - 0.5);
       expect(rect.bottom, part.className).toBeLessThanOrEqual(box.bottom + 0.5);
+    }
+  });
+});
+
+/**
+ * Switching boards is a layout event as much as an interaction one: the strip
+ * is paid for out of a page with 0.9px of slack, and their board carries a
+ * wider centre panel and a pill on every marked node (JQ-324).
+ */
+describe('switching boards holds the layout', () => {
+  it.each(WIDTHS)('keeps the pentagon exactly where it was at %ipx', async (width) => {
+    await at(width, <Board />);
+    const before = document.querySelector('.move-board')!.getBoundingClientRect();
+
+    const [mine, theirs] = [...document.querySelectorAll<HTMLElement>('[role="tab"]')];
+    theirs.click();
+    await frame();
+    const during = document.querySelector('.move-board')!.getBoundingClientRect();
+    // The board is the tap surface. It moving under a thumb mid-decision is the
+    // thing the reserved status slot exists to prevent, and a tab strip that
+    // resized with its label would undo it.
+    expect(during.top).toBe(before.top);
+    expect(during.height).toBe(before.height);
+
+    mine.click();
+    await frame();
+    const after = document.querySelector('.move-board')!.getBoundingClientRect();
+    expect(after.top).toBe(before.top);
+    expect(document.querySelectorAll('.move-btn')).toHaveLength(5);
+  });
+
+  it.each(WIDTHS)('does not overflow on their board at %ipx', async (width) => {
+    await at(width, <Board theirDelays={{ rock: 2, paper: 1, scissors: 3, lizard: 1, robot: 4 }} />);
+    document.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+    await frame();
+    // A tapped move opens the widest panel their board has.
+    document.querySelector<HTMLElement>('.move-btn')!.click();
+    await frame();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    expect(escaping(document.querySelector<HTMLElement>('.board')!)).toEqual([]);
+  });
+
+  it.each(WIDTHS)('keeps the tabs reachable and tall enough at %ipx', async (width) => {
+    await at(width, <Board />);
+    const strip = [...document.querySelectorAll<HTMLElement>('[role="tab"]')];
+    expect(strip).toHaveLength(2);
+    for (const tab of strip) {
+      const box = tab.getBoundingClientRect();
+      expect(box.height, tab.textContent ?? '').toBeGreaterThanOrEqual(32);
+      // Wide enough to hit without aiming: half the strip, less its gap.
+      expect(box.width, tab.textContent ?? '').toBeGreaterThanOrEqual(100);
     }
   });
 });

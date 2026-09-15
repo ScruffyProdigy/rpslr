@@ -939,8 +939,11 @@ export function Board({
             myBeats={myRules.beats}
             oppBeats={oppRules.beats}
             myLedger={myLedger}
-
             oppCanFreeze={holdsFreeze(oppSeat?.loadout ?? null)}
+            // The two people the tabs name. Already in hand for the match-end
+            // card, so the strip gets avatars rather than initials.
+            you={you}
+            opponent={opponent}
             idleCaption={beforeRoundOne ? "Round 1 hasn't started" : undefined}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
