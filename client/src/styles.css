@@ -716,6 +716,21 @@ button.ghost {
   border-radius: 12px;
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--warn) 55%, transparent);
 }
+/* The nodes a step will accept are drawn *over* the instruction panel, which is
+   the one place targeting cannot behave like inspection.
+   Every centre panel the board has ever drawn overlaps the lower nodes, and that
+   is harmless while they are `pointer-events: none` — an inspecting tap falls
+   straight through the panel to the node. Targeting puts real buttons in that
+   panel, and Cancel lands on two of the five nodes at every width. A player
+   reaching for the move the board just asked them to name would abort the firing
+   instead, which is the worst outcome the flow has.
+   So the legal nodes take the higher layer: visible through nothing, and first in
+   the hit test, so the tap reaches the move rather than the button over it. An
+   illegal node stays underneath, where it is `disabled` and has nothing to
+   offer (JQ-325). */
+.move-board[data-targeting] .move-btn:not(:disabled) {
+  z-index: 3;
+}
 .move-board[data-state='picking']::before {
   opacity: 1;
 }
@@ -1231,6 +1246,76 @@ button.ghost {
   line-height: 1.3;
   color: var(--text);
 }
+/* Your move against what they can play. Three changes from the centred box,
+   every one of them forced by a measurement rather than chosen (JQ-326).
+
+   The width is wider than any other centre panel, and that is a fit constraint
+   rather than a taste: at 320px the narrow box breaks the rules caption onto a
+   second line, and the tallest version of this panel then clears the board's
+   bottom edge by 4.8px on one machine and overruns it by 19px on another with
+   different font metrics. A layout that turns on whether one string wraps is not
+   a layout. This width keeps every line here to one line at every supported
+   width, which is what makes the fit hold rather than happen to pass.
+   The proportion is what 320px needs and the cap is what keeps it from being
+   spent anywhere it is not needed: past ~264px of board the panel stops growing
+   and hands the room back to the pentagon.
+
+   It hangs from a line instead of straddling the middle, because the centred
+   panel already clears the top node's tap target by 0.8px at 320px — so *any*
+   extra line in it covers the one move the board has always kept readable.
+   35% is where that node's box ends while it is previewed: the tapped move grows
+   under `scale: 1.08`, and the move this panel is describing is exactly the one
+   that has grown. The pentagon is square and scales whole, so the same figure
+   holds at 320, 360 and 390px. Growing downwards from there leaves the top node
+   alone and spends the room on the lower two, which every panel the centre has
+   ever drawn already overlaps.
+
+   The tighter gap and padding are what keep the tallest version — every clause
+   filled, plus the draw caveat — clear of the board's bottom edge at 320px,
+   where it hangs lowest. They buy roughly a line of text, which is the unit the
+   layout test holds this to: enough that a machine whose fonts wrap one line
+   more than this one still lands inside the board.
+
+   All of it only while a summary is showing: an idle, blocked or forced centre
+   keeps the narrow, centred box the pentagon was laid out around. */
+.picker-center--summary {
+  width: min(72cqw, 190px);
+  top: 35%;
+  transform: translate(-50%, 0);
+  gap: 4px;
+  padding-block: 7px;
+}
+/* The label belongs to the list, so it sits on it rather than a gap away. */
+.picker-center--summary .picker-center__against {
+  margin-bottom: -3px;
+}
+/* Which question the three lines under it answer. Quiet, because it is a label
+   rather than a claim, and tight against the list it names. */
+.picker-center__against {
+  margin: 0;
+  font-size: clamp(0.52rem, 2.6cqw, 0.62rem);
+  line-height: 1.2;
+  color: var(--muted);
+}
+/* One clause per line, unbulleted. The marker is dropped and the list is not:
+   three facts read as three facts to a screen reader, and as three lines to
+   everyone else, where one wrapped line with separators in it read as neither. */
+.picker-center__summary {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: clamp(0.58rem, 2.9cqw, 0.7rem);
+  line-height: 1.3;
+  color: var(--text);
+}
+/* The qualifier, deliberately quieter than the claim it qualifies: it is true of
+   every line above rather than a fact about one of them. */
+.picker-center__caveat {
+  margin: 0;
+  font-size: clamp(0.54rem, 2.7cqw, 0.64rem);
+  line-height: 1.25;
+  color: var(--muted);
+}
 .picker-center__lock {
   pointer-events: auto;
   width: 100%;
@@ -1258,8 +1343,24 @@ button.ghost {
    same reason the opponent's is — it carries an instruction and the card's own
    prompt — and tinted to the warning colour rather than to a player, because it
    is neither player's board state that is being read (JQ-325). */
+/* The same width as the inspect panel it replaces, and not a pixel more: the
+   centre is painted over the pentagon, and at 320px a wider box is the
+   difference between covering four nodes and covering all five. Measured, not
+   chosen — see the probe in `board.browser.test.tsx` (JQ-325). */
 .picker-center--targeting {
-  width: min(52cqw, 190px);
+  width: min(46cqw, 172px);
+  /* Hung from a line rather than straddling the middle, for the reason JQ-326
+     found for the matchup summary and then measured: the centred box clears the
+     top node's tap target by 0.8px at 320px, so any panel with an extra line in
+     it covers the one move the board has always kept readable. This one carries
+     an instruction *and* the step's own prompt, which is that extra line.
+     Growing downwards leaves the top node alone and spends the room on the lower
+     two, which every centre panel already overlaps — and which targeting now
+     draws over the panel anyway. */
+  top: 35%;
+  transform: translate(-50%, 0);
+  gap: 4px;
+  padding-block: 7px;
   border-color: color-mix(in srgb, var(--warn) 45%, transparent);
   background: color-mix(in srgb, var(--warn) 10%, var(--card));
 }

@@ -193,6 +193,36 @@ the ledger entry.
 One firing per slot per round and the two-charge-helper case are untouched: both
 are server state and neither is re-derived here.
 
+### The panel may not cover the move it is asking for
+
+Merging JQ-326 turned this up, and it is the one place targeting cannot behave
+like inspection.
+
+Every centre panel the board has drawn since JQ-324 overlaps the lower nodes.
+That is harmless while the panel is `pointer-events: none`: an inspecting tap
+falls straight through it to the node underneath. Targeting puts *real buttons*
+in that panel, and measured in a browser, `Cancel targeting` lands on two of the
+five nodes at all three supported widths. A player reaching for the move the
+board has just asked them to name would abort the firing instead — the worst
+outcome the flow has.
+
+Three things follow, each measured rather than chosen:
+
+- **The legal nodes are drawn over the panel** (`z-index: 3` while
+  `data-targeting`), so they are both readable and first in the hit test. An
+  illegal node stays underneath, where it is `disabled` and has nothing to offer.
+- **The panel is the same width as the inspect panel it replaces** — `min(46cqw,
+  172px)`. A wider box is the difference between covering four nodes and covering
+  all five at 320px.
+- **It hangs from `top: 35%` rather than straddling the middle**, which is
+  JQ-326's own fix for its own extra line: the centred box clears the top node's
+  tap target by 0.8px at 320px, and this panel carries an instruction *and* the
+  step's prompt.
+
+The test that holds it asks what a tap actually reaches — `elementFromPoint` at
+the node's centre — rather than comparing rectangles, because rectangles were
+never the question.
+
 ## Re-picks
 
 ### The window takes the board back
