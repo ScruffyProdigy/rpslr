@@ -658,6 +658,14 @@ button.ghost {
   border-bottom-color: var(--opp);
   background: color-mix(in srgb, var(--opp) 10%, transparent);
 }
+/* Held while a walk owns the board. Dimmed and refused, but still the answer to
+   whose board is open, so the active tab keeps its rule and its tint (JQ-325). */
+.picker-tabs[data-locked] .picker-tab {
+  cursor: not-allowed;
+}
+.picker-tabs[data-locked] .picker-tab:not(.picker-tab--active) {
+  opacity: 0.45;
+}
 .picker-tab__label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -700,6 +708,28 @@ button.ghost {
     transparent 100%
   );
   transition: opacity 260ms ease, background 260ms ease;
+}
+/* Targeting is not inspection, and has to look like it is not (AC #2). An inset
+   ring rather than an outline: the board is `min(100%, 380px)` and an outline
+   offset outwards paints past the page's own gutter at 360px. */
+.move-board[data-targeting] {
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--warn) 55%, transparent);
+}
+/* The nodes a step will accept are drawn *over* the instruction panel, which is
+   the one place targeting cannot behave like inspection.
+   Every centre panel the board has ever drawn overlaps the lower nodes, and that
+   is harmless while they are `pointer-events: none` — an inspecting tap falls
+   straight through the panel to the node. Targeting puts real buttons in that
+   panel, and Cancel lands on two of the five nodes at every width. A player
+   reaching for the move the board just asked them to name would abort the firing
+   instead, which is the worst outcome the flow has.
+   So the legal nodes take the higher layer: visible through nothing, and first in
+   the hit test, so the tap reaches the move rather than the button over it. An
+   illegal node stays underneath, where it is `disabled` and has nothing to
+   offer (JQ-325). */
+.move-board[data-targeting] .move-btn:not(:disabled) {
+  z-index: 3;
 }
 .move-board[data-state='picking']::before {
   opacity: 1;
@@ -1309,6 +1339,80 @@ button.ghost {
   font-weight: 600;
   color: var(--text);
 }
+/* The centre while an ability is naming a move. Wider than the idle slot for the
+   same reason the opponent's is — it carries an instruction and the card's own
+   prompt — and tinted to the warning colour rather than to a player, because it
+   is neither player's board state that is being read (JQ-325). */
+/* The same width as the inspect panel it replaces, and not a pixel more: the
+   centre is painted over the pentagon, and at 320px a wider box is the
+   difference between covering four nodes and covering all five. Measured, not
+   chosen — see the probe in `board.browser.test.tsx` (JQ-325). */
+.picker-center--targeting {
+  width: min(46cqw, 172px);
+  /* Hung from a line rather than straddling the middle, for the reason JQ-326
+     found for the matchup summary and then measured: the centred box clears the
+     top node's tap target by 0.8px at 320px, so any panel with an extra line in
+     it covers the one move the board has always kept readable. This one carries
+     an instruction *and* the step's own prompt, which is that extra line.
+     Growing downwards leaves the top node alone and spends the room on the lower
+     two, which every centre panel already overlaps — and which targeting now
+     draws over the panel anyway. */
+  top: 35%;
+  transform: translate(-50%, 0);
+  gap: 4px;
+  padding-block: 7px;
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--card));
+}
+.picker-center__targeting {
+  margin: 0;
+  font-size: clamp(0.6rem, 3cqw, 0.74rem);
+  line-height: 1.3;
+  font-weight: 650;
+  color: var(--text);
+}
+.picker-center__named {
+  margin: 0;
+  font-size: clamp(0.54rem, 2.7cqw, 0.66rem);
+  line-height: 1.3;
+  color: var(--muted);
+}
+/* JQ-220 settled it in the negative: there is no withdraw message. The line says
+   so, in the colour the board uses for things that cannot be undone. */
+.picker-center__final {
+  margin: 0;
+  font-size: clamp(0.54rem, 2.7cqw, 0.66rem);
+  line-height: 1.35;
+  color: var(--warn);
+}
+.picker-center__targeting-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.picker-center__fire {
+  pointer-events: auto;
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 7px 8px;
+  font-size: clamp(0.62rem, 3.1cqw, 0.74rem);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--surface-0);
+  border-radius: 10px;
+}
+.picker-center__cancel {
+  pointer-events: auto;
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 7px 8px;
+  font-size: clamp(0.62rem, 3.1cqw, 0.74rem);
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 10px;
+}
+
 /* The way out of an inspection. It is the only control on their board, so it is
    the one thing here that takes a pointer. */
 .picker-center__back {
@@ -3170,9 +3274,36 @@ input:focus-visible {
   line-height: 1.3;
   color: var(--muted);
 }
-.ability-card__fire,
-.ability-confirm__go,
-.ability-card__cancel {
+/* Whose cards these are. A full-width row of its own, so the two cards below it
+   keep the one row `boardFit` holds them to.
+
+   `line-height` is a fixed px rather than a ratio on purpose: the rail's height
+   is modelled from this stylesheet, and a line whose height depends on the
+   inherited font size is a term the model would have to guess at (JQ-325). */
+.ability-rail__owner {
+  flex: 1 0 100%;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  line-height: 18px;
+  font-weight: 650;
+  color: var(--muted);
+}
+/* Below 360px the rail has 8.1px of room and this line wants 26. The board
+   already scrolls on that screen, and the section's name still reaches anyone
+   whose screen reader is doing the reading — which is the audience the line was
+   for. Same properties as `.sr-only`. */
+@media (max-width: 359px) {
+  .ability-rail__owner {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+.ability-card__fire {
   /* 44px is the floor a thumb needs; the pentagon's own 56px is the board's
      larger promise (JQ-108) and these sit outside it. */
   min-height: 44px;
@@ -3197,61 +3328,25 @@ input:focus-visible {
   font-size: 0.72rem;
   color: var(--muted-2);
 }
-.ability-target__prompt,
-.ability-confirm__what {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text);
-}
-.ability-target__moves {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 6px 0;
-  padding: 0;
-  list-style: none;
-}
-.ability-target__move {
+/* Where the choice went. The card stops being the place a target is named the
+   moment a walk opens, so it says so rather than going quiet (JQ-325). */
+.ability-card__naming {
   display: flex;
   align-items: center;
-  gap: 4px;
   min-height: 44px;
-  padding-inline: 8px;
-  border: 1px solid var(--line-3);
-  border-radius: 8px;
-  background: var(--surface-4);
-  color: var(--text);
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-/* An illegal target is dashed and dimmed as well as unclickable, and carries
-   its reason in an `aria-describedby` span — refusable *and* explicable. */
-.ability-target__move:disabled {
-  border-style: dashed;
-  color: var(--muted-2);
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-.ability-card__cancel {
-  border: 1px solid var(--line-2);
-  background: transparent;
-  color: var(--muted);
-}
-.ability-confirm__final {
   margin: 0;
   font-size: 0.75rem;
-  line-height: 1.35;
-  color: var(--warn);
+  line-height: 1.3;
+  color: var(--accent);
 }
-.ability-confirm__actions {
-  display: flex;
-  gap: 6px;
-}
-.ability-confirm__go {
-  flex: 1 1 auto;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--surface-0);
+/* What became of a walk: the charge you just spent, or the one the round took
+   away from you. It replaces `__blocked` rather than joining it — the same fact
+   with more in it, and the rail's height is measured (JQ-254, JQ-325). */
+.ability-card__note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--text);
 }
 
 /* The mid-round sub-phase (JQ-221, finishing JQ-150's client half; generalised

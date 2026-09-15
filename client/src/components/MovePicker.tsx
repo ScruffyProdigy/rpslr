@@ -35,6 +35,8 @@ import {
 import MoveIcon from './MoveIcon';
 import UiIcon from './UiIcon';
 import { PickerTabs, type PickerView } from './PickerTabs';
+import type { Targeting } from '../lib/useAbilityTargeting';
+import { TargetingCenter } from './TargetingCenter';
 import type { Identity } from '../lib/seatProfile';
 
 /** The board, for the tabs to point `aria-controls` at. */
@@ -106,6 +108,11 @@ export function MovePicker({
   drawCardInPlay = false,
   you,
   opponent,
+  targeting = null,
+  onNameTarget,
+  onCancelTargeting,
+  onConfirmTargeting,
+  demandOwnBoard = null,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -180,6 +187,28 @@ export function MovePicker({
    */
   you?: Identity;
   opponent?: Identity;
+  /**
+   * An ability naming a move, or null (JQ-325).
+   *
+   * While it holds, the board is a target picker: the open view is derived from
+   * the step rather than read from state, every commit path is suppressed, and a
+   * node tap names rather than chooses. JQ-221 kept targeting off the pentagon
+   * because the pentagon was always the commit surface; it is not, while this is
+   * set, and that is what makes the reversal safe rather than merely allowed.
+   */
+  targeting?: Targeting | null;
+  onNameTarget?: (move: Move) => void;
+  onCancelTargeting?: () => void;
+  onConfirmTargeting?: () => void;
+  /**
+   * The round of a mid-round window this seat may act in, or null (JQ-325).
+   *
+   * A re-pick is an action on your own board, so the window takes the board
+   * back — once, when it opens, rather than on every state refresh. JQ-324 left
+   * this to "their own explicit prompt"; the prompt is still there, and this is
+   * what puts the board under it.
+   */
+  demandOwnBoard?: number | null;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -187,15 +216,44 @@ export function MovePicker({
   const [picked, setPicked] = useState<Move | null>(null);
   const [hovered, setHovered] = useState<Move | null>(null);
   const autoCommitted = useRef(false);
-  const preview = hovered ?? picked;
+  /*
+   * Nothing that teaches your own decision is drawn while an ability is naming a
+   * move: the preview highlight, the caption it belongs to, and the inspection
+   * on their board are all about the round's pick, and the board is being used
+   * for something else. `picked` itself is untouched — that is AC #6's "preserves
+   * a still-legal tentative move", and it survives because targeting writes to
+   * none of the state a pick lives in.
+   */
+  const preview = targeting ? null : (hovered ?? picked);
 
   // Whose board is drawn, and what has been tapped on theirs.
   //
   // `inspected` is deliberately not `picked`: nothing that reads a commit target
   // reads this, so an inspection cannot become a move by any path — not the
   // second tap, not the Lock in button, not the clock (JQ-324).
-  const [view, setView] = useState<PickerView>('mine');
+  const [viewState, setViewState] = useState<PickerView>('mine');
   const [inspected, setInspected] = useState<Move | null>(null);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  // Read by `switchTo`, which must not take a new identity on every render of a
+  // walk — the Escape listener re-subscribes on it.
+  const targetingRef = useRef<Targeting | null>(null);
+  targetingRef.current = targeting;
+
+  /**
+   * Whose board is open.
+   *
+   * Derived, not stored, whenever targeting holds: there is then no path by
+   * which a tab, a key or a refresh can move the board, because the stored view
+   * is simply not being read. That is AC #5's "require completion or explicit
+   * cancellation before normal perspective switching" as a mechanism rather than
+   * as a guard — and it is also why a cancel restores the view you came from for
+   * free, since nothing overwrote it.
+   */
+  const view: PickerView = targeting
+    ? targeting.side === 'own'
+      ? 'mine'
+      : 'theirs'
+    : viewState;
 
   // Whether the next tap on `picked` commits it.
   //
@@ -231,9 +289,28 @@ export function MovePicker({
     commitArmed.current = false;
     // A new decision is your decision: the next ordinary selection phase opens
     // on your own board, whatever was being inspected when the round ended.
-    setView('mine');
+    setViewState('mine');
     setInspected(null);
   }, [round, disabled]);
+
+  /**
+   * A window that entitles this seat to act takes the board back.
+   *
+   * Once per window — keyed on the round it names, and held in a ref so an
+   * ordinary state refresh cannot re-open your own board under a player who has
+   * deliberately gone back to look at theirs.
+   */
+  const answered = useRef<number | null>(null);
+  useEffect(() => {
+    if (demandOwnBoard == null) {
+      answered.current = null;
+      return;
+    }
+    if (answered.current === demandOwnBoard) return;
+    answered.current = demandOwnBoard;
+    setViewState('mine');
+    setInspected(null);
+  }, [demandOwnBoard]);
 
   /**
    * Open the other board.
@@ -241,14 +318,42 @@ export function MovePicker({
    * Never a commit path, and never a clear: `picked` survives so the choice you
    * had carries across, and only the tap sequence and the transient hover reset.
    */
+  /**
+   * Focus follows the walk.
+   *
+   * Pressing "Fire Rust" leaves focus inside a card that has just become a
+   * status line, so it is moved to the first move the step will accept — and
+   * again when Thief's second step opens a different board (AC #10).
+   *
+   * Keyed on the step rather than on `targeting`, which is a fresh object every
+   * render: the walk changing is what should move focus, not the board redrawing.
+   */
+  const stepKey = targeting ? `${targeting.helperId}:${targeting.step?.field ?? 'confirm'}` : null;
+  useEffect(() => {
+    if (!stepKey) return;
+    const first = targetingRef.current?.step ? targetingRef.current.legal[0] : undefined;
+    if (!first) return;
+    boardRef.current
+      ?.querySelector<HTMLButtonElement>(`.move-btn[data-move="${first}"]`)
+      ?.focus();
+  }, [stepKey]);
+
   const switchTo = useCallback(
     (next: PickerView) => {
+      // Targeting owns the board. The derived `view` above already makes this
+      // unreachable through the strip; this is the same rule for every other
+      // caller of it.
+      //
+      // Before the tip is retired, not after: a switch that does not happen has
+      // not shown anyone their opponent's board, and targeting opens it for a
+      // different reason than the tip is asking about (JQ-325, JQ-326).
+      if (targetingRef.current) return;
       // Opening their board is the thing the strategy tip asks for, so doing it
       // retires the tip — the same argument that lets a first lock-in retire the
       // tap hint. A tip that kept asking after you had already done it is the
-      // "repeat every round" this ticket rules out (JQ-326).
+      // "repeat every round" JQ-326 rules out.
       if (next === 'theirs') strategyTip.dismiss();
-      setView(next);
+      setViewState(next);
       setInspected(null);
       setHovered(null);
       commitArmed.current = false;
@@ -265,6 +370,15 @@ export function MovePicker({
   }, []);
 
   useEffect(() => {
+    // Mid-targeting Escape is Cancel, which outranks both cases below: the walk
+    // is what has the board, so it is what Escape lets go of.
+    if (targeting) {
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onCancelTargeting?.();
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
     // On their board Escape is the way out of the inspection entirely — the
     // keyboard's version of the Back button in the centre.
     if (view === 'theirs') {
@@ -280,7 +394,7 @@ export function MovePicker({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [picked, lockedIn, clearPreview, view, switchTo]);
+  }, [picked, lockedIn, clearPreview, view, switchTo, targeting, onCancelTargeting]);
 
   const commit = useCallback(
     (move: Move) => {
@@ -322,6 +436,9 @@ export function MovePicker({
     // but the clock running out during an inspection must not play it for you
     // any more than a tap on their node could (JQ-324).
     if (view !== 'mine') return;
+    // Nor while an ability is naming a move. The clock belongs to the round's
+    // pick, and the board is not showing that decision right now.
+    if (targeting) return;
     // A tapped move you cannot play was a "why can't I play this?", not a
     // choice. Asked of the same helper the tap path uses, so the two cannot
     // disagree about what is playable — they used to hold separate copies of
@@ -329,9 +446,16 @@ export function MovePicker({
     if (!isPlayable(picked, myDelays)) return;
     autoCommitted.current = true;
     commit(picked);
-  }, [secondsLeft, boardState, picked, myDelays, commit, view]);
+  }, [secondsLeft, boardState, picked, myDelays, commit, view, targeting]);
 
   function handleClick(move: Move) {
+    // Naming a target for an ability. First, and returning unconditionally, so
+    // no tap during targeting can reach the commit paths below it — an illegal
+    // move is simply ignored here as well as being `disabled` in the markup.
+    if (targeting) {
+      if (targeting.legal.includes(move)) onNameTarget?.(move);
+      return;
+    }
     // Their board answers questions and takes no decisions: a tap is a look at
     // one of their moves, and nothing here can reach `commit` (JQ-324).
     if (view === 'theirs') {
@@ -388,7 +512,10 @@ export function MovePicker({
   // Your pick against each move they can actually play, once their board is open
   // and you are carrying one. The comparison the ticket asks for, drawn as the
   // arrows that would decide it.
-  const matchupEdges = !mineOpen && picked ? liveMatchupEdges(picked, oppDelays, myBeats, oppBeats) : [];
+  const matchupEdges =
+    !mineOpen && picked && !targeting
+      ? liveMatchupEdges(picked, oppDelays, myBeats, oppBeats)
+      : [];
   const isMatchup = (from: Move, to: Move) =>
     matchupEdges.some((e) => e.from === from && e.to === to);
 
@@ -396,7 +523,11 @@ export function MovePicker({
   const myLastMove = myRecentMoves[0] ?? null;
   // Both notes teach your own board — one says how to commit, the other says why
   // one of your moves is down — so neither belongs under theirs.
-  const showTapHint = mineOpen && tapHint.show && !lockedIn && round <= 2;
+  //
+  // None of them while an ability is naming a move: `mineOpen` is still true on
+  // Thief's own-board step, and teaching a player to lock a move in is the wrong
+  // thing to say over a board that is refusing exactly that (JQ-325).
+  const showTapHint = mineOpen && !targeting && tapHint.show && !lockedIn && round <= 2;
   // One note at a time — two stacked bars push the board off a phone screen —
   // and in this order, because each one is the prerequisite of the next. You
   // cannot act on a read of their board until you can commit a move at all, and
@@ -408,10 +539,12 @@ export function MovePicker({
   // other tab would otherwise hold the single note slot for the whole match and
   // the cooldown explainer behind it would never get a turn. It is opening
   // advice; after the opening it lives in How to play.
-  const showStrategyTip = mineOpen && !showTapHint && strategyTip.show && !lockedIn && round <= 3;
+  const showStrategyTip =
+    mineOpen && !targeting && !showTapHint && strategyTip.show && !lockedIn && round <= 3;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
     mineOpen &&
+    !targeting &&
     !showTapHint &&
     !showStrategyTip &&
     cooldownNote.show &&
@@ -428,17 +561,26 @@ export function MovePicker({
         opponent={oppIdentity}
         voice={voice}
         panelId={PANEL_ID}
+        locked={targeting !== null}
       />
       <div
         className="move-board"
+        ref={boardRef}
         data-state={boardState}
         id={PANEL_ID}
         role="tabpanel"
         aria-labelledby={`picker-tab-${view}`}
         data-view={view}
+        // What tells targeting apart from ordinary inspection at a glance
+        // (AC #2). The words in the centre say it; this is the board agreeing.
+        data-targeting={targeting ? '' : undefined}
         onClick={(e) => {
           // A move button or the commit button owns its own click.
           if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
+          // Tapping the board away from a node is a way to put a caption down.
+          // There is no caption to put down mid-targeting, and the way out is
+          // the Cancel button, which says so.
+          if (targeting) return;
           if (view === 'theirs') {
             setInspected(null);
             return;
@@ -616,11 +758,11 @@ export function MovePicker({
           // anything on a board that is not yours to act on.
           const selected = mineOpen && myChosenMove === m;
           const previewed = mineOpen && preview === m;
-          const inspecting = !mineOpen && inspected === m;
+          const inspecting = !mineOpen && !targeting && inspected === m;
           // The viewed player's graph, not the shared one: previewing Lizard as
           // a Chimera owner has to light Scissors too, or the caption and the
           // board disagree.
-          const lit = mineOpen ? preview : inspected;
+          const lit = targeting ? null : mineOpen ? preview : inspected;
           const isTarget = lit != null && lit !== m && beatsOf(lit, board.beats).includes(m);
           // Whose cooldown this is has to be in the words, not only in the
           // colour of the pill — and only one player's is ever read, so a node
@@ -653,23 +795,48 @@ export function MovePicker({
                 .filter(Boolean)
                 .join(' ')}
               style={{ left: boardPct(pos.x), top: boardPct(pos.y) }}
-              disabled={disabled}
-              aria-disabled={blocked || undefined}
+              data-move={m}
+              // While targeting, legality is the *step's* question, not the
+              // round's: a seat that has already locked its move may still fire,
+              // so the round's own `disabled` must not close the board here.
+              disabled={targeting ? !targeting.legal.includes(m) : disabled}
+              aria-disabled={!targeting && blocked ? true : undefined}
+              // The reason rides on the button itself rather than a tooltip, so
+              // it is spoken: an illegal target must be refusable *and*
+              // explicable. Moved here from the rail's chips (JQ-221, JQ-325).
+              aria-describedby={
+                targeting && !targeting.legal.includes(m) ? `why-not-${m}` : undefined
+              }
               onClick={() => handleClick(m)}
+              // No hover state while an ability is naming a move. The walk
+              // moves focus onto a node itself, and a hover picked up there
+              // would outlive the walk and displace the tentative pick the
+              // player still has (JQ-325).
               onPointerEnter={(e) => {
-                if (e.pointerType === 'mouse') setHovered(m);
+                if (!targeting && e.pointerType === 'mouse') setHovered(m);
               }}
               onPointerLeave={(e) => {
-                if (e.pointerType === 'mouse') setHovered(null);
+                if (!targeting && e.pointerType === 'mouse') setHovered(null);
               }}
-              onFocus={() => setHovered(m)}
-              onBlur={() => setHovered(null)}
+              onFocus={() => {
+                if (!targeting) setHovered(m);
+              }}
+              onBlur={() => {
+                if (!targeting) setHovered(null);
+              }}
               aria-label={label}
               // A tap on their board takes no decision, so nothing on it is
               // pressed — `aria-pressed` there would announce a commitment that
               // does not exist.
-              aria-pressed={mineOpen ? selected : undefined}
+              // Nothing is "pressed" while an ability is naming a move: the
+              // nodes are candidates for a target, not a commitment of yours.
+              aria-pressed={mineOpen && !targeting ? selected : undefined}
             >
+              {targeting && !targeting.legal.includes(m) && (
+                <span id={`why-not-${m}`} className="sr-only">
+                  {targeting.rejection(m)}
+                </span>
+              )}
               {selected && (
                 <UiIcon name="check" className="move-btn__check" />
               )}
@@ -718,7 +885,19 @@ export function MovePicker({
             positioned card inside still centres on the board. */}
         <div className="picker-slot" role="status">
           {centerSlot ??
-            (view === 'theirs' ? (
+            (targeting ? (
+              <TargetingCenter
+                targeting={targeting}
+                onCancel={() => onCancelTargeting?.()}
+                onConfirm={() => {
+                  // Completing a firing hands the board back to your own moves
+                  // (AC #6). A cancel does not: it restores whatever was open,
+                  // which the untouched `viewState` already is.
+                  setViewState('mine');
+                  onConfirmTargeting?.();
+                }}
+              />
+            ) : view === 'theirs' ? (
               <OpponentCenter
                 name={oppIdentity.name}
                 inspected={inspected}

@@ -442,8 +442,13 @@ const RAIL_TEXT = {
   blocked3: 43.5,
 } as const;
 
-/** The rule the fire button shares with the confirm and cancel buttons. */
-const RAIL_BUTTONS = '.ability-card__fire,\n.ability-confirm__go,\n.ability-card__cancel';
+/**
+ * The fire button's own rule.
+ *
+ * It shared it with the card's confirm and cancel buttons until JQ-325 moved the
+ * naming onto the board; those two are gone, and the selector with them.
+ */
+const RAIL_BUTTONS = '.ability-card__fire';
 
 /** The `flex` shorthand's basis, e.g. `1 1 126px` → 126. */
 function flexBasis(selector: string, viewport: number): number {
@@ -460,6 +465,21 @@ function cardWidth(viewport: number): number {
   return (boardInnerWidth(viewport) - gap) / 2;
 }
 
+/**
+ * What the rail's owner line costs: its own fixed line box, plus the rail gap it
+ * brings as a fourth flex row.
+ *
+ * Nothing below 360px, where it is `sr-only` and so out of flow entirely — the
+ * rail has 8.1px of room on a 320px phone and this line wants 26 (JQ-325).
+ */
+function ownerBlock(viewport: number): number {
+  if (viewport < 360) return 0;
+  return (
+    resolvePx(declaration('.ability-rail__owner', 'line-height', viewport), 0) +
+    resolvePx(declaration('.ability-rail', 'gap', viewport), 0)
+  );
+}
+
 /** The tallest card the roster can put on the rail, from the stylesheet. */
 function railHeight(viewport: number): number {
   const width = cardWidth(viewport);
@@ -467,6 +487,7 @@ function railHeight(viewport: number): number {
     resolvePx(declaration(selector, prop, viewport), width);
   const gap = px('.ability-card', 'gap');
   return (
+    ownerBlock(viewport) +
     2 * borderPx('.ability-card', viewport) +
     2 * px('.ability-card', 'padding') +
     RAIL_TEXT.head +
@@ -561,6 +582,22 @@ describe('the ability rail is inside the budget (JQ-254)', () => {
     // here because "shrink the pentagon to make room" is the fix this ticket
     // considered and rejected, and this is what it would have spent.
     expect(buttonSize(viewport, screen - SAFARI_CHROME)).toBeGreaterThanOrEqual(floor);
+  });
+
+  /*
+   * JQ-325 added a line to the rail, and the rail is the surface with the least
+   * room on the page. It is visible on both phones JQ-165 promised a duel board
+   * would not scroll on, and out of flow on the one where a duel board already
+   * scrolls — which is the trade the design records, held here as a number
+   * rather than left as a comment.
+   */
+  it.each(PHONES)('affords the rail its owner line at %ix%i', (viewport) => {
+    expect(ownerBlock(viewport)).toBeGreaterThan(0);
+  });
+
+  it('takes the owner line out of flow where the rail cannot afford it', () => {
+    expect(ownerBlock(320)).toBe(0);
+    expect(declaration('.ability-rail__owner', 'position', 320)).toBe('absolute');
   });
 
   it('sizes the pentagon the same in both modes, on purpose', () => {

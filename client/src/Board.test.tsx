@@ -808,3 +808,195 @@ describe('<Board> their cooldowns, on their own board (JQ-149 / JQ-151, rehomed 
     ).toBeInTheDocument();
   });
 });
+
+describe('<Board> firing names its target on the board (JQ-325)', () => {
+  /** A seat holding one charged ability, against an opponent carrying a mark. */
+  function armed(over: Parameters<typeof state>[0] = {}): MatchState {
+    const s = state({ oppDelays: { scissors: 2 }, ...over });
+    return {
+      ...s,
+      seats: s.seats.map((seat) =>
+        seat.seatKey === MY_SEAT
+          ? { ...seat, loadout: ['rust', 'echo-chamber'] as unknown as Seat['loadout'] }
+          : seat,
+      ),
+      abilities: { rust: { marks: 0, available: true } },
+    };
+  }
+
+  function renderArmed(s: MatchState = armed(), onFire = vi.fn()) {
+    render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+        onFire={onFire}
+      />,
+    );
+    return { onFire };
+  }
+
+  function openBoard(): string | null {
+    return document.querySelector('.move-board')!.getAttribute('data-view');
+  }
+
+  it('opens their board with the instruction when a firing starts', async () => {
+    renderArmed();
+    expect(openBoard()).toBe('mine');
+    await userEvent.click(screen.getByRole('button', { name: /fire rust/i }));
+
+    expect(openBoard()).toBe('theirs');
+    expect(screen.getByText('Choose one of their moves for Rust')).toBeInTheDocument();
+    // The card stops being the place the choice happens, and says where it went.
+    expect(screen.getByText('Naming a target on the board')).toBeInTheDocument();
+  });
+
+  it('fires what the board named, once, through the existing path', async () => {
+    const { onFire } = renderArmed();
+    await userEvent.click(screen.getByRole('button', { name: /fire rust/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Fire$/ }));
+
+    expect(onFire).toHaveBeenCalledTimes(1);
+    expect(onFire).toHaveBeenCalledWith({ helperId: 'rust', target: 'scissors', source: null });
+    // AC #6: back on your own moves, with the firing accounted for.
+    expect(openBoard()).toBe('mine');
+    // Twice on purpose: the card says it where the eye is, and the rail's one
+    // permanent live region says it to a screen reader (JQ-157).
+    const said = screen.getAllByText('Rust fired, naming their Scissors.');
+    expect(said).toHaveLength(2);
+    expect(within(screen.getByRole('group', { name: /rust/i })).getByText(
+      'Rust fired, naming their Scissors.',
+    )).toBeInTheDocument();
+  });
+
+  it('cancels back to the board you came from, having sent nothing', async () => {
+    const { onFire } = renderArmed();
+    await userEvent.click(screen.getByRole('button', { name: /fire rust/i }));
+    await userEvent.click(screen.getByRole('button', { name: /cancel targeting/i }));
+
+    expect(onFire).not.toHaveBeenCalled();
+    expect(openBoard()).toBe('mine');
+    expect(screen.getByRole('button', { name: /fire rust/i })).toBeEnabled();
+  });
+
+  /*
+   * AC #3. The round's own pick cannot be taken while a target is open — the
+   * board is not showing that decision.
+   */
+  it('cannot commit the round move while a target is open', async () => {
+    const onPlay = vi.fn();
+    const s = armed();
+    render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={s}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={onPlay}
+        onFire={() => {}}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /fire rust/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+});
+
+describe('<Board> a window takes the board back (JQ-325, AC #7)', () => {
+  function reactState(entitled: boolean): MatchState {
+    const s = state({ submitted: [MY_PLAYER, OPP_PLAYER] });
+    return {
+      ...s,
+      match: { ...s.match, phase: 'react' as const },
+      currentRoundMoves: { [MY_PLAYER]: 'rock' as Move },
+      entitlement: entitled
+        ? {
+            round: 1,
+            reveals: [{ helperId: 'oracle', namedMove: 'paper' as Move }],
+            incoming: [],
+            acted: false,
+          }
+        : null,
+    };
+  }
+
+  function openBoard(): string | null {
+    return document.querySelector('.move-board')!.getAttribute('data-view');
+  }
+
+  it('lands an entitled seat on its own board, whichever tab was open', () => {
+    const { rerender } = render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={state()}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('tab')[1]);
+    expect(openBoard()).toBe('theirs');
+
+    rerender(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={reactState(true)}
+        connected
+        error={null}
+        myChosenMove="rock"
+        onPlay={() => {}}
+      />,
+    );
+    expect(openBoard()).toBe('mine');
+    // Attributed, not silent: JQ-324's rule was that nothing switches the view
+    // *quietly*, and this is the ticket it deferred that to.
+    expect(screen.getByText(/something changed — pick again, or keep your move/i))
+      .toBeInTheDocument();
+    expect(screen.getByText(/they did not play/i)).toBeInTheDocument();
+  });
+
+  /*
+   * AC #7's other half: ordinary inspection must never enable a re-pick this
+   * seat is not entitled to. `submitMove` refuses them anyway — "your move is
+   * locked while the round resolves" — so the board must not offer the tap.
+   */
+  it('offers an unentitled seat nothing, whichever tab it was on', () => {
+    const { rerender } = render(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={state()}
+        connected
+        error={null}
+        myChosenMove={null}
+        onPlay={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('tab')[1]);
+    rerender(
+      <Board
+        myPlayerId={MY_PLAYER}
+        mySeatKey={MY_SEAT}
+        state={reactState(false)}
+        connected
+        error={null}
+        myChosenMove="rock"
+        onPlay={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/something changed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/they did not play/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Lizard/ })).toBeDisabled();
+  });
+});
