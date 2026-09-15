@@ -16,6 +16,8 @@ import {
   beatsOf,
   opponentCooldownPhrase,
   cooldownCause,
+  describeMatchup,
+  liveMatchupEdges,
   threatsTo,
   winningEdgeOf,
   roundCap,
@@ -550,5 +552,103 @@ describe('backInPhrase (JQ-151)', () => {
     expect(holdsFreeze(['freeze', 'chimera'])).toBe(true);
     expect(holdsFreeze(['chimera', 'ferrus'])).toBe(false);
     expect(holdsFreeze(null)).toBe(false);
+  });
+});
+
+describe('describeMatchup reads each side through its own graph (JQ-324)', () => {
+  // The opponent view states a matchup while both picks are still the players'
+  // own. It must not assume the two graphs are the same one: the whole reason
+  // the edge resolution is shared with `winningEdgeOf` is that the engine, the
+  // reveal and this sentence have to agree about who took an asymmetric pair.
+  it('names the winner and says whose it is', () => {
+    expect(describeMatchup('rock', 'scissors')).toEqual({
+      line: 'Rock crushes Scissors',
+      winner: 'you',
+    });
+    expect(describeMatchup('scissors', 'rock')).toEqual({
+      line: 'Rock crushes Scissors',
+      winner: 'opp',
+    });
+  });
+
+  it('has no winner for a mirror', () => {
+    expect(describeMatchup('rock', 'rock')).toEqual({
+      line: 'Rock vs Rock — same pick, no winner',
+      winner: null,
+    });
+  });
+
+  it('gives an added edge to whichever side holds it', () => {
+    expect(describeMatchup('lizard', 'scissors', { mine: CHIMERA_BEATS })).toEqual({
+      line: 'Lizard beats Scissors',
+      winner: 'you',
+    });
+    expect(describeMatchup('scissors', 'lizard', { theirs: CHIMERA_BEATS })).toEqual({
+      line: 'Lizard beats Scissors',
+      winner: 'opp',
+    });
+  });
+
+  it('leaves the pair to the shared graph when nobody holds the extra edge', () => {
+    expect(describeMatchup('scissors', 'lizard')).toEqual({
+      line: 'Scissors decapitates Lizard',
+      winner: 'you',
+    });
+  });
+});
+
+describe('liveMatchupEdges — your pick against what they can actually play (JQ-324)', () => {
+  const OPEN = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+
+  it('drops your attacks on a move they cannot play this round', () => {
+    const edges = liveMatchupEdges('rock', { ...OPEN, scissors: 2 });
+    expect(edges).toContainEqual({ from: 'rock', to: 'lizard', role: 'you' });
+    expect(edges).not.toContainEqual({ from: 'rock', to: 'scissors', role: 'you' });
+  });
+
+  it('carries the live attacks that beat your pick', () => {
+    const edges = liveMatchupEdges('rock', OPEN);
+    expect(edges).toContainEqual({ from: 'paper', to: 'rock', role: 'opp' });
+    expect(edges).toContainEqual({ from: 'robot', to: 'rock', role: 'opp' });
+  });
+
+  it('drops a threat they cannot make', () => {
+    expect(liveMatchupEdges('rock', { ...OPEN, paper: 2 })).not.toContainEqual({
+      from: 'paper',
+      to: 'rock',
+      role: 'opp',
+    });
+  });
+
+  it('reads their threats through their graph, and yours through yours', () => {
+    // Their Chimera Lizard takes your Scissors; your own graph says the reverse,
+    // and reading the wrong one here would draw the arrow the wrong way round.
+    const edges = liveMatchupEdges('scissors', OPEN, SHARED_BEATS, CHIMERA_BEATS);
+    expect(edges).toContainEqual({ from: 'lizard', to: 'scissors', role: 'opp' });
+    expect(edges).not.toContainEqual({ from: 'scissors', to: 'lizard', role: 'you' });
+  });
+
+  it('draws one arrow for a pair that carries an edge each way', () => {
+    // Your Scissors decapitates their Lizard; their Chimera Lizard beats your
+    // Scissors. Both edges exist, and the round gives it to the added one — so
+    // one arrow lights, pointing the way the round would actually go.
+    const edges = liveMatchupEdges('scissors', OPEN, SHARED_BEATS, CHIMERA_BEATS);
+    expect(edges.filter((e) => e.from === 'lizard' || e.to === 'lizard')).toEqual([
+      { from: 'lizard', to: 'scissors', role: 'opp' },
+    ]);
+  });
+
+  it('draws nothing for the mirror of your own pick', () => {
+    expect(liveMatchupEdges('rock', OPEN).some((e) => e.from === 'rock' && e.to === 'rock')).toBe(
+      false,
+    );
+  });
+
+  it('is empty when nothing they can play meets your pick', () => {
+    // Every move that meets Rock either way is down, so the pick is live
+    // against nothing: no arrow lights rather than a misleading one.
+    expect(liveMatchupEdges('rock', { rock: 0, paper: 2, scissors: 2, lizard: 2, robot: 2 })).toEqual(
+      [],
+    );
   });
 });

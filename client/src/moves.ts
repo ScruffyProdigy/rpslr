@@ -257,6 +257,67 @@ export function winningEdgeOf(
 }
 
 /**
+ * Your pick against one of theirs, with neither side's rules assumed.
+ *
+ * The opponent view states this while both picks are still the players' own, so
+ * it cannot go through `describeRoundMatchup` — that one reads the shared verb
+ * table and would hand a Chimera pair to the wrong player. The edge is resolved
+ * by `winningEdgeOf`, the same function the reveal lights the graph with and the
+ * same precedence the engine's `seatWinner` uses, so the sentence and the arrow
+ * cannot disagree about who took an asymmetric pair (JQ-324).
+ *
+ * `winner` rather than a finished sentence: a live match says "you win" and a
+ * replay names a player, and that is the caller's `Voice` to spend, not this
+ * function's (JQ-324).
+ */
+export function describeMatchup(
+  mine: Move,
+  theirs: Move,
+  graphs: { mine?: BeatsMap; theirs?: BeatsMap } = {},
+): { line: string; winner: 'you' | 'opp' | null } {
+  if (mine === theirs) {
+    return {
+      line: `${MOVE_META[mine].label} vs ${MOVE_META[theirs].label} — same pick, no winner`,
+      winner: null,
+    };
+  }
+  const edge = winningEdgeOf(mine, theirs, graphs);
+  // Every distinct pair of the five has exactly one edge between it, so this is
+  // unreachable — but a graph a loadout has bent is not a thing to assume about.
+  if (!edge) return { line: `${MOVE_META[mine].label} vs ${MOVE_META[theirs].label}`, winner: null };
+  return { line: describeBeat(edge.from, edge.to), winner: edge.role };
+}
+
+/**
+ * One edge per move they can actually play this round: the arrow that would
+ * decide your pick against it, pointing the way that pairing would go.
+ *
+ * This is the whole point of the opponent view — "is what I am holding live
+ * against what they have?" — stated as a comparison rather than as ambient
+ * encoding on your own board.
+ *
+ * Decided by `winningEdgeOf` rather than collected from the two graphs, and that
+ * is load-bearing rather than tidy. Once a loadout bends one graph a pair can
+ * carry an edge *each way* — your Scissors decapitates their Lizard, their
+ * Chimera Lizard beats your Scissors — and drawing both says the two moves beat
+ * each other, which is the one thing the round will not do. `winningEdgeOf` holds
+ * the engine's precedence, so the arrow that lights is the arrow that would win
+ * (JQ-324).
+ */
+export function liveMatchupEdges(
+  mine: Move,
+  oppDelays: Record<string, number>,
+  myBeats: BeatsMap = SHARED_BEATS,
+  oppBeats: BeatsMap = SHARED_BEATS,
+): Array<{ from: Move; to: Move; role: 'you' | 'opp' }> {
+  return ALL_MOVES.filter((m) => isPlayable(m, oppDelays))
+    .map((m) => winningEdgeOf(mine, m, { mine: myBeats, theirs: oppBeats }))
+    // A mirror decides nothing, so it draws nothing.
+    .filter((edge): edge is WinningEdge => edge !== null)
+    .map(({ from, to, role }) => ({ from, to, role }));
+}
+
+/**
  * Why one of your moves is unavailable. Read off your own last two picks rather
  * than inferred from the mark count, so it stays true whatever a loadout charges
  * for a pick. `recent` is most-recent-first.
