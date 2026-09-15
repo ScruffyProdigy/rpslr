@@ -613,6 +613,60 @@ button.ghost {
   align-items: center;
   gap: 10px;
 }
+/* The two tabs above the pentagon. Whose board is open is the first thing the
+   player has to be able to read, and it is paid for out of a page that had
+   0.9px of slack on a 390x844 phone — so it is one short row, and the legend
+   below the board gave up its second line to buy it (JQ-324). */
+.picker-tabs {
+  display: flex;
+  width: min(100%, 380px);
+  gap: 6px;
+}
+.picker-tab {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  /* The active state's rule, drawn on every tab so the row does not move by
+     2px when it changes. Transparent is the inactive state. */
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+  font-size: clamp(0.72rem, 3.2cqw, 0.82rem);
+  line-height: 1.2;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+/* Weight and a rule under the tab, not colour alone: the role tint on top of
+   them is an accent (JQ-195). */
+.picker-tab--active {
+  color: var(--text);
+  font-weight: 650;
+}
+.picker-tab--active:nth-child(1) {
+  border-bottom-color: var(--you);
+  background: color-mix(in srgb, var(--you) 10%, transparent);
+}
+.picker-tab--active:nth-child(2) {
+  border-bottom-color: var(--opp);
+  background: color-mix(in srgb, var(--opp) 10%, transparent);
+}
+.picker-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .picker-tab {
+    transition: none;
+  }
+}
+
 .move-board {
   position: relative;
   width: min(100%, 380px);
