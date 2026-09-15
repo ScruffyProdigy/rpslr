@@ -1240,8 +1240,11 @@ button.ghost {
    alone and spends the room on the lower two, which every panel the centre has
    ever drawn already overlaps.
 
-   The tighter gap is what keeps the tallest version — every clause filled, plus
-   the draw caveat — inside the board at 320px, where it hangs lowest.
+   The tighter gap and padding are what keep the tallest version — every clause
+   filled, plus the draw caveat — clear of the board's bottom edge at 320px,
+   where it hangs lowest. They buy roughly a line of text, which is the unit the
+   layout test holds this to: enough that a machine whose fonts wrap one line
+   more than this one still lands inside the board.
 
    All of it only while a summary is showing: an idle, blocked or forced centre
    keeps the narrow, centred box the pentagon was laid out around. */
@@ -1249,7 +1252,8 @@ button.ghost {
   width: min(72cqw, 190px);
   top: 35%;
   transform: translate(-50%, 0);
-  gap: 5px;
+  gap: 4px;
+  padding-block: 7px;
 }
 /* The label belongs to the list, so it sits on it rather than a gap away. */
 .picker-center--summary .picker-center__against {
