@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DelayMap } from '@game/game';
@@ -6,43 +6,50 @@ import { MovePicker } from './MovePicker';
 import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
 import { SHARED_BEATS, threatsTo, type BeatsMap } from '../moves';
+import { PLAYER_VOICE, spectatorVoice, type Voice } from '../lib/voice';
+import type { Identity } from '../lib/seatProfile';
 import type { MarkEvent } from '@game/game';
 
 /** What a duel opens on; every fixture here is a duel unless it says otherwise. */
 const DUEL_OPENING: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
 
-function renderPicker(
-  over: {
-    myDelays?: Record<string, number>;
-    oppDelays?: Record<string, number>;
-    myChosenMove?: Move | null;
-    lockedIn?: boolean;
-    disabled?: boolean;
-    round?: number;
-    myRecentMoves?: Move[];
-    myOpeningDelays?: DelayMap;
-    onPlay?: (m: Move) => void;
-    winningEdge?: { from: Move; to: Move; role: 'you' | 'opp'; added: boolean } | null;
-    secondsLeft?: number | null;
-    myBeats?: BeatsMap;
-    oppBeats?: BeatsMap;
-    myLedger?: readonly MarkEvent[];
-    showOppCooldownCounts?: boolean;
-    oppCanFreeze?: boolean;
-  } = {},
-) {
-  const onPlay = over.onPlay ?? vi.fn();
-  const utils = render(
+type Over = {
+  myDelays?: Record<string, number>;
+  oppDelays?: Record<string, number>;
+  myChosenMove?: Move | null;
+  lockedIn?: boolean;
+  opponentLockedIn?: boolean;
+  disabled?: boolean;
+  round?: number;
+  myRecentMoves?: Move[];
+  myOpeningDelays?: DelayMap;
+  onPlay?: (m: Move) => void;
+  winningEdge?: { from: Move; to: Move; role: 'you' | 'opp'; added: boolean } | null;
+  secondsLeft?: number | null;
+  myBeats?: BeatsMap;
+  oppBeats?: BeatsMap;
+  myLedger?: readonly MarkEvent[];
+  showOppCooldownCounts?: boolean;
+  oppCanFreeze?: boolean;
+  voice?: Voice;
+  oppName?: string;
+  you?: Identity;
+  opponent?: Identity;
+};
+
+function pickerEl(over: Over & { onPlay: (m: Move) => void }) {
+  return (
     <MovePicker
       myDelays={over.myDelays ?? {}}
       oppDelays={over.oppDelays ?? {}}
       myChosenMove={over.myChosenMove ?? null}
       lockedIn={over.lockedIn ?? false}
+      opponentLockedIn={over.opponentLockedIn ?? false}
       disabled={over.disabled ?? false}
       round={over.round ?? 3}
       myRecentMoves={over.myRecentMoves ?? []}
       myOpeningDelays={over.myOpeningDelays ?? DUEL_OPENING}
-      onPlay={onPlay}
+      onPlay={over.onPlay}
       secondsLeft={over.secondsLeft ?? null}
       winningEdge={over.winningEdge ?? null}
       myBeats={over.myBeats ?? SHARED_BEATS}
@@ -50,9 +57,36 @@ function renderPicker(
       myLedger={over.myLedger ?? []}
       showOppCooldownCounts={over.showOppCooldownCounts ?? false}
       oppCanFreeze={over.oppCanFreeze ?? false}
-    />,
+      voice={over.voice ?? PLAYER_VOICE}
+      oppName={over.oppName ?? 'Robin'}
+      you={over.you}
+      opponent={over.opponent}
+    />
   );
-  return { ...utils, onPlay };
+}
+
+function renderPicker(over: Over = {}) {
+  const onPlay = over.onPlay ?? vi.fn();
+  const props = { ...over, onPlay };
+  const utils = render(pickerEl(props));
+  /** Re-render with a few props changed and everything else held still. */
+  const rerenderWith = (next: Over = {}) => utils.rerender(pickerEl({ ...props, ...next }));
+  return { ...utils, onPlay, rerenderWith };
+}
+
+/** The tabs, in the order the strip draws them: yours, then theirs. */
+function tabs(): HTMLElement[] {
+  return screen.getAllByRole('tab');
+}
+
+/** Open the opponent's board. */
+async function showTheirs() {
+  await userEvent.click(tabs()[1]);
+}
+
+/** Come back to your own. */
+async function showMine() {
+  await userEvent.click(tabs()[0]);
 }
 
 /**
@@ -299,6 +333,9 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
   it('previews on keyboard focus too', async () => {
     const user = userEvent.setup();
     const { container } = renderPicker();
+    // Two stops: the tab strip above the board is one of them, and the board's
+    // first move button is the next (JQ-324).
+    await user.tab();
     await user.tab();
     expect(within(center(container)).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
   });
@@ -1011,5 +1048,135 @@ describe('a cooldown says what actually caused it', () => {
       ],
     });
     expect(screen.getByRole('button', { name: /their rust put 2 marks on paper/ })).toBeTruthy();
+  });
+});
+
+describe('<MovePicker> switching between the two views (JQ-324)', () => {
+  it('opens on your own moves', () => {
+    renderPicker();
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('cannot commit a move, however many times you switch', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await showTheirs();
+    await showMine();
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending choice across a switch', async () => {
+    renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    expect(screen.getByRole('button', { name: /Lock in Rock/ })).toBeInTheDocument();
+  });
+
+  it('resets the second-tap-to-commit sequence across a switch', async () => {
+    // Coming back to a board you left has to read as arriving at it, not as
+    // being one tap from having played: the tap that committed before the
+    // switch is not the tap in front of you now.
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('keeps the explicit Lock in working after a switch', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /Lock in Rock/ }));
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('returns to your moves on a new round', () => {
+    const { rerenderWith } = renderPicker({ round: 3 });
+    fireEvent.click(tabs()[1]);
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+    rerenderWith({ round: 4 });
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('leaves the view alone when state refreshes without a new round', async () => {
+    // A board that jumped back to your own every time the opponent's readiness
+    // arrived would make an inspection impossible to finish.
+    const { rerenderWith } = renderPicker({ round: 3, opponentLockedIn: false });
+    await showTheirs();
+    rerenderWith({ round: 3, opponentLockedIn: true });
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('never lets an inspection become the move the clock commits', async () => {
+    // The auto-commit plays what you tapped just before the deadline. What you
+    // tapped on *their* board is a question, not a choice.
+    const { onPlay, rerenderWith } = renderPicker({ secondsLeft: 10 });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    rerenderWith({ secondsLeft: 1 });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('still auto-commits your own tapped move once you are back', async () => {
+    const { onPlay, rerenderWith } = renderPicker({ secondsLeft: 10 });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    rerenderWith({ secondsLeft: 1 });
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('accepts no input on either board once you have locked in', async () => {
+    const { onPlay } = renderPicker({ lockedIn: true, myChosenMove: 'rock', disabled: true });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('points the tabs at the board they switch', () => {
+    const { container } = renderPicker();
+    const panel = container.querySelector('[role="tabpanel"]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(tabs()[0]).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAttribute('aria-labelledby', tabs()[0].id);
+  });
+
+  it('takes Escape back to your own moves', async () => {
+    renderPicker();
+    await showTheirs();
+    await userEvent.keyboard('{Escape}');
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('<MovePicker> focus order (JQ-324)', () => {
+  it('spends one stop on the strip before the board', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.tab();
+    expect(document.activeElement).toBe(tabs()[0]);
+    await user.tab();
+    expect(document.activeElement).toHaveClass('move-btn');
+  });
+
+  it('drops the controls of the board you are not on out of the focus order', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelector('.picker-center__lock')).not.toBeNull();
+    await showTheirs();
+    // Lock in belongs to your board. While theirs is open it is not hidden from
+    // view by CSS — it is not in the tree at all, so nothing can tab to it.
+    expect(container.querySelector('.picker-center__lock')).toBeNull();
   });
 });

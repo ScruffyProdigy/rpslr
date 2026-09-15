@@ -22,6 +22,7 @@ import {
   cooldownReason,
   describeBeatsGraph,
   describeBeatsOf,
+  describeMatchup,
   isForcedPick,
   isPlayable,
   opponentCooldownPhrase,
@@ -30,6 +31,11 @@ import {
 } from '../moves';
 import MoveIcon from './MoveIcon';
 import UiIcon from './UiIcon';
+import { PickerTabs, type PickerView } from './PickerTabs';
+import type { Identity } from '../lib/seatProfile';
+
+/** The board, for the tabs to point `aria-controls` at. */
+const PANEL_ID = 'move-board-panel';
 
 /** Remembers a one-time note's dismissal across reloads. */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
@@ -70,6 +76,8 @@ export function MovePicker({
   myLedger = [],
   showOppCooldownCounts = false,
   oppCanFreeze = false,
+  you,
+  opponent,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -131,6 +139,15 @@ export function MovePicker({
   showOppCooldownCounts?: boolean;
   /** Whether the opponent can stop your marks coming off, so nothing promises turns. */
   oppCanFreeze?: boolean;
+  /**
+   * The two people the tabs name, for the avatar and the name on each.
+   *
+   * Optional, and defaulted from `voice` and `oppName` below, because the board
+   * is rendered by tests and by surfaces that hold nothing richer than a name —
+   * an avatar is worth having and is not worth making a caller invent (JQ-324).
+   */
+  you?: Identity;
+  opponent?: Identity;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -139,6 +156,22 @@ export function MovePicker({
   const [hovered, setHovered] = useState<Move | null>(null);
   const autoCommitted = useRef(false);
   const preview = hovered ?? picked;
+
+  // Whose board is drawn, and what has been tapped on theirs.
+  //
+  // `inspected` is deliberately not `picked`: nothing that reads a commit target
+  // reads this, so an inspection cannot become a move by any path — not the
+  // second tap, not the Lock in button, not the clock (JQ-324).
+  const [view, setView] = useState<PickerView>('mine');
+  const [inspected, setInspected] = useState<Move | null>(null);
+
+  // Whether the next tap on `picked` commits it.
+  //
+  // The second tap is only a commit because the first one happened in front of
+  // you. Leaving another board and coming back puts a board in front of you
+  // again, so the sequence starts over — while `picked` itself survives, which
+  // is the half the ticket is explicit about keeping.
+  const commitArmed = useRef(false);
 
   const tapHint = useOneTimeNote('tapHint');
   const cooldownNote = useOneTimeNote('cooldownExplainer');
@@ -162,7 +195,25 @@ export function MovePicker({
     setPicked(null);
     setHovered(null);
     autoCommitted.current = false;
+    commitArmed.current = false;
+    // A new decision is your decision: the next ordinary selection phase opens
+    // on your own board, whatever was being inspected when the round ended.
+    setView('mine');
+    setInspected(null);
   }, [round, disabled]);
+
+  /**
+   * Open the other board.
+   *
+   * Never a commit path, and never a clear: `picked` survives so the choice you
+   * had carries across, and only the tap sequence and the transient hover reset.
+   */
+  const switchTo = useCallback((next: PickerView) => {
+    setView(next);
+    setInspected(null);
+    setHovered(null);
+    commitArmed.current = false;
+  }, []);
 
   // The preview's caption and Lock-in button sit on top of the graph, so there
   // has to be a way to put them away and read what is underneath. Tapping the
@@ -173,13 +224,22 @@ export function MovePicker({
   }, []);
 
   useEffect(() => {
+    // On their board Escape is the way out of the inspection entirely — the
+    // keyboard's version of the Back button in the centre.
+    if (view === 'theirs') {
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') switchTo('mine');
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
     if (!picked || lockedIn) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') clearPreview();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [picked, lockedIn, clearPreview]);
+  }, [picked, lockedIn, clearPreview, view, switchTo]);
 
   const commit = useCallback(
     (move: Move) => {
@@ -217,6 +277,10 @@ export function MovePicker({
     // not already locked in, not disabled. Reusing it keeps the auto-commit
     // from carrying a second, drifting notion of the same thing.
     if (boardState !== 'picking' || !picked || autoCommitted.current) return;
+    // Not while their board is open. `picked` is still yours and still valid,
+    // but the clock running out during an inspection must not play it for you
+    // any more than a tap on their node could (JQ-324).
+    if (view !== 'mine') return;
     // A tapped move you cannot play was a "why can't I play this?", not a
     // choice. Asked of the same helper the tap path uses, so the two cannot
     // disagree about what is playable — they used to hold separate copies of
@@ -224,18 +288,28 @@ export function MovePicker({
     if (!isPlayable(picked, myDelays)) return;
     autoCommitted.current = true;
     commit(picked);
-  }, [secondsLeft, boardState, picked, myDelays, commit]);
+  }, [secondsLeft, boardState, picked, myDelays, commit, view]);
 
   function handleClick(move: Move) {
+    // Their board answers questions and takes no decisions: a tap is a look at
+    // one of their moves, and nothing here can reach `commit` (JQ-324).
+    if (view === 'theirs') {
+      setInspected((current) => (current === move ? null : move));
+      return;
+    }
     // A move you cannot play can be inspected but never committed: tapping it
     // asks "why can't I play this?", which previously got no answer at all.
     // A *marked* move may still be playable — see `isPlayable`.
     if (!isPlayable(move, myDelays)) {
       setPicked(move);
+      commitArmed.current = false;
       return;
     }
-    if (picked === move) commit(move);
-    else setPicked(move);
+    if (picked === move && commitArmed.current) commit(move);
+    else {
+      setPicked(move);
+      commitArmed.current = true;
+    }
   }
 
   const graphText = describeBeatsGraph(oppDelays, oppName, { mine: myBeats, theirs: oppBeats });
@@ -245,6 +319,20 @@ export function MovePicker({
     ...addedEdgesOf(myBeats).map((e) => ({ ...e, role: 'you' as const })),
     ...addedEdgesOf(oppBeats).map((e) => ({ ...e, role: 'opp' as const })),
   ];
+  // The tabs want a person each. A caller that has Lobby identities hands them
+  // over; one that has only a name gets a name-shaped identity rather than
+  // having to build one.
+  const youIdentity: Identity = you ?? {
+    profile: null,
+    name: voice.you ?? 'You',
+    placeholder: false,
+  };
+  const oppIdentity: Identity = opponent ?? {
+    profile: null,
+    name: oppName?.trim() || 'Opponent',
+    placeholder: !oppName?.trim(),
+  };
+
   const myMarked = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
   const showTapHint = tapHint.show && !lockedIn && round <= 2;
@@ -255,12 +343,28 @@ export function MovePicker({
 
   return (
     <div className="move-picker">
+      <PickerTabs
+        view={view}
+        onView={switchTo}
+        you={youIdentity}
+        opponent={oppIdentity}
+        voice={voice}
+        panelId={PANEL_ID}
+      />
       <div
         className="move-board"
         data-state={boardState}
+        id={PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={`picker-tab-${view}`}
+        data-view={view}
         onClick={(e) => {
           // A move button or the commit button owns its own click.
           if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
+          if (view === 'theirs') {
+            setInspected(null);
+            return;
+          }
           if (lockedIn) return;
           clearPreview();
         }}
@@ -505,7 +609,19 @@ export function MovePicker({
             and only its contents change. It is `inset: 0` so the absolutely
             positioned card inside still centres on the board. */}
         <div className="picker-slot" role="status">
-          {centerSlot ?? (
+          {centerSlot ??
+            (view === 'theirs' ? (
+              <OpponentCenter
+                name={oppIdentity.name}
+                inspected={inspected}
+                picked={picked}
+                oppDelays={oppDelays}
+                oppBeats={oppBeats}
+                myBeats={myBeats}
+                voice={voice}
+                onBack={() => switchTo('mine')}
+              />
+            ) : (
             <PickerCenter
               idleCaption={idleCaption}
               preview={preview}
@@ -523,7 +639,7 @@ export function MovePicker({
               myLedger={myLedger}
               oppCanFreeze={oppCanFreeze}
             />
-          )}
+            ))}
         </div>
       </div>
 
@@ -727,6 +843,83 @@ function PickerCenter({
           Lock in {MOVE_META[commitTarget].label}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The centre while their board is open.
+ *
+ * Reads their graph for everything it says about their move, and both graphs for
+ * the matchup — a Chimera owner's Lizard beats a Scissors that beats everyone
+ * else's, and a sentence that assumed one graph would be confidently wrong about
+ * exactly the pair a player most needs to ask about.
+ *
+ * It renders into the board's one live region, like `PickerCenter`, and carries
+ * no `role="status"` of its own (JQ-157). It offers no commit control of any
+ * kind: the only button here is the way back (JQ-324).
+ */
+function OpponentCenter({
+  name,
+  inspected,
+  picked,
+  oppDelays,
+  oppBeats,
+  myBeats,
+  voice,
+  onBack,
+}: {
+  name: string;
+  /** The move of theirs being asked about, if any. */
+  inspected: Move | null;
+  /** Your tentative pick, which turns the panel into a comparison. */
+  picked: Move | null;
+  oppDelays: Record<string, number>;
+  oppBeats: BeatsMap;
+  myBeats: BeatsMap;
+  voice: Voice;
+  onBack: () => void;
+}) {
+  const back = (
+    <button className="picker-center__back" onClick={onBack}>
+      {/* The arrow is decoration; the words are the name a screen reader
+          reads, so it stays out of them. */}
+      <span aria-hidden="true">←</span> Back to {voice.you ? `${voice.you}'s` : 'your'} moves
+    </button>
+  );
+
+  if (!inspected) {
+    return (
+      <div className="picker-center picker-center--theirs picker-center--idle">
+        <span className="picker-center__idle">Tap one of {name}&rsquo;s moves</span>
+        {back}
+      </div>
+    );
+  }
+
+  const delay = oppDelays[inspected] ?? 0;
+  // Their availability is a legality question, not a mark count: the floor
+  // leaves a fully-marked player their least-marked moves, and saying they
+  // cannot play one of those would be a false all-clear (JQ-215).
+  const down = !isPlayable(inspected, oppDelays);
+  const matchup = picked ? describeMatchup(picked, inspected, { mine: myBeats, theirs: oppBeats }) : null;
+
+  return (
+    <div className="picker-center picker-center--theirs">
+      <p className="picker-center__caption">{describeBeatsOf(inspected, oppBeats)}</p>
+      {down && (
+        <p className="picker-center__why">
+          {name} can&rsquo;t play it — {backInPhrase(delay)}
+        </p>
+      )}
+      {matchup && (
+        <p className="picker-center__matchup">
+          {matchup.line}
+          {matchup.winner === 'you' && ` — ${voice.you ? `${voice.you} wins` : 'you win'}`}
+          {matchup.winner === 'opp' && ` — ${name} wins`}
+        </p>
+      )}
+      {back}
     </div>
   );
 }
