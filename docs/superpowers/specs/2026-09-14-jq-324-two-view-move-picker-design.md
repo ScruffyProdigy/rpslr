@@ -57,12 +57,20 @@ play Lizard this round puts the board and the caption in disagreement, and
 rebuilds the two-perspectives-on-one-board problem this ticket removes.
 
 **The cross-player comparison lives in the opponent view.** With a tentative
-pick, their board lights exactly the edges that connect your pick to a move they
-can actually play — your pick beats this one; that one beats your pick — read
-through both graphs, so an asymmetric pair (Chimera) is never assumed to be
-symmetric. Edges to moves they cannot play this round stay faded. The full
-beginner-facing version of this comparison is JQ-326, which this ticket unblocks;
-what is built here is the mechanism, not the teaching.
+pick, their board lights one arrow per move they can actually play: the arrow
+that would decide that pairing, in the colour of whoever it would go to. Edges to
+moves they cannot play this round stay faded.
+
+One arrow per pairing rather than every edge between the two moves, and that is
+load-bearing. Once a loadout bends one graph a pair can carry an edge each way —
+your Scissors decapitates their Lizard, their Chimera Lizard beats your Scissors
+— and drawing both says the two moves beat each other, which is the one thing the
+round will not do. So `liveMatchupEdges` resolves each pairing through
+`winningEdgeOf`, the same precedence the engine's `seatWinner` and the round
+reveal use, and the arrow that lights is the arrow that would win.
+
+The full beginner-facing version of this comparison is JQ-326, which this ticket
+unblocks; what is built here is the mechanism, not the teaching.
 
 ## The tabs
 
@@ -94,18 +102,23 @@ There is no spare vertical space. Measured from the shipped CSS:
 
 So the strip is paid for rather than added:
 
-- The legend collapses from two lines (39.2px) to one. In Your view it has a
-  single item left — `⌛N your cooldown`, plus `curved = an extra rule` when
-  helpers are in play — because the opponent badge and the faded-arrow clause no
-  longer exist on that board. The opponent view's legend is the mirror of it.
-- The board's phone `margin-top` and the `.move-picker` gap above the board are
-  absorbed into the strip's own margin.
+- The legend collapses from two lines (39.2px) to one (19.6px), measured in
+  Chromium at 360, 375 and 390px. It reads `⌛N cooldown · faded = can't attack`,
+  plus `curved = extra rule` when helpers are in play, and is **the same on both
+  boards**: the possessive is gone because the tab above says whose board it is,
+  the pill takes that player's colour, and the text equivalent names them
+  outright. Keeping the possessive ran to two lines at every supported width.
+- `.move-picker`'s gap goes 10px → 8px (the strip is a fourth child, so a third
+  gap) and the board's phone `margin-top` goes to 0, since the strip brings the
+  picker's own gap with it.
 
-Net furniture goes up by roughly 14px, which the `svh` formula takes out of the
-pentagon: ~254 → ~240 at 390px, ~222 → ~208 at 375px. Both stay above the 205px
-floor that keeps a move button at JQ-108's 56px. `--board-furniture` moves with
-it, and `boardFit.test.ts` recomputes the constant from the stylesheet, so the
-two cannot drift apart silently.
+Net furniture goes 489.1px → 503.5px, which the `svh` formula takes out of the
+pentagon. `--board-furniture` moves 490 → 504 with it. At 375×812 — the binding
+case — that leaves 3.5px between the furniture and the 205px pentagon floor that
+keeps a move button at JQ-108's 56px. `boardFit.test.ts` recomputes the constant
+from the stylesheet, so the two cannot drift apart silently, and the legend copy
+is pinned in `MovePicker.test.tsx` so growing it fails there rather than on a
+phone.
 
 ## The centre, per view
 
@@ -144,6 +157,27 @@ view.
   (`centerSlot`), and the next ordinary selection phase opens on Your moves.
 - Forced actionable sub-phases keep their own explicit prompt
   (`SubPhasePrompt`); nothing here silently switches the view for them.
+
+## What the split removed
+
+Three things had no coherent home once one board is open at a time, and were
+deleted rather than left unreachable:
+
+- `showOppCooldownCounts`. It existed to keep a duel's opponent badge from
+  restating the history strip while sharing a node with your own state. Their
+  board is their own now, so their pill carries its count exactly as yours does.
+- `opponentCooldownPhrase` ("Opponent can't play Robot for 2 turns"), which sat
+  under your own preview caption. That claim is the subject of their board now,
+  phrased with their name, and the function had no caller left.
+- `describeBeatsGraph`'s two-sided form. It named both players' added edges and
+  always described the opponent's availability; `describeBoardGraph` describes
+  one board — the ten shared edges, that player's extra edges, and what that
+  player can and cannot play. The rule you are playing against is still spoken,
+  on the board that holds it.
+
+The fade also stopped being amber. It was the opponent's colour because the only
+dead attacks drawn were theirs; it is the graph's own colour faded out now, since
+an amber edge on your own board would say "theirs" about one of yours.
 
 ## Scope
 
