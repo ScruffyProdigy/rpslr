@@ -611,7 +611,9 @@ button.ghost {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  /* 8, not 10: the tab strip added a fourth child and so a third gap, and the
+     page it joined had 0.9px of slack (JQ-324). */
+  gap: 8px;
 }
 /* The two tabs above the pentagon. Whose board is open is the first thing the
    player has to be able to read, and it is paid for out of a page that had
@@ -1532,7 +1534,7 @@ button.ghost {
        at 390px) — nothing above it moves, and you are already scrolled to the
        rail by the time it happens. `boardFit.test.ts` measures a helpers page
        and holds both halves of that. */
-    --board-furniture: calc(490px + env(safe-area-inset-bottom));
+    --board-furniture: calc(504px + env(safe-area-inset-bottom));
   }
   .board {
     padding-block: 12px;
@@ -1569,7 +1571,9 @@ button.ghost {
     gap: 10px;
   }
   .move-board {
-    margin-top: 4px;
+    /* The tab strip sits directly above and brings the picker's own gap with
+       it, so the board's margin is one space too many on a phone. */
+    margin-top: 0;
     margin-bottom: 0;
     /* The pentagon takes the height that is actually left, rather than a width
        the page then fails to fit around. Everything else on the board is fixed

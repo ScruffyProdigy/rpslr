@@ -925,7 +925,7 @@ describe('the legend gains at most one entry', () => {
   const legend = (container: HTMLElement) =>
     container.querySelector('.graph-legend') as HTMLElement;
 
-  it('stays at two entries in a duel', () => {
+  it('stays at one entry in a duel', () => {
     const { container } = renderPicker();
     expect(legend(container).querySelector('.graph-legend__added')).toBeNull();
     expect(legend(container)).not.toHaveTextContent('curved');
@@ -934,35 +934,35 @@ describe('the legend gains at most one entry', () => {
   it('gains exactly one when a loadout added an edge', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
     expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
-    expect(legend(container)).toHaveTextContent('curved = an extra rule');
+    expect(legend(container)).toHaveTextContent('curved = extra rule');
   });
 
-  // Two added edges, one each — still one legend entry, because the entry explains
-  // the *shape*, and the colour is the channel that says whose.
+  // One board at a time, so one owner's curve at a time — the entry explains the
+  // *shape*, and which board you are on says whose it is (JQ-324).
   it('does not gain a second when both players have one', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS, oppBeats: CHIMERA_BEATS });
     expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
   });
 
   /**
-   * `TEXT.legend` in boardFit.test.ts is a Chromium measurement of this copy at two
-   * lines. jsdom does no layout, so the guard here is the copy itself: growing it
-   * means re-measuring that constant, and a third line pushes the board off a
-   * 360px screen.
+   * `TEXT.legend` in boardFit.test.ts is a Chromium measurement of this copy at
+   * ONE line, at 360, 375 and 390px. jsdom does no layout, so the guard here is
+   * the copy itself: growing it means re-measuring that constant, and a second
+   * line is the tab strip's height, which the page has no room to give twice.
    */
   it('holds the measured copy, so a second line cannot arrive unnoticed', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
     expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      "N your cooldown · faded = attacks you can't make · curved = an extra rule",
+      'N cooldown · faded = can’t attack · curved = extra rule',
     );
   });
 
-  it('names the other player once their board is the one open', async () => {
+  it('reads the same on either board, because the tab says whose it is', async () => {
     const { container } = renderPicker({ oppName: 'Robin' });
+    const mine = legend(container).textContent?.replace(/\s+/g, ' ').trim();
     await showTheirs();
-    expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      "N Robin's cooldown · faded = attacks Robin can't make",
-    );
+    expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(mine);
+    expect(tabs()[1]).toHaveTextContent(/Robin's moves/);
   });
 });
 

@@ -727,12 +727,12 @@ export function MovePicker({
         >
           <UiIcon name="hourglass" /> N
         </span>{' '}
-        {mineOpen
-          ? voice.you
-            ? `${voice.you}'s cooldown`
-            : 'your cooldown'
-          : `${oppIdentity.name}'s cooldown`}{' '}
-        · faded = attacks {mineOpen ? (voice.you ? `${voice.you} can't` : "you can't") : `${oppIdentity.name} can't`} make
+        {/* No possessive, and that is the split paying for itself: the tab
+            above says whose board this is, the pill takes their colour, and the
+            text equivalent below names them outright. A legend that repeated it
+            ran to two lines at every width the board supports, and the second
+            line is the tab strip's height (JQ-324). */}
+        cooldown · faded = can&rsquo;t attack
         {/* One entry, and only in a match that has one to explain. Phase 2 cut the
             legend to two items and it is not growing back: a duel renders exactly
             the one above (JQ-151). */}
@@ -740,7 +740,7 @@ export function MovePicker({
           <>
             {' · '}
             <span className="graph-legend__added" aria-hidden="true" />{' '}
-            curved = an extra rule
+            curved = extra rule
           </>
         )}
       </p>
