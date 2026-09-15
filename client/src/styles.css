@@ -758,7 +758,11 @@ button.ghost {
    it without colour, and since JQ-157 there is a text equivalent below the
    board. The arrows that do carry live information are held to 3:1 above. */
 .beat-arrow--off {
-  stroke: var(--opp);
+  /* Neutral, not either player's colour. It used to be amber because the only
+     dead attacks drawn were the opponent's; the fade belongs to whichever board
+     is open now, and an amber edge on your own board would say "theirs" about
+     one of yours (JQ-324). */
+  stroke: var(--graph);
   stroke-opacity: 0.3;
   stroke-dasharray: 5 5;
 }
@@ -964,6 +968,13 @@ button.ghost {
 .cooldown-pill--theirs {
   background: color-mix(in srgb, var(--opp) 22%, var(--line-1));
   border-color: color-mix(in srgb, var(--opp) 55%, transparent);
+}
+
+/* What a move of theirs would take. Their colour, because the ring is that
+   move's reach — in yours it reads as something you chose (JQ-324). */
+.move-board[data-view='theirs'] .move-btn--target {
+  border-color: color-mix(in srgb, var(--opp) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--opp) 22%, transparent);
 }
 
 /* A move of theirs you have tapped to ask about. Not `--preview`: that one is

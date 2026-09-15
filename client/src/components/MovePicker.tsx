@@ -357,10 +357,12 @@ export function MovePicker({
 
   const myMarked = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
-  const showTapHint = tapHint.show && !lockedIn && round <= 2;
+  // Both notes teach your own board — one says how to commit, the other says why
+  // one of your moves is down — so neither belongs under theirs.
+  const showTapHint = mineOpen && tapHint.show && !lockedIn && round <= 2;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
-    !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
+    mineOpen && !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
 
 
   return (

@@ -1391,3 +1391,28 @@ describe('<MovePicker> inspecting their board (JQ-324)', () => {
     expect(within(theirCenter(container)).getByText(/Tap one of Robin’s moves/)).toBeInTheDocument();
   });
 });
+
+describe('<MovePicker> their board says nothing about yours (JQ-324)', () => {
+  it('leaves your one-time notes on your own board', async () => {
+    const { container } = renderPicker({
+      round: 1,
+      myDelays: { scissors: 2 },
+      myRecentMoves: ['scissors'],
+    });
+    expect(container.querySelector('.picker-note')).not.toBeNull();
+    await showTheirs();
+    // "Tap to preview, tap again to lock in" and "you played Scissors last
+    // round" are both about a board that is not open.
+    expect(container.querySelector('.picker-note')).toBeNull();
+  });
+
+  it('marks what one of their moves would take, not what you chose', async () => {
+    const { container } = renderPicker({ oppDelays: { paper: 2, lizard: 1 } });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(
+      [...container.querySelectorAll('.move-btn--target')].map((b) => b.textContent),
+    ).toEqual(['Rock', 'Robot']);
+    expect(container.querySelector('.move-btn--selected')).toBeNull();
+  });
+});
