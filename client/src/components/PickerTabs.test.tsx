@@ -18,6 +18,7 @@ function renderTabs(over: Partial<Parameters<typeof PickerTabs>[0]> = {}) {
       opponent={over.opponent ?? THEM}
       voice={over.voice ?? PLAYER_VOICE}
       panelId={over.panelId ?? 'move-board-panel'}
+      locked={over.locked ?? false}
     />,
   );
   return { ...utils, onView };
@@ -116,5 +117,43 @@ describe('<PickerTabs> is reachable and readable (JQ-324)', () => {
   it('labels the strip, so the two tabs are heard as a pair', () => {
     renderTabs();
     expect(screen.getByRole('tablist')).toHaveAccessibleName(/whose moves/i);
+  });
+});
+
+describe('<PickerTabs> held during targeting (JQ-325, AC #5)', () => {
+  /*
+   * Targeting owns the board while it runs, so the strip must not move it. The
+   * tabs are held rather than hidden: a control that disappears takes the focus
+   * with it, and the strip is still the thing that says whose board is open.
+   */
+  it('refuses a tap while locked', async () => {
+    const { onView } = renderTabs({ view: 'theirs', locked: true });
+    await userEvent.click(screen.getAllByRole('tab')[0]);
+    expect(onView).not.toHaveBeenCalled();
+  });
+
+  it('refuses the arrow keys while locked', async () => {
+    const { onView } = renderTabs({ view: 'theirs', locked: true });
+    screen.getAllByRole('tab')[1].focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(onView).not.toHaveBeenCalled();
+  });
+
+  it('says it is unavailable without giving up which board is open', () => {
+    renderTabs({ view: 'theirs', locked: true });
+    const tabs = screen.getAllByRole('tab');
+    for (const tab of tabs) expect(tab).toHaveAttribute('aria-disabled', 'true');
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('keeps the open tab reachable by keyboard while locked', () => {
+    renderTabs({ view: 'theirs', locked: true });
+    expect(screen.getAllByRole('tab')[1]).toHaveAttribute('tabindex', '0');
+  });
+
+  it('is unlocked by default', async () => {
+    const { onView } = renderTabs();
+    await userEvent.click(screen.getAllByRole('tab')[1]);
+    expect(onView).toHaveBeenCalledWith('theirs');
   });
 });

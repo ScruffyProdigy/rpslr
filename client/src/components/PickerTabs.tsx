@@ -41,6 +41,7 @@ export function PickerTabs({
   opponent,
   voice,
   panelId,
+  locked = false,
 }: {
   view: PickerView;
   onView: (view: PickerView) => void;
@@ -49,10 +50,22 @@ export function PickerTabs({
   voice: Voice;
   /** The board this strip switches, for `aria-controls`. */
   panelId: string;
+  /**
+   * Whether targeting is holding the board (JQ-325).
+   *
+   * Held rather than hidden. The board below is already off limits to ordinary
+   * switching — while targeting runs, `MovePicker` derives the open view from
+   * the step rather than reading its own state — so this is the strip saying so
+   * rather than the thing enforcing it. It stays in the focus order and keeps
+   * `aria-selected` on the open side, because it is also still the answer to
+   * "whose board am I looking at?".
+   */
+  locked?: boolean;
 }) {
   const identities: Record<PickerView, Identity> = { mine: you, theirs: opponent };
 
   function onKeyDown(e: React.KeyboardEvent) {
+    if (locked) return;
     const i = ORDER.indexOf(view);
     // Two tabs, so left and right are the same move — which is what makes the
     // wrap worth having rather than an edge case to get right.
@@ -70,7 +83,13 @@ export function PickerTabs({
   }
 
   return (
-    <div className="picker-tabs" role="tablist" aria-label="Whose moves to show" onKeyDown={onKeyDown}>
+    <div
+      className="picker-tabs"
+      role="tablist"
+      aria-label="Whose moves to show"
+      data-locked={locked || undefined}
+      onKeyDown={onKeyDown}
+    >
       {ORDER.map((v) => {
         const active = v === view;
         const identity = identities[v];
@@ -82,11 +101,15 @@ export function PickerTabs({
             id={`picker-tab-${v}`}
             aria-selected={active}
             aria-controls={panelId}
+            // `aria-disabled` rather than `disabled`: a disabled tab leaves the
+            // focus order, and the open one has to stay reachable (JQ-325).
+            aria-disabled={locked || undefined}
             // Roving: the open tab is the one the tab order stops on.
             tabIndex={active ? 0 : -1}
             className={['picker-tab', active ? 'picker-tab--active' : ''].filter(Boolean).join(' ')}
             onClick={() => {
-              if (!active) onView(v);
+              if (locked || active) return;
+              onView(v);
             }}
           >
             <PlayerAvatar
