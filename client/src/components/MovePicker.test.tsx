@@ -1280,3 +1280,114 @@ describe('<MovePicker> each view draws only its own player (JQ-324)', () => {
     expect(within(graph).getByText(/^You can't play Rock this round/)).toBeInTheDocument();
   });
 });
+
+describe('<MovePicker> inspecting their board (JQ-324)', () => {
+  const theirCenter = (container: HTMLElement) =>
+    container.querySelector('.picker-center--theirs') as HTMLElement;
+
+  it('prompts before anything is tapped', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await showTheirs();
+    expect(within(theirCenter(container)).getByText(/Tap one of Robin’s moves/)).toBeInTheDocument();
+  });
+
+  it('explains one of their moves in their terms', async () => {
+    const { container } = renderPicker({ oppDelays: { scissors: 2 }, oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    expect(
+      within(theirCenter(container)).getByText('Scissors cuts Paper & decapitates Lizard'),
+    ).toBeInTheDocument();
+    expect(within(theirCenter(container)).getByText(/back in 2 turns/)).toBeInTheDocument();
+  });
+
+  it('reads a tapped move through their graph, not yours', async () => {
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Lizard/ }));
+    expect(
+      within(theirCenter(container)).getByText('Lizard eats Paper, poisons Robot & beats Scissors'),
+    ).toBeInTheDocument();
+  });
+
+  it('states the matchup, and whose it is, once you are carrying a pick', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(
+      within(theirCenter(container)).getByText(/Paper covers Rock — Robin wins/),
+    ).toBeInTheDocument();
+  });
+
+  it('gives an asymmetric pair to the side that actually holds the edge', async () => {
+    // Their Chimera Lizard takes your Scissors, though the shared graph says
+    // Scissors decapitates Lizard. The round would give it to them, so this does.
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS, oppName: 'Robin' });
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Lizard/ }));
+    expect(
+      within(theirCenter(container)).getByText(/Lizard beats Scissors — Robin wins/),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about the matchup before you have picked', async () => {
+    const { container } = renderPicker();
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(theirCenter(container).querySelector('.picker-center__matchup')).toBeNull();
+  });
+
+  it('lights only the edges your pick shares with a move they can play', async () => {
+    const { container } = renderPicker({ oppDelays: { scissors: 3 } });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    const live = [...container.querySelectorAll('.beat-arrow--matchup')].map((a) => [
+      a.getAttribute('data-from'),
+      a.getAttribute('data-to'),
+    ]);
+    expect(live).toContainEqual(['rock', 'lizard']);
+    expect(live).not.toContainEqual(['rock', 'scissors']);
+    expect(live).toContainEqual(['paper', 'rock']);
+  });
+
+  it('colours a matchup arrow for whoever would take it', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    expect(arrow(container, 'rock', 'lizard')).toHaveClass('beat-arrow--matchup-you');
+    expect(arrow(container, 'paper', 'rock')).toHaveClass('beat-arrow--matchup-opp');
+  });
+
+  it('draws no matchup arrows on your own board', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelectorAll('.beat-arrow--matchup')).toHaveLength(0);
+  });
+
+  it('offers a way back that commits nothing', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /Back to your moves/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: /Lock in Rock/ })).toBeInTheDocument();
+  });
+
+  it('says nothing about the move they have actually chosen', async () => {
+    renderPicker({ opponentLockedIn: true, oppName: 'Robin' });
+    await showTheirs();
+    expect(screen.queryByText(/Robin picked|their move is|has chosen/i)).toBeNull();
+  });
+
+  it('puts an inspection away when you tap it again', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(within(theirCenter(container)).queryByText(/Tap one of Robin’s moves/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(within(theirCenter(container)).getByText(/Tap one of Robin’s moves/)).toBeInTheDocument();
+  });
+});
