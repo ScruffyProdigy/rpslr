@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DelayMap } from '@game/game';
@@ -6,53 +6,85 @@ import { MovePicker } from './MovePicker';
 import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
 import { SHARED_BEATS, threatsTo, type BeatsMap } from '../moves';
+import { PLAYER_VOICE, spectatorVoice, type Voice } from '../lib/voice';
+import type { Identity } from '../lib/seatProfile';
 import type { MarkEvent } from '@game/game';
 
 /** What a duel opens on; every fixture here is a duel unless it says otherwise. */
 const DUEL_OPENING: DelayMap = { rock: 0, paper: 0, scissors: 0, lizard: 1, robot: 2 };
 
-function renderPicker(
-  over: {
-    myDelays?: Record<string, number>;
-    oppDelays?: Record<string, number>;
-    myChosenMove?: Move | null;
-    lockedIn?: boolean;
-    disabled?: boolean;
-    round?: number;
-    myRecentMoves?: Move[];
-    myOpeningDelays?: DelayMap;
-    onPlay?: (m: Move) => void;
-    winningEdge?: { from: Move; to: Move; role: 'you' | 'opp'; added: boolean } | null;
-    secondsLeft?: number | null;
-    myBeats?: BeatsMap;
-    oppBeats?: BeatsMap;
-    myLedger?: readonly MarkEvent[];
-    showOppCooldownCounts?: boolean;
-    oppCanFreeze?: boolean;
-  } = {},
-) {
-  const onPlay = over.onPlay ?? vi.fn();
-  const utils = render(
+type Over = {
+  myDelays?: Record<string, number>;
+  oppDelays?: Record<string, number>;
+  myChosenMove?: Move | null;
+  lockedIn?: boolean;
+  opponentLockedIn?: boolean;
+  disabled?: boolean;
+  round?: number;
+  myRecentMoves?: Move[];
+  myOpeningDelays?: DelayMap;
+  onPlay?: (m: Move) => void;
+  winningEdge?: { from: Move; to: Move; role: 'you' | 'opp'; added: boolean } | null;
+  secondsLeft?: number | null;
+  myBeats?: BeatsMap;
+  oppBeats?: BeatsMap;
+  myLedger?: readonly MarkEvent[];
+  oppCanFreeze?: boolean;
+  voice?: Voice;
+  oppName?: string;
+  you?: Identity;
+  opponent?: Identity;
+};
+
+function pickerEl(over: Over & { onPlay: (m: Move) => void }) {
+  return (
     <MovePicker
       myDelays={over.myDelays ?? {}}
       oppDelays={over.oppDelays ?? {}}
       myChosenMove={over.myChosenMove ?? null}
       lockedIn={over.lockedIn ?? false}
+      opponentLockedIn={over.opponentLockedIn ?? false}
       disabled={over.disabled ?? false}
       round={over.round ?? 3}
       myRecentMoves={over.myRecentMoves ?? []}
       myOpeningDelays={over.myOpeningDelays ?? DUEL_OPENING}
-      onPlay={onPlay}
+      onPlay={over.onPlay}
       secondsLeft={over.secondsLeft ?? null}
       winningEdge={over.winningEdge ?? null}
       myBeats={over.myBeats ?? SHARED_BEATS}
       oppBeats={over.oppBeats ?? SHARED_BEATS}
       myLedger={over.myLedger ?? []}
-      showOppCooldownCounts={over.showOppCooldownCounts ?? false}
       oppCanFreeze={over.oppCanFreeze ?? false}
-    />,
+      voice={over.voice ?? PLAYER_VOICE}
+      oppName={over.oppName ?? 'Robin'}
+      you={over.you}
+      opponent={over.opponent}
+    />
   );
-  return { ...utils, onPlay };
+}
+
+function renderPicker(over: Over = {}) {
+  const onPlay = over.onPlay ?? vi.fn();
+  const props = { ...over, onPlay };
+  const utils = render(pickerEl(props));
+  /** Re-render with a few props changed and everything else held still. */
+  const rerenderWith = (next: Over = {}) => utils.rerender(pickerEl({ ...props, ...next }));
+  return { ...utils, onPlay, rerenderWith };
+}
+
+/** The tabs, in the order the strip draws them: yours, then theirs. */
+function tabs(): HTMLElement[] {
+  return screen.getAllByRole('tab');
+}
+
+/** Open the opponent's board. */
+async function showTheirs() {
+  await userEvent.click(tabs()[1]);
+}
+
+/** Come back to your own. */
+async function showMine() {
+  await userEvent.click(tabs()[0]);
 }
 
 /**
@@ -196,62 +228,55 @@ describe('<MovePicker> buttons carry only your own state (JQ 2.1/2.2)', () => {
   });
 });
 
-describe('<MovePicker> opponent cooldown is drawn on the graph (JQ 2.3)', () => {
-  it('fades the arrows leaving a move the opponent cannot play, and no others', () => {
+describe('<MovePicker> their cooldowns, on their own board (JQ 2.3, rehomed by JQ-324)', () => {
+  it('fades the arrows leaving a move they cannot play, and no others', async () => {
     const { container } = renderPicker({ oppDelays: { robot: 2 } });
+    await showTheirs();
     // Robot smashes Scissors & vaporizes Rock — neither attack is coming.
-    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
-    expect(arrow(container, 'robot', 'scissors')).toHaveClass('beat-arrow--opp-off');
-    expect(container.querySelectorAll('.beat-arrow--opp-off')).toHaveLength(2);
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--off');
+    expect(arrow(container, 'robot', 'scissors')).toHaveClass('beat-arrow--off');
+    expect(container.querySelectorAll('.beat-arrow--off')).toHaveLength(2);
   });
 
-  it('leaves a safe move with no solid incoming arrow', () => {
+  it('leaves a move nothing live can beat with no solid incoming arrow', async () => {
     const oppDelays = { paper: 1, robot: 2 };
     const { container } = renderPicker({ oppDelays });
+    await showTheirs();
 
     expect(threatsTo('rock', oppDelays).safe).toBe(true);
     for (const line of incomingArrows(container, 'rock')) {
-      expect(line).toHaveClass('beat-arrow--opp-off');
+      expect(line).toHaveClass('beat-arrow--off');
     }
 
     // Lizard is still beaten by Rock and Scissors, both playable.
     expect(threatsTo('lizard', oppDelays).safe).toBe(false);
     expect(
-      incomingArrows(container, 'lizard').some((l) => !l.classList.contains('beat-arrow--opp-off')),
+      incomingArrows(container, 'lizard').some((l) => !l.classList.contains('beat-arrow--off')),
     ).toBe(true);
   });
 
-  it('marks the node and names the wait in the preview caption', async () => {
-    const user = userEvent.setup();
-    renderPicker({ oppDelays: { robot: 2 } });
-    await user.click(screen.getByRole('button', { name: /^Robot/ }));
-    expect(screen.getByText("Opponent can't play Robot for 2 turns")).toBeInTheDocument();
+  it('marks the node and names the wait when you tap it', async () => {
+    renderPicker({ oppDelays: { robot: 2 }, oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(screen.getByText(/Robin can’t play it — back in 2 turns/)).toBeInTheDocument();
   });
 
-  it('withholds "opponent can\'t play" when the floor leaves them the move (JQ-215)', async () => {
-    // Own board ordinary — this is not about what I can play. Opponent is
-    // fully marked, with Paper and Lizard tied for fewest, so the floor keeps
+  it('withholds "can\'t play" when the floor leaves them the move (JQ-215)', async () => {
+    // Fully marked, with Paper and Lizard tied for fewest, so the floor keeps
     // both playable for them. Saying "can't play" here would be a false
     // all-clear the round itself disproves.
-    const user = userEvent.setup();
-    renderPicker({ oppDelays: ALL_MARKED });
-    await user.click(screen.getByRole('button', { name: /^Paper/ }));
-    expect(screen.queryByText(/Opponent can't play Paper/)).toBeNull();
+    renderPicker({ oppDelays: ALL_MARKED, oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(screen.queryByText(/can’t play it/)).toBeNull();
   });
 
   it('still shows it for a move the floor genuinely did not reach (JQ-215)', async () => {
-    const user = userEvent.setup();
-    renderPicker({ oppDelays: ALL_MARKED });
-    await user.click(screen.getByRole('button', { name: /^Robot/ }));
-    expect(screen.getByText("Opponent can't play Robot for 4 turns")).toBeInTheDocument();
-  });
-
-  it('shows a two-item legend', () => {
-    renderPicker();
-    const legend = screen.getByText(/your cooldown/);
-    expect(legend).toHaveTextContent(
-      /your cooldown · .*opponent cooldown \(faded arrows = attacks they can’t make\)/,
-    );
+    renderPicker({ oppDelays: ALL_MARKED, oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Robot/ }));
+    expect(screen.getByText(/Robin can’t play it — back in 4 turns/)).toBeInTheDocument();
   });
 });
 
@@ -299,6 +324,9 @@ describe('<MovePicker> tap to preview, tap again to lock in (JQ 2.4)', () => {
   it('previews on keyboard focus too', async () => {
     const user = userEvent.setup();
     const { container } = renderPicker();
+    // Two stops: the tab strip above the board is one of them, and the board's
+    // first move button is the next (JQ-324).
+    await user.tab();
     await user.tab();
     expect(within(center(container)).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
   });
@@ -582,7 +610,9 @@ describe('<MovePicker> gives the pentagon a text equivalent (JQ-157)', () => {
   });
 
   it('names the attacks the faded arrows stand for', () => {
-    renderPicker({ oppDelays: { lizard: 2 } });
+    // Your own board's fades are your own dead attacks now, so this is the
+    // sentence that has to match them (JQ-324).
+    renderPicker({ myDelays: { lizard: 2 } });
     const graph = screen.getByRole('region', { name: /what beats what/i });
     expect(within(graph).getByText(/can't play Lizard/)).toBeInTheDocument();
   });
@@ -768,12 +798,13 @@ describe('<MovePicker> a marked move can still be played (JQ-215)', () => {
     expect(container.querySelectorAll('.move-btn--cooldown')).toHaveLength(2);
   });
 
-  it('does not fade every arrow when the opponent is fully marked', () => {
+  it('does not fade every arrow when the opponent is fully marked', async () => {
     const { container } = renderPicker({ oppDelays: ALL_MARKED });
+    await showTheirs();
     // Paper and Lizard are their least-marked, so their attacks are live.
-    expect(arrow(container, 'paper', 'rock')).not.toHaveClass('beat-arrow--opp-off');
-    expect(arrow(container, 'lizard', 'robot')).not.toHaveClass('beat-arrow--opp-off');
-    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--opp-off');
+    expect(arrow(container, 'paper', 'rock')).not.toHaveClass('beat-arrow--off');
+    expect(arrow(container, 'lizard', 'robot')).not.toHaveClass('beat-arrow--off');
+    expect(arrow(container, 'robot', 'rock')).toHaveClass('beat-arrow--off');
   });
 
   /**
@@ -838,8 +869,11 @@ describe('an edge a loadout added', () => {
 
   // The whole point of the ticket: a rule you are playing against is no use to you
   // unrendered. It appears on the opponent's screen too, in *their* colour.
-  it('draws it on the opponent’s screen as well, marked as theirs', () => {
+  it('draws it on the opponent’s own board, marked as theirs', async () => {
+    // Still reachable, still theirs — one tab away rather than on top of your
+    // own rules (JQ-324).
     const { container } = renderPicker({ oppBeats: CHIMERA_BEATS });
+    await showTheirs();
     const edge = addedArrow(container, 'lizard', 'scissors');
     expect(edge).toHaveClass('beat-arrow--added-opp');
     expect(edge?.getAttribute('marker-end')).toBe('url(#rps-arrow-opp)');
@@ -854,9 +888,10 @@ describe('an edge a loadout added', () => {
     expect(arrow(container, 'scissors', 'lizard')).toBeTruthy();
   });
 
-  it('fades an edge of theirs off a move they cannot play this round', () => {
+  it('fades an edge of theirs off a move they cannot play this round', async () => {
     const { container } = renderPicker({ oppBeats: CHIMERA_BEATS, oppDelays: { lizard: 2 } });
-    expect(addedArrow(container, 'lizard', 'scissors')).toHaveClass('beat-arrow--opp-off');
+    await showTheirs();
+    expect(addedArrow(container, 'lizard', 'scissors')).toHaveClass('beat-arrow--off');
   });
 
   it('lights the curve when the round was won on it', () => {
@@ -890,7 +925,7 @@ describe('the legend gains at most one entry', () => {
   const legend = (container: HTMLElement) =>
     container.querySelector('.graph-legend') as HTMLElement;
 
-  it('stays at two entries in a duel', () => {
+  it('stays at one entry in a duel', () => {
     const { container } = renderPicker();
     expect(legend(container).querySelector('.graph-legend__added')).toBeNull();
     expect(legend(container)).not.toHaveTextContent('curved');
@@ -899,56 +934,64 @@ describe('the legend gains at most one entry', () => {
   it('gains exactly one when a loadout added an edge', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
     expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
-    expect(legend(container)).toHaveTextContent('curved = an extra rule');
+    expect(legend(container)).toHaveTextContent('curved = extra rule');
   });
 
-  // Two added edges, one each — still one legend entry, because the entry explains
-  // the *shape*, and the colour is the channel that says whose.
+  // One board at a time, so one owner's curve at a time — the entry explains the
+  // *shape*, and which board you are on says whose it is (JQ-324).
   it('does not gain a second when both players have one', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS, oppBeats: CHIMERA_BEATS });
     expect(legend(container).querySelectorAll('.graph-legend__added')).toHaveLength(1);
   });
 
   /**
-   * `TEXT.legend` in boardFit.test.ts is a Chromium measurement of this copy at two
-   * lines. jsdom does no layout, so the guard here is the copy itself: growing it
-   * means re-measuring that constant, and a third line pushes the board off a
-   * 360px screen.
+   * `TEXT.legend` in boardFit.test.ts is a Chromium measurement of this copy at
+   * ONE line, at 360, 375 and 390px. jsdom does no layout, so the guard here is
+   * the copy itself: growing it means re-measuring that constant, and a second
+   * line is the tab strip's height, which the page has no room to give twice.
    */
-  it('holds the measured copy, so a third line cannot arrive unnoticed', () => {
+  it('holds the measured copy, so a second line cannot arrive unnoticed', () => {
     const { container } = renderPicker({ myBeats: CHIMERA_BEATS });
     expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(
-      'N your cooldown · opponent cooldown (faded arrows = attacks they can’t make) · curved = an extra rule',
+      'N cooldown · faded = can’t attack · curved = extra rule',
     );
+  });
+
+  it('reads the same on either board, because the tab says whose it is', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    const mine = legend(container).textContent?.replace(/\s+/g, ' ').trim();
+    await showTheirs();
+    expect(legend(container).textContent?.replace(/\s+/g, ' ').trim()).toBe(mine);
+    expect(tabs()[1]).toHaveTextContent(/Robin's moves/);
   });
 });
 
-describe('opponent cooldowns carry their count in helpers mode', () => {
-  const badge = (container: HTMLElement) =>
-    container.querySelector('.opp-cooldown-mark') as HTMLElement;
+describe('their cooldowns, on their own board (JQ-324)', () => {
+  /** The pill on a node — not the one in the legend, which teaches it. */
+  const pill = (container: HTMLElement) =>
+    container.querySelector('.move-btn .cooldown-pill') as HTMLElement;
 
-  // In a duel their marks are only ever (1, 2), so a number would restate which of
-  // two moves they played most recently — which the history strip already says.
-  it('shows the marker alone in a duel', () => {
+  // The count used to be withheld in a duel: their badge shared a node with your
+  // own state, and a number there restated what the history strip already said.
+  // Their board is their own now, so the pill reads exactly like yours does.
+  it('carries their count in a duel as well as in helpers', async () => {
     const { container } = renderPicker({ oppDelays: { rock: 2 } });
-    expect(badge(container)).not.toHaveClass('opp-cooldown-mark--counted');
-    expect(badge(container).textContent?.trim()).toBe('');
+    await showTheirs();
+    expect(pill(container)).toHaveClass('cooldown-pill--theirs');
+    expect(pill(container).textContent).toContain('2');
   });
 
-  it('shows the number once helpers are in play', () => {
-    const { container } = renderPicker({ oppDelays: { rock: 4 }, showOppCooldownCounts: true });
-    expect(badge(container)).toHaveClass('opp-cooldown-mark--counted');
-    expect(badge(container).textContent).toContain('4');
+  it('keeps their marks off your own board entirely', () => {
+    const { container } = renderPicker({ oppDelays: { rock: 2 } });
+    expect(container.querySelector('.move-btn .cooldown-pill')).toBeNull();
+    expect(container.querySelector('.opp-cooldown-mark')).toBeNull();
   });
 
-  // The button's own label has always carried the count; turning the number on is
-  // about the sighted board catching up with what a screen reader already got.
-  it('leaves the spoken label saying the same thing either way', () => {
-    for (const showOppCooldownCounts of [false, true]) {
-      const { unmount } = renderPicker({ oppDelays: { rock: 4 }, showOppCooldownCounts });
-      expect(screen.getByRole('button', { name: /opponent cooldown, 4 turns/ })).toBeTruthy();
-      unmount();
-    }
+  it('names whose cooldown it is in the spoken label', async () => {
+    renderPicker({ oppDelays: { rock: 4 }, oppName: 'Robin' });
+    await showTheirs();
+    expect(screen.getByRole('button', { name: /Rock, Robin can't play it, on cooldown, 4 turns/ }))
+      .toBeInTheDocument();
   });
 });
 
@@ -1011,5 +1054,365 @@ describe('a cooldown says what actually caused it', () => {
       ],
     });
     expect(screen.getByRole('button', { name: /their rust put 2 marks on paper/ })).toBeTruthy();
+  });
+});
+
+describe('<MovePicker> switching between the two views (JQ-324)', () => {
+  it('opens on your own moves', () => {
+    renderPicker();
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('cannot commit a move, however many times you switch', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await showTheirs();
+    await showMine();
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending choice across a switch', async () => {
+    renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    expect(screen.getByRole('button', { name: /Lock in Rock/ })).toBeInTheDocument();
+  });
+
+  it('resets the second-tap-to-commit sequence across a switch', async () => {
+    // Coming back to a board you left has to read as arriving at it, not as
+    // being one tap from having played: the tap that committed before the
+    // switch is not the tap in front of you now.
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('keeps the explicit Lock in working after a switch', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /Lock in Rock/ }));
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('returns to your moves on a new round', () => {
+    const { rerenderWith } = renderPicker({ round: 3 });
+    fireEvent.click(tabs()[1]);
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+    rerenderWith({ round: 4 });
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('leaves the view alone when state refreshes without a new round', async () => {
+    // A board that jumped back to your own every time the opponent's readiness
+    // arrived would make an inspection impossible to finish.
+    const { rerenderWith } = renderPicker({ round: 3, opponentLockedIn: false });
+    await showTheirs();
+    rerenderWith({ round: 3, opponentLockedIn: true });
+    expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('never lets an inspection become the move the clock commits', async () => {
+    // The auto-commit plays what you tapped just before the deadline. What you
+    // tapped on *their* board is a question, not a choice.
+    const { onPlay, rerenderWith } = renderPicker({ secondsLeft: 10 });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    rerenderWith({ secondsLeft: 1 });
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('still auto-commits your own tapped move once you are back', async () => {
+    const { onPlay, rerenderWith } = renderPicker({ secondsLeft: 10 });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await showMine();
+    rerenderWith({ secondsLeft: 1 });
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('accepts no input on either board once you have locked in', async () => {
+    const { onPlay } = renderPicker({ lockedIn: true, myChosenMove: 'rock', disabled: true });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    await showMine();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('points the tabs at the board they switch', () => {
+    const { container } = renderPicker();
+    const panel = container.querySelector('[role="tabpanel"]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(tabs()[0]).toHaveAttribute('aria-controls', panel.id);
+    expect(panel).toHaveAttribute('aria-labelledby', tabs()[0].id);
+  });
+
+  it('takes Escape back to your own moves', async () => {
+    renderPicker();
+    await showTheirs();
+    await userEvent.keyboard('{Escape}');
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('<MovePicker> focus order (JQ-324)', () => {
+  it('spends one stop on the strip before the board', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.tab();
+    expect(document.activeElement).toBe(tabs()[0]);
+    await user.tab();
+    expect(document.activeElement).toHaveClass('move-btn');
+  });
+
+  it('drops the controls of the board you are not on out of the focus order', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelector('.picker-center__lock')).not.toBeNull();
+    await showTheirs();
+    // Lock in belongs to your board. While theirs is open it is not hidden from
+    // view by CSS — it is not in the tree at all, so nothing can tab to it.
+    expect(container.querySelector('.picker-center__lock')).toBeNull();
+  });
+});
+
+describe('<MovePicker> each view draws only its own player (JQ-324)', () => {
+  it('drops the opponent fade from your own board', () => {
+    // The fade is the viewed player's own dead attacks now. On your board with
+    // every move of yours live, nothing is faded however marked they are.
+    const { container } = renderPicker({ oppDelays: { scissors: 2, lizard: 2 } });
+    expect(container.querySelectorAll('.beat-arrow--off')).toHaveLength(0);
+  });
+
+  it('fades the arrows leaving a move you cannot play', () => {
+    const { container } = renderPicker({ myDelays: { lizard: 2 } });
+    const off = [...container.querySelectorAll('.beat-arrow--off')];
+    expect(off).not.toHaveLength(0);
+    expect(off.every((a) => a.getAttribute('data-from') === 'lizard')).toBe(true);
+  });
+
+  it('fades the arrows leaving a move they cannot play, on their board', async () => {
+    const { container } = renderPicker({ oppDelays: { lizard: 2 } });
+    await showTheirs();
+    const off = [...container.querySelectorAll('.beat-arrow--off')];
+    expect(off).not.toHaveLength(0);
+    expect(off.every((a) => a.getAttribute('data-from') === 'lizard')).toBe(true);
+  });
+
+  it('lights every outgoing edge of a move you preview, live or not', async () => {
+    // The caption says "Rock crushes Scissors & Lizard". Dropping the Lizard
+    // arrow because they cannot play it this round would put the board and the
+    // caption in disagreement, which is worse than saying less.
+    const { container } = renderPicker({ oppDelays: { lizard: 3 } });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(arrow(container, 'rock', 'scissors')).toHaveClass('beat-arrow--preview');
+    expect(arrow(container, 'rock', 'lizard')).toHaveClass('beat-arrow--preview');
+  });
+
+  it('shows their cooldown, and yours nowhere on it', async () => {
+    const { container } = renderPicker({ myDelays: { rock: 2 }, oppDelays: { paper: 3 } });
+    await showTheirs();
+    const pills = [...container.querySelectorAll('.move-btn .cooldown-pill')];
+    expect(pills).toHaveLength(1);
+    expect(pills[0].textContent).toContain('3');
+  });
+
+  it('offers no commitment on their board', async () => {
+    const { onPlay, container } = renderPicker();
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(container.querySelector('.picker-center__lock')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Rock/ })).not.toHaveAttribute('aria-pressed');
+  });
+
+  it('keeps your locked-in check off their board', async () => {
+    const { container } = renderPicker({ lockedIn: true, myChosenMove: 'rock' });
+    expect(container.querySelector('.move-btn--selected')).not.toBeNull();
+    await showTheirs();
+    expect(container.querySelector('.move-btn--selected')).toBeNull();
+  });
+
+  it('draws each owner’s added edge on that owner’s board', async () => {
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS });
+    expect(container.querySelector('[data-added-from="lizard"]')).toBeNull();
+    await showTheirs();
+    expect(container.querySelector('[data-added-from="lizard"]')).not.toBeNull();
+  });
+
+  it('keeps the five positions and the button count in both views', async () => {
+    const { container } = renderPicker();
+    const before = [...container.querySelectorAll('.move-btn')].map(
+      (b) => `${(b as HTMLElement).style.left}/${(b as HTMLElement).style.top}`,
+    );
+    await showTheirs();
+    const after = [...container.querySelectorAll('.move-btn')].map(
+      (b) => `${(b as HTMLElement).style.left}/${(b as HTMLElement).style.top}`,
+    );
+    expect(after).toEqual(before);
+    expect(after).toHaveLength(5);
+  });
+
+  it('says whose options are being read, and only theirs', async () => {
+    renderPicker({ myDelays: { rock: 2 }, oppDelays: { lizard: 2 }, oppName: 'Robin' });
+    const graph = () => screen.getByRole('region', { name: /what beats what/i });
+    expect(within(graph()).getByText(/^You can't play Rock this round/)).toBeInTheDocument();
+    await showTheirs();
+    expect(within(graph()).getByText(/^Robin can't play Lizard this round/)).toBeInTheDocument();
+  });
+
+  it('speaks in names on a replay, where there is no you', async () => {
+    renderPicker({ voice: spectatorVoice('Ada'), myDelays: { rock: 2 }, oppName: 'Robin' });
+    expect(screen.getAllByRole('tab')[0]).toHaveTextContent(/Ada's moves/);
+    const graph = screen.getByRole('region', { name: /what beats what/i });
+    expect(within(graph).getByText(/^You can't play Rock this round/)).toBeInTheDocument();
+  });
+});
+
+describe('<MovePicker> inspecting their board (JQ-324)', () => {
+  const theirCenter = (container: HTMLElement) =>
+    container.querySelector('.picker-center--theirs') as HTMLElement;
+
+  it('prompts before anything is tapped', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await showTheirs();
+    expect(within(theirCenter(container)).getByText(/Tap one of Robin’s moves/)).toBeInTheDocument();
+  });
+
+  it('explains one of their moves in their terms', async () => {
+    const { container } = renderPicker({ oppDelays: { scissors: 2 }, oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    expect(
+      within(theirCenter(container)).getByText('Scissors cuts Paper & decapitates Lizard'),
+    ).toBeInTheDocument();
+    expect(within(theirCenter(container)).getByText(/back in 2 turns/)).toBeInTheDocument();
+  });
+
+  it('reads a tapped move through their graph, not yours', async () => {
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Lizard/ }));
+    expect(
+      within(theirCenter(container)).getByText('Lizard eats Paper, poisons Robot & beats Scissors'),
+    ).toBeInTheDocument();
+  });
+
+  it('states the matchup, and whose it is, once you are carrying a pick', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(
+      within(theirCenter(container)).getByText(/Paper covers Rock — Robin wins/),
+    ).toBeInTheDocument();
+  });
+
+  it('gives an asymmetric pair to the side that actually holds the edge', async () => {
+    // Their Chimera Lizard takes your Scissors, though the shared graph says
+    // Scissors decapitates Lizard. The round would give it to them, so this does.
+    const { container } = renderPicker({ oppBeats: CHIMERA_BEATS, oppName: 'Robin' });
+    await userEvent.click(screen.getByRole('button', { name: /^Scissors/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Lizard/ }));
+    expect(
+      within(theirCenter(container)).getByText(/Lizard beats Scissors — Robin wins/),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about the matchup before you have picked', async () => {
+    const { container } = renderPicker();
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(theirCenter(container).querySelector('.picker-center__matchup')).toBeNull();
+  });
+
+  it('lights only the edges your pick shares with a move they can play', async () => {
+    const { container } = renderPicker({ oppDelays: { scissors: 3 } });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    const live = [...container.querySelectorAll('.beat-arrow--matchup')].map((a) => [
+      a.getAttribute('data-from'),
+      a.getAttribute('data-to'),
+    ]);
+    expect(live).toContainEqual(['rock', 'lizard']);
+    expect(live).not.toContainEqual(['rock', 'scissors']);
+    expect(live).toContainEqual(['paper', 'rock']);
+  });
+
+  it('colours a matchup arrow for whoever would take it', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    expect(arrow(container, 'rock', 'lizard')).toHaveClass('beat-arrow--matchup-you');
+    expect(arrow(container, 'paper', 'rock')).toHaveClass('beat-arrow--matchup-opp');
+  });
+
+  it('draws no matchup arrows on your own board', async () => {
+    const { container } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelectorAll('.beat-arrow--matchup')).toHaveLength(0);
+  });
+
+  it('offers a way back that commits nothing', async () => {
+    const { onPlay } = renderPicker();
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /Back to your moves/ }));
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(tabs()[0]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: /Lock in Rock/ })).toBeInTheDocument();
+  });
+
+  it('says nothing about the move they have actually chosen', async () => {
+    renderPicker({ opponentLockedIn: true, oppName: 'Robin' });
+    await showTheirs();
+    expect(screen.queryByText(/Robin picked|their move is|has chosen/i)).toBeNull();
+  });
+
+  it('puts an inspection away when you tap it again', async () => {
+    const { container } = renderPicker({ oppName: 'Robin' });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(within(theirCenter(container)).queryByText(/Tap one of Robin’s moves/)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(within(theirCenter(container)).getByText(/Tap one of Robin’s moves/)).toBeInTheDocument();
+  });
+});
+
+describe('<MovePicker> their board says nothing about yours (JQ-324)', () => {
+  it('leaves your one-time notes on your own board', async () => {
+    const { container } = renderPicker({
+      round: 1,
+      myDelays: { scissors: 2 },
+      myRecentMoves: ['scissors'],
+    });
+    expect(container.querySelector('.picker-note')).not.toBeNull();
+    await showTheirs();
+    // "Tap to preview, tap again to lock in" and "you played Scissors last
+    // round" are both about a board that is not open.
+    expect(container.querySelector('.picker-note')).toBeNull();
+  });
+
+  it('marks what one of their moves would take, not what you chose', async () => {
+    const { container } = renderPicker({ oppDelays: { paper: 2, lizard: 1 } });
+    await showTheirs();
+    await userEvent.click(screen.getByRole('button', { name: /^Paper/ }));
+    expect(
+      [...container.querySelectorAll('.move-btn--target')].map((b) => b.textContent),
+    ).toEqual(['Rock', 'Robot']);
+    expect(container.querySelector('.move-btn--selected')).toBeNull();
   });
 });

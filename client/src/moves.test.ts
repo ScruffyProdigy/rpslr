@@ -11,11 +11,12 @@ import {
   describeBeat,
   describeOutcome,
   describeBeatsOf,
-  describeBeatsGraph,
+  describeBoardGraph,
   describeRoundMatchup,
   beatsOf,
-  opponentCooldownPhrase,
   cooldownCause,
+  describeMatchup,
+  liveMatchupEdges,
   threatsTo,
   winningEdgeOf,
   roundCap,
@@ -126,14 +127,6 @@ describe('threatsTo', () => {
   });
 });
 
-describe('opponentCooldownPhrase', () => {
-  it('names the move and the wait', () => {
-    expect(opponentCooldownPhrase('robot', 2)).toBe("Opponent can't play Robot for 2 turns");
-    expect(opponentCooldownPhrase('lizard', 1)).toBe("Opponent can't play Lizard for 1 turn");
-  });
-});
-
-
 describe('winningEdgeOf', () => {
   it('points from the winning move to the losing one', () => {
     expect(winningEdgeOf('rock', 'scissors')).toEqual({
@@ -209,13 +202,13 @@ describe('cooldownCause', () => {
   });
 });
 
-describe('describeBeatsGraph (JQ-157)', () => {
+describe('describeBoardGraph (JQ-157)', () => {
   /*
    * The arrows SVG is aria-hidden, so this is the only form of the pentagon a
    * screen reader ever gets. Five lines carry all ten edges.
    */
   it('covers all ten beats in one line per move', () => {
-    expect(describeBeatsGraph({}).edges).toEqual([
+    expect(describeBoardGraph({}).edges).toEqual([
       'Rock crushes Scissors & Lizard',
       'Paper covers Rock & disproves Robot',
       'Scissors cuts Paper & decapitates Lizard',
@@ -224,48 +217,51 @@ describe('describeBeatsGraph (JQ-157)', () => {
     ]);
   });
 
-  it('says the graph is fully live when the opponent has no cooldowns', () => {
-    expect(describeBeatsGraph({}).opponent).toBe(
-      'The opponent can play every move this round, so every arrow is live.',
+  it('says the graph is fully live when the viewed player has no cooldowns', () => {
+    expect(describeBoardGraph({}).availability).toBe(
+      'You can play every move this round, so every arrow is live.',
     );
   });
 
-  it('names the attacks the opponent cannot make, which the board draws faded', () => {
-    expect(describeBeatsGraph({ lizard: 2, robot: 1 }).opponent).toBe(
-      "The opponent can't play Lizard or Robot this round, so those attacks are drawn faded.",
+  it('names the attacks they cannot make, which the board draws faded', () => {
+    expect(describeBoardGraph({ lizard: 2, robot: 1 }).availability).toBe(
+      "You can't play Lizard or Robot this round, so those attacks are drawn faded.",
     );
   });
 
   it('reads a single unavailable move without a list', () => {
-    expect(describeBeatsGraph({ rock: 1 }).opponent).toBe(
-      "The opponent can't play Rock this round, so those attacks are drawn faded.",
+    expect(describeBoardGraph({ rock: 1 }).availability).toBe(
+      "You can't play Rock this round, so those attacks are drawn faded.",
     );
   });
 
   it('ignores moves whose cooldown has run out', () => {
-    expect(describeBeatsGraph({ rock: 0, lizard: 2 }).opponent).toContain("can't play Lizard");
-    expect(describeBeatsGraph({ rock: 0, lizard: 2 }).opponent).not.toContain('Rock');
+    expect(describeBoardGraph({ rock: 0, lizard: 2 }).availability).toContain("can't play Lizard");
+    expect(describeBoardGraph({ rock: 0, lizard: 2 }).availability).not.toContain('Rock');
   });
 });
 
-describe('describeBeatsGraph naming', () => {
-  it('says "The opponent" when there is a you to be opposite', () => {
-    expect(describeBeatsGraph({}).opponent).toBe(
-      'The opponent can play every move this round, so every arrow is live.',
+describe('describeBoardGraph naming (JQ-324)', () => {
+  // Whose board is open is the thing this text has to make unmistakable: the
+  // fades below it mean "the viewed player cannot attack with this", and a
+  // sentence about the other player would contradict the arrows.
+  it('speaks second person for your own board', () => {
+    expect(describeBoardGraph({}).availability).toBe(
+      'You can play every move this round, so every arrow is live.',
     );
   });
 
-  it('names the other player on a replay, where nobody is "you"', () => {
-    expect(describeBeatsGraph({}, 'Ben').opponent).toBe(
+  it('names the player whose board it is', () => {
+    expect(describeBoardGraph({}, SHARED_BEATS, 'Ben').availability).toBe(
       'Ben can play every move this round, so every arrow is live.',
     );
-    expect(describeBeatsGraph({ robot: 2 }, 'Ben').opponent).toBe(
+    expect(describeBoardGraph({ robot: 2 }, SHARED_BEATS, 'Ben').availability).toBe(
       "Ben can't play Robot this round, so those attacks are drawn faded.",
     );
   });
 
-  it('falls back to the anonymous form for a blank name', () => {
-    expect(describeBeatsGraph({}, '  ').opponent).toMatch(/^The opponent/);
+  it('falls back to the anonymous form for a seat with no name yet', () => {
+    expect(describeBoardGraph({}, SHARED_BEATS, '  ').availability).toMatch(/^The opponent/);
   });
 });
 
@@ -326,14 +322,18 @@ describe('the opponent gets the floor too (JQ-215)', () => {
   });
 
   it('says the graph is fully live when the floor gives them everything back', () => {
-    expect(describeBeatsGraph({ rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 }).opponent).toBe(
-      'The opponent can play every move this round, so every arrow is live.',
-    );
+    expect(
+      describeBoardGraph(
+        { rock: 3, paper: 3, scissors: 3, lizard: 3, robot: 3 },
+        SHARED_BEATS,
+        'Ben',
+      ).availability,
+    ).toBe('Ben can play every move this round, so every arrow is live.');
   });
 
   it('names only the moves the floor did not reach', () => {
-    expect(describeBeatsGraph(THEIRS).opponent).toBe(
-      "The opponent can't play Rock, Scissors or Robot this round, so those attacks are drawn faded.",
+    expect(describeBoardGraph(THEIRS, SHARED_BEATS, 'Ben').availability).toBe(
+      "Ben can't play Rock, Scissors or Robot this round, so those attacks are drawn faded.",
     );
   });
 });
@@ -437,32 +437,31 @@ describe('winningEdgeOf with per-player graphs', () => {
   });
 });
 
-describe('describeBeatsGraph names the extra edges out loud', () => {
+describe('describeBoardGraph names the extra edges out loud', () => {
   it('says nothing extra in a duel', () => {
-    expect(describeBeatsGraph({}).added).toEqual([]);
+    expect(describeBoardGraph({}).added).toEqual([]);
   });
 
   it('names your own', () => {
-    expect(describeBeatsGraph({}, undefined, { mine: CHIMERA_BEATS }).added).toEqual([
+    expect(describeBoardGraph({}, CHIMERA_BEATS).added).toEqual([
       'Your Lizard also beats Scissors this match',
     ]);
   });
 
-  // The opponent must be able to hear the rule they are playing against: an edge
-  // rendered on their screen only for its owner is a rule they cannot see.
-  it('names theirs too, by name where there is one', () => {
-    expect(describeBeatsGraph({}, 'Ben', { theirs: CHIMERA_BEATS }).added).toEqual([
+  // The opponent must still be able to hear the rule they are playing against —
+  // it is spoken on the board that holds it, which is the board the tab opens
+  // (JQ-151, JQ-324).
+  it('names theirs on their own board, by name where there is one', () => {
+    expect(describeBoardGraph({}, CHIMERA_BEATS, 'Ben').added).toEqual([
       "Ben's Lizard also beats Scissors this match",
     ]);
-    expect(describeBeatsGraph({}, undefined, { theirs: CHIMERA_BEATS }).added).toEqual([
+    expect(describeBoardGraph({}, CHIMERA_BEATS, '').added).toEqual([
       'Their Lizard also beats Scissors this match',
     ]);
   });
 
   it('leaves the five shared lines word for word as they were', () => {
-    expect(describeBeatsGraph({}, undefined, { mine: CHIMERA_BEATS }).edges).toEqual(
-      describeBeatsGraph({}).edges,
-    );
+    expect(describeBoardGraph({}, CHIMERA_BEATS).edges).toEqual(describeBoardGraph({}).edges);
   });
 });
 
@@ -550,5 +549,103 @@ describe('backInPhrase (JQ-151)', () => {
     expect(holdsFreeze(['freeze', 'chimera'])).toBe(true);
     expect(holdsFreeze(['chimera', 'ferrus'])).toBe(false);
     expect(holdsFreeze(null)).toBe(false);
+  });
+});
+
+describe('describeMatchup reads each side through its own graph (JQ-324)', () => {
+  // The opponent view states a matchup while both picks are still the players'
+  // own. It must not assume the two graphs are the same one: the whole reason
+  // the edge resolution is shared with `winningEdgeOf` is that the engine, the
+  // reveal and this sentence have to agree about who took an asymmetric pair.
+  it('names the winner and says whose it is', () => {
+    expect(describeMatchup('rock', 'scissors')).toEqual({
+      line: 'Rock crushes Scissors',
+      winner: 'you',
+    });
+    expect(describeMatchup('scissors', 'rock')).toEqual({
+      line: 'Rock crushes Scissors',
+      winner: 'opp',
+    });
+  });
+
+  it('has no winner for a mirror', () => {
+    expect(describeMatchup('rock', 'rock')).toEqual({
+      line: 'Rock vs Rock — same pick, no winner',
+      winner: null,
+    });
+  });
+
+  it('gives an added edge to whichever side holds it', () => {
+    expect(describeMatchup('lizard', 'scissors', { mine: CHIMERA_BEATS })).toEqual({
+      line: 'Lizard beats Scissors',
+      winner: 'you',
+    });
+    expect(describeMatchup('scissors', 'lizard', { theirs: CHIMERA_BEATS })).toEqual({
+      line: 'Lizard beats Scissors',
+      winner: 'opp',
+    });
+  });
+
+  it('leaves the pair to the shared graph when nobody holds the extra edge', () => {
+    expect(describeMatchup('scissors', 'lizard')).toEqual({
+      line: 'Scissors decapitates Lizard',
+      winner: 'you',
+    });
+  });
+});
+
+describe('liveMatchupEdges — your pick against what they can actually play (JQ-324)', () => {
+  const OPEN = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+
+  it('drops your attacks on a move they cannot play this round', () => {
+    const edges = liveMatchupEdges('rock', { ...OPEN, scissors: 2 });
+    expect(edges).toContainEqual({ from: 'rock', to: 'lizard', role: 'you' });
+    expect(edges).not.toContainEqual({ from: 'rock', to: 'scissors', role: 'you' });
+  });
+
+  it('carries the live attacks that beat your pick', () => {
+    const edges = liveMatchupEdges('rock', OPEN);
+    expect(edges).toContainEqual({ from: 'paper', to: 'rock', role: 'opp' });
+    expect(edges).toContainEqual({ from: 'robot', to: 'rock', role: 'opp' });
+  });
+
+  it('drops a threat they cannot make', () => {
+    expect(liveMatchupEdges('rock', { ...OPEN, paper: 2 })).not.toContainEqual({
+      from: 'paper',
+      to: 'rock',
+      role: 'opp',
+    });
+  });
+
+  it('reads their threats through their graph, and yours through yours', () => {
+    // Their Chimera Lizard takes your Scissors; your own graph says the reverse,
+    // and reading the wrong one here would draw the arrow the wrong way round.
+    const edges = liveMatchupEdges('scissors', OPEN, SHARED_BEATS, CHIMERA_BEATS);
+    expect(edges).toContainEqual({ from: 'lizard', to: 'scissors', role: 'opp' });
+    expect(edges).not.toContainEqual({ from: 'scissors', to: 'lizard', role: 'you' });
+  });
+
+  it('draws one arrow for a pair that carries an edge each way', () => {
+    // Your Scissors decapitates their Lizard; their Chimera Lizard beats your
+    // Scissors. Both edges exist, and the round gives it to the added one — so
+    // one arrow lights, pointing the way the round would actually go.
+    const edges = liveMatchupEdges('scissors', OPEN, SHARED_BEATS, CHIMERA_BEATS);
+    expect(edges.filter((e) => e.from === 'lizard' || e.to === 'lizard')).toEqual([
+      { from: 'lizard', to: 'scissors', role: 'opp' },
+    ]);
+  });
+
+  it('draws nothing for the mirror of your own pick', () => {
+    expect(liveMatchupEdges('rock', OPEN).some((e) => e.from === 'rock' && e.to === 'rock')).toBe(
+      false,
+    );
+  });
+
+  it('is empty when nothing they can play meets your pick', () => {
+    // Every move that meets Rock either way is down, so the pick is live
+    // against nothing: no arrow lights rather than a misleading one.
+    expect(liveMatchupEdges('rock', { rock: 0, paper: 2, scissors: 2, lizard: 2, robot: 2 })).toEqual(
+      [],
+    );
   });
 });

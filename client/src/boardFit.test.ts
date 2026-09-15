@@ -274,12 +274,16 @@ const TEXT = {
   seatName: 19.5, // .player-name at 1rem
   winPips: 18.4, // .win-pip is 1.15rem across
   roundLabel: 18, // .round-label at 1rem
-  // .graph-legend, two lines at 0.72rem / 1.7. Measured against the *helpers*
-  // legend, which is the longer of the two — it carries one extra entry for a
-  // loadout's added edge (JQ-151). `the legend stays within two lines` below
-  // pins the copy that was measured, so growing it fails there rather than
-  // silently pushing the board off a 360px screen.
-  legend: 39.2,
+  // .graph-legend, ONE line at 0.72rem / 1.7. Measured in Chromium against the
+  // *helpers* legend, which is the longer of the two — it carries one extra
+  // entry for a loadout's added edge (JQ-151) — at 360, 375 and 390px.
+  //
+  // It was two lines until JQ-324, and the line it gave up is what the tab strip
+  // above the board is paid for with: the legend no longer says whose cooldown
+  // it is, because the tab does. the legend copy guard in `MovePicker.test.tsx` pins
+  // the copy that was measured, so growing it fails there rather than silently
+  // pushing the board off a phone.
+  legend: 19.6,
   // The cooldown explainer, not the tap hint: they are mutually exclusive, and
   // a player who has already dismissed the tap hint — everyone after their
   // first match — gets this one, which is two lines rather than one.
@@ -340,6 +344,9 @@ function pageHeight(viewport: number): number {
     movesGap +
     px('.board-status', 'min-height') +
     movesGap +
+    // The tab strip, and the gap it brought with it.
+    px('.picker-tab', 'min-height') +
+    pickerGap +
     px('.move-board', 'margin-top') +
     boardWidth(viewport) + // square, so its width is its height
     px('.move-board', 'margin-bottom') +

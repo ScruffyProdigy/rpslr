@@ -20,16 +20,37 @@ import {
   beatsOf,
   cooldownPhrase,
   cooldownReason,
-  describeBeatsGraph,
+  describeBoardGraph,
   describeBeatsOf,
+  describeMatchup,
+  liveMatchupEdges,
   isForcedPick,
   isPlayable,
-  opponentCooldownPhrase,
   type BeatsMap,
   type WinningEdge,
 } from '../moves';
 import MoveIcon from './MoveIcon';
 import UiIcon from './UiIcon';
+import { PickerTabs, type PickerView } from './PickerTabs';
+import type { Identity } from '../lib/seatProfile';
+
+/** The board, for the tabs to point `aria-controls` at. */
+const PANEL_ID = 'move-board-panel';
+
+/**
+ * Whose arrow a matchup edge is, so it takes that player's colour.
+ *
+ * Looked up rather than recomputed: `liveMatchupEdges` already resolved the pair
+ * through both graphs, and asking a second time is how the colour and the edge
+ * would come to disagree about an asymmetric one (JQ-324).
+ */
+function matchupRole(
+  edges: Array<{ from: Move; to: Move; role: 'you' | 'opp' }>,
+  from: Move,
+  to: Move,
+): 'you' | 'opp' {
+  return edges.find((e) => e.from === from && e.to === to)?.role ?? 'you';
+}
 
 /** Remembers a one-time note's dismissal across reloads. */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
@@ -68,8 +89,9 @@ export function MovePicker({
   myBeats = SHARED_BEATS,
   oppBeats = SHARED_BEATS,
   myLedger = [],
-  showOppCooldownCounts = false,
   oppCanFreeze = false,
+  you,
+  opponent,
 }: {
   myDelays: Record<string, number>;
   oppDelays: Record<string, number>;
@@ -119,18 +141,17 @@ export function MovePicker({
   oppBeats?: BeatsMap;
   /** Your own mark events, so a cooldown can name what actually caused it. */
   myLedger?: readonly MarkEvent[];
-  /**
-   * Whether the opponent's marks carry their count.
-   *
-   * Off in `duel`, where the reachable states are only ever `(1, 2)` and a number
-   * would restate which of two moves they played most recently — something the
-   * history strip below the board already says in words. Helpers break that
-   * invariant, and once marks vary the count is the only way to read their board
-   * without re-simulating their loadout every round (JQ-151).
-   */
-  showOppCooldownCounts?: boolean;
   /** Whether the opponent can stop your marks coming off, so nothing promises turns. */
   oppCanFreeze?: boolean;
+  /**
+   * The two people the tabs name, for the avatar and the name on each.
+   *
+   * Optional, and defaulted from `voice` and `oppName` below, because the board
+   * is rendered by tests and by surfaces that hold nothing richer than a name —
+   * an avatar is worth having and is not worth making a caller invent (JQ-324).
+   */
+  you?: Identity;
+  opponent?: Identity;
 }) {
   // Two-tap pick: `picked` is the tapped move (first tap), `hovered` is the
   // desktop hover/focus preview. Only `picked` can be committed, so a tap that
@@ -139,6 +160,22 @@ export function MovePicker({
   const [hovered, setHovered] = useState<Move | null>(null);
   const autoCommitted = useRef(false);
   const preview = hovered ?? picked;
+
+  // Whose board is drawn, and what has been tapped on theirs.
+  //
+  // `inspected` is deliberately not `picked`: nothing that reads a commit target
+  // reads this, so an inspection cannot become a move by any path — not the
+  // second tap, not the Lock in button, not the clock (JQ-324).
+  const [view, setView] = useState<PickerView>('mine');
+  const [inspected, setInspected] = useState<Move | null>(null);
+
+  // Whether the next tap on `picked` commits it.
+  //
+  // The second tap is only a commit because the first one happened in front of
+  // you. Leaving another board and coming back puts a board in front of you
+  // again, so the sequence starts over — while `picked` itself survives, which
+  // is the half the ticket is explicit about keeping.
+  const commitArmed = useRef(false);
 
   const tapHint = useOneTimeNote('tapHint');
   const cooldownNote = useOneTimeNote('cooldownExplainer');
@@ -162,7 +199,25 @@ export function MovePicker({
     setPicked(null);
     setHovered(null);
     autoCommitted.current = false;
+    commitArmed.current = false;
+    // A new decision is your decision: the next ordinary selection phase opens
+    // on your own board, whatever was being inspected when the round ended.
+    setView('mine');
+    setInspected(null);
   }, [round, disabled]);
+
+  /**
+   * Open the other board.
+   *
+   * Never a commit path, and never a clear: `picked` survives so the choice you
+   * had carries across, and only the tap sequence and the transient hover reset.
+   */
+  const switchTo = useCallback((next: PickerView) => {
+    setView(next);
+    setInspected(null);
+    setHovered(null);
+    commitArmed.current = false;
+  }, []);
 
   // The preview's caption and Lock-in button sit on top of the graph, so there
   // has to be a way to put them away and read what is underneath. Tapping the
@@ -173,13 +228,22 @@ export function MovePicker({
   }, []);
 
   useEffect(() => {
+    // On their board Escape is the way out of the inspection entirely — the
+    // keyboard's version of the Back button in the centre.
+    if (view === 'theirs') {
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') switchTo('mine');
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
     if (!picked || lockedIn) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') clearPreview();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [picked, lockedIn, clearPreview]);
+  }, [picked, lockedIn, clearPreview, view, switchTo]);
 
   const commit = useCallback(
     (move: Move) => {
@@ -217,6 +281,10 @@ export function MovePicker({
     // not already locked in, not disabled. Reusing it keeps the auto-commit
     // from carrying a second, drifting notion of the same thing.
     if (boardState !== 'picking' || !picked || autoCommitted.current) return;
+    // Not while their board is open. `picked` is still yours and still valid,
+    // but the clock running out during an inspection must not play it for you
+    // any more than a tap on their node could (JQ-324).
+    if (view !== 'mine') return;
     // A tapped move you cannot play was a "why can't I play this?", not a
     // choice. Asked of the same helper the tap path uses, so the two cannot
     // disagree about what is playable — they used to hold separate copies of
@@ -224,43 +292,103 @@ export function MovePicker({
     if (!isPlayable(picked, myDelays)) return;
     autoCommitted.current = true;
     commit(picked);
-  }, [secondsLeft, boardState, picked, myDelays, commit]);
+  }, [secondsLeft, boardState, picked, myDelays, commit, view]);
 
   function handleClick(move: Move) {
+    // Their board answers questions and takes no decisions: a tap is a look at
+    // one of their moves, and nothing here can reach `commit` (JQ-324).
+    if (view === 'theirs') {
+      setInspected((current) => (current === move ? null : move));
+      return;
+    }
     // A move you cannot play can be inspected but never committed: tapping it
     // asks "why can't I play this?", which previously got no answer at all.
     // A *marked* move may still be playable — see `isPlayable`.
     if (!isPlayable(move, myDelays)) {
       setPicked(move);
+      commitArmed.current = false;
       return;
     }
-    if (picked === move) commit(move);
-    else setPicked(move);
+    if (picked === move && commitArmed.current) commit(move);
+    else {
+      setPicked(move);
+      commitArmed.current = true;
+    }
   }
 
-  const graphText = describeBeatsGraph(oppDelays, oppName, { mine: myBeats, theirs: oppBeats });
-  // Both sides' extra edges, each tagged with whose it is so the board can colour
-  // it. Empty in a duel, which is what keeps the ten-edge graph untouched there.
-  const addedEdges = [
-    ...addedEdgesOf(myBeats).map((e) => ({ ...e, role: 'you' as const })),
-    ...addedEdgesOf(oppBeats).map((e) => ({ ...e, role: 'opp' as const })),
-  ];
+  // The tabs want a person each. A caller that has Lobby identities hands them
+  // over; one that has only a name gets a name-shaped identity rather than
+  // having to build one.
+  const youIdentity: Identity = you ?? {
+    profile: null,
+    name: voice.you ?? 'You',
+    placeholder: false,
+  };
+  const oppIdentity: Identity = opponent ?? {
+    profile: null,
+    name: oppName?.trim() || 'Opponent',
+    placeholder: !oppName?.trim(),
+  };
+
+  /**
+   * The board that is open, as one value.
+   *
+   * Every read below — the arrows, the pills, the labels, the text equivalent —
+   * goes through this rather than reaching for `my*` or `opp*` directly. That is
+   * the whole mechanism of the split: there is no way for the arrows to be
+   * drawing one player while the nodes describe the other, because neither one
+   * can see both any more (JQ-324).
+   */
+  const mineOpen = view === 'mine';
+  const board = mineOpen
+    ? { delays: myDelays, beats: myBeats, name: null as string | null }
+    : { delays: oppDelays, beats: oppBeats, name: oppIdentity.name };
+
+  const graphText = describeBoardGraph(board.delays, board.beats, board.name);
+  // The viewed player's extra edges. Empty in a duel, which is what keeps the
+  // ten-edge graph untouched there.
+  const addedEdges = addedEdgesOf(board.beats);
+  // Your pick against each move they can actually play, once their board is open
+  // and you are carrying one. The comparison the ticket asks for, drawn as the
+  // arrows that would decide it.
+  const matchupEdges = !mineOpen && picked ? liveMatchupEdges(picked, oppDelays, myBeats, oppBeats) : [];
+  const isMatchup = (from: Move, to: Move) =>
+    matchupEdges.some((e) => e.from === from && e.to === to);
+
   const myMarked = CIRCLE_ORDER.filter((m) => (myDelays[m] ?? 0) > 0);
   const myLastMove = myRecentMoves[0] ?? null;
-  const showTapHint = tapHint.show && !lockedIn && round <= 2;
+  // Both notes teach your own board — one says how to commit, the other says why
+  // one of your moves is down — so neither belongs under theirs.
+  const showTapHint = mineOpen && tapHint.show && !lockedIn && round <= 2;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
-    !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
+    mineOpen && !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
 
 
   return (
     <div className="move-picker">
+      <PickerTabs
+        view={view}
+        onView={switchTo}
+        you={youIdentity}
+        opponent={oppIdentity}
+        voice={voice}
+        panelId={PANEL_ID}
+      />
       <div
         className="move-board"
         data-state={boardState}
+        id={PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={`picker-tab-${view}`}
+        data-view={view}
         onClick={(e) => {
           // A move button or the commit button owns its own click.
           if ((e.target as HTMLElement).closest?.('.move-btn, .picker-center__lock')) return;
+          if (view === 'theirs') {
+            setInspected(null);
+            return;
+          }
           if (lockedIn) return;
           clearPreview();
         }}
@@ -333,10 +461,15 @@ export function MovePicker({
             // state — a win off a move the opponent had on cooldown last round
             // still reads as a win.
             const won = winningEdge?.from === fromMove && winningEdge.to === toMove;
-            // An attack the opponent can't make this round: draw it as a faded
-            // threat so a node with no solid incoming arrow reads as safe.
-            const oppOff = !won && !isPlayable(fromMove, oppDelays);
-            const highlighted = preview === fromMove;
+            // An attack the player whose board this is cannot make this round.
+            // On your own board that is your own threat set — the four edges off
+            // Lizard and Robot in a duel's first round — and on theirs it is the
+            // read JQ-106 built, now in the view where it is the subject.
+            const off = !won && !isPlayable(fromMove, board.delays);
+            // Only your own board previews: on theirs the highlight belongs to
+            // the matchup, which is a claim about two picks rather than one.
+            const highlighted = mineOpen && preview === fromMove;
+            const matchup = !won && isMatchup(fromMove, toMove);
             return (
               <line
                 key={`${fromMove}-${toMove}`}
@@ -344,8 +477,10 @@ export function MovePicker({
                 data-to={toMove}
                 className={[
                   'beat-arrow',
-                  oppOff ? 'beat-arrow--opp-off' : '',
+                  off ? 'beat-arrow--off' : '',
                   highlighted ? 'beat-arrow--preview' : '',
+                  matchup ? 'beat-arrow--matchup' : '',
+                  matchup ? `beat-arrow--matchup-${matchupRole(matchupEdges, fromMove, toMove)}` : '',
                   won ? 'beat-arrow--won' : '',
                   won ? `beat-arrow--won-${winningEdge.role}` : '',
                 ]
@@ -360,9 +495,11 @@ export function MovePicker({
                     ? `url(#rps-arrow-${winningEdge.role})`
                     : highlighted
                       ? 'url(#rps-arrow-you)'
-                      : oppOff
-                        ? 'url(#rps-arrow-off)'
-                        : 'url(#rps-arrow)'
+                      : matchup
+                        ? `url(#rps-arrow-${matchupRole(matchupEdges, fromMove, toMove)})`
+                        : off
+                          ? 'url(#rps-arrow-off)'
+                          : 'url(#rps-arrow)'
                 }
               />
             );
@@ -372,13 +509,17 @@ export function MovePicker({
               and a straight one would land on top of an arrow pointing the other
               way — see `addedEdgePath`. Role-coloured, so "whose rule is this?"
               is answered without reading the legend. */}
-          {addedEdges.map(({ from, to, role }) => {
+          {addedEdges.map(({ from, to }) => {
+            // The curve belongs to whoever's board is open, so its colour is the
+            // view's rather than a tag carried on the edge.
+            const role = mineOpen ? ('you' as const) : ('opp' as const);
             const won =
               winningEdge?.added && winningEdge.from === from && winningEdge.to === to;
-            // The owner is the one who can play it, so an edge of theirs off a
-            // move they cannot play this round is as dead as any other.
-            const off = !won && role === 'opp' && !isPlayable(from, oppDelays);
-            const highlighted = role === 'you' && preview === from;
+            // An extra edge off a move its owner cannot play this round is as
+            // dead as any other attack they cannot make.
+            const off = !won && !isPlayable(from, board.delays);
+            const highlighted = mineOpen && preview === from;
+            const matchup = !won && isMatchup(from, to);
             return (
               <path
                 key={`added-${role}-${from}-${to}`}
@@ -389,8 +530,10 @@ export function MovePicker({
                   'beat-arrow',
                   'beat-arrow--added',
                   `beat-arrow--added-${role}`,
-                  off ? 'beat-arrow--opp-off' : '',
+                  off ? 'beat-arrow--off' : '',
                   highlighted ? 'beat-arrow--preview' : '',
+                  matchup ? 'beat-arrow--matchup' : '',
+                  matchup ? `beat-arrow--matchup-${matchupRole(matchupEdges, from, to)}` : '',
                   won ? 'beat-arrow--won' : '',
                   won ? `beat-arrow--won-${winningEdge.role}` : '',
                 ]
@@ -408,27 +551,35 @@ export function MovePicker({
 
         {CIRCLE_ORDER.map((m, i) => {
           const pos = circleNodePos(i);
-          const myDelay = myDelays[m] ?? 0;
-          const oppDelay = oppDelays[m] ?? 0;
+          const delay = board.delays[m] ?? 0;
           // Two flags, not one. `onCooldown` used to mean both "carries marks"
           // and "cannot be played", which is the bug: under the floor a marked
           // move may be the only thing you can play. `blocked || forced` is
-          // exactly the old test, so the pill and the opponent badge below are
-          // untouched (JQ-215).
-          const blocked = !isPlayable(m, myDelays);
-          const forced = isForcedPick(m, myDelays);
-          const selected = myChosenMove === m;
-          const previewed = preview === m;
-          // Your graph, not the shared one: previewing Lizard as a Chimera owner
-          // has to light Scissors too, or the caption and the board disagree.
-          const isTarget =
-            preview != null && preview !== m && beatsOf(preview, myBeats).includes(m);
+          // exactly the old test (JQ-215).
+          const blocked = !isPlayable(m, board.delays);
+          const forced = isForcedPick(m, board.delays);
+          // Your pick, your check mark, your preview: none of the three mean
+          // anything on a board that is not yours to act on.
+          const selected = mineOpen && myChosenMove === m;
+          const previewed = mineOpen && preview === m;
+          const inspecting = !mineOpen && inspected === m;
+          // The viewed player's graph, not the shared one: previewing Lizard as
+          // a Chimera owner has to light Scissors too, or the caption and the
+          // board disagree.
+          const lit = mineOpen ? preview : inspected;
+          const isTarget = lit != null && lit !== m && beatsOf(lit, board.beats).includes(m);
+          // Whose cooldown this is has to be in the words, not only in the
+          // colour of the pill — and only one player's is ever read, so a node
+          // no longer recites two cooldown sets (JQ-324).
           const label = [
             MOVE_META[m].label,
-            forced ? 'marked but playable, costs you more' : '',
-            blocked ? cooldownPhrase(myDelay) : '',
-            blocked ? cooldownReason(m, myRecentMoves, myOpeningDelays, myLedger).toLowerCase() : '',
-            oppDelay > 0 ? `opponent cooldown, ${oppDelay} turn${oppDelay === 1 ? '' : 's'}` : '',
+            forced && mineOpen ? 'marked but playable, costs you more' : '',
+            forced && !mineOpen ? 'marked but playable for them' : '',
+            blocked && mineOpen ? cooldownPhrase(delay) : '',
+            blocked && !mineOpen ? `${board.name} can't play it, ${cooldownPhrase(delay)}` : '',
+            blocked && mineOpen
+              ? cooldownReason(m, myRecentMoves, myOpeningDelays, myLedger).toLowerCase()
+              : '',
           ]
             .filter(Boolean)
             .join(', ');
@@ -441,8 +592,9 @@ export function MovePicker({
                 forced ? 'move-btn--forced' : '',
                 selected ? 'move-btn--selected' : '',
                 previewed && !selected ? 'move-btn--preview' : '',
+                inspecting ? 'move-btn--inspected' : '',
                 isTarget ? 'move-btn--target' : '',
-                lockedIn && !selected ? 'move-btn--dimmed' : '',
+                lockedIn && mineOpen && !selected ? 'move-btn--dimmed' : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
@@ -459,37 +611,43 @@ export function MovePicker({
               onFocus={() => setHovered(m)}
               onBlur={() => setHovered(null)}
               aria-label={label}
-              aria-pressed={selected}
+              // A tap on their board takes no decision, so nothing on it is
+              // pressed — `aria-pressed` there would announce a commitment that
+              // does not exist.
+              aria-pressed={mineOpen ? selected : undefined}
             >
               {selected && (
                 <UiIcon name="check" className="move-btn__check" />
               )}
               <MoveIcon move={m} className="move-btn__emoji" />
               <span className="move-btn__name">{MOVE_META[m].label}</span>
-              {myDelay > 0 &&
+              {/* One pill, belonging to whoever's board is open, and it always
+                  carries the count.
+                  Their marks used to be a separate badge with the number held
+                  back in a duel, because the badge shared a node with your own
+                  state and a number there restated the history strip. Their board
+                  is their own now, so it reads exactly like yours (JQ-151,
+                  JQ-324). */}
+              {delay > 0 &&
                 (forced ? (
-                  // The button's own label says "marked but playable, costs
-                  // you more". A second voice saying "on cooldown" would
-                  // contradict it, so here the pill is decoration.
-                  <span className="cooldown-pill" aria-hidden="true">
-                    <UiIcon name="hourglass" /> {myDelay}
+                  // The button's own label says "marked but playable". A second
+                  // voice saying "on cooldown" would contradict it, so here the
+                  // pill is decoration.
+                  <span
+                    className={`cooldown-pill${mineOpen ? '' : ' cooldown-pill--theirs'}`}
+                    aria-hidden="true"
+                  >
+                    <UiIcon name="hourglass" /> {delay}
                   </span>
                 ) : (
-                  <span className="cooldown-pill" role="img" aria-label={cooldownPhrase(myDelay)}>
-                    <UiIcon name="hourglass" /> {myDelay}
+                  <span
+                    className={`cooldown-pill${mineOpen ? '' : ' cooldown-pill--theirs'}`}
+                    role="img"
+                    aria-label={cooldownPhrase(delay)}
+                  >
+                    <UiIcon name="hourglass" /> {delay}
                   </span>
                 ))}
-              {oppDelay > 0 && (
-                <span
-                  className={`opp-cooldown-mark${
-                    showOppCooldownCounts ? ' opp-cooldown-mark--counted' : ''
-                  }`}
-                  aria-hidden="true"
-                >
-                  <UiIcon name="hourglass" />
-                  {showOppCooldownCounts && ` ${oppDelay}`}
-                </span>
-              )}
             </button>
           );
         })}
@@ -505,7 +663,19 @@ export function MovePicker({
             and only its contents change. It is `inset: 0` so the absolutely
             positioned card inside still centres on the board. */}
         <div className="picker-slot" role="status">
-          {centerSlot ?? (
+          {centerSlot ??
+            (view === 'theirs' ? (
+              <OpponentCenter
+                name={oppIdentity.name}
+                inspected={inspected}
+                picked={picked}
+                oppDelays={oppDelays}
+                oppBeats={oppBeats}
+                myBeats={myBeats}
+                voice={voice}
+                onBack={() => switchTo('mine')}
+              />
+            ) : (
             <PickerCenter
               idleCaption={idleCaption}
               preview={preview}
@@ -516,14 +686,13 @@ export function MovePicker({
               myDelays={myDelays}
               myRecentMoves={myRecentMoves}
               myOpeningDelays={myOpeningDelays}
-              oppDelays={oppDelays}
               onCommit={commit}
               voice={voice}
               myBeats={myBeats}
               myLedger={myLedger}
               oppCanFreeze={oppCanFreeze}
             />
-          )}
+            ))}
         </div>
       </div>
 
@@ -543,36 +712,37 @@ export function MovePicker({
             <li key={line}>{line}</li>
           ))}
         </ul>
-        <p>{graphText.opponent}</p>
+        <p>{graphText.availability}</p>
       </section>
 
+      {/* One player's legend, because one player's board is open.
+          This is also what pays for the tab strip above the board: the two-line
+          legend that named both sides and explained the fade is one line now,
+          and the page had 0.9px of slack to give (JQ-324, see
+          `--board-furniture`). */}
       <p className="graph-legend">
-        <span className="cooldown-pill cooldown-pill--legend" aria-hidden="true">
-          <UiIcon name="hourglass" /> N
-        </span>{' '}
-        {voice.you ? `${voice.you}'s cooldown` : 'your cooldown'} ·{' '}
-        {/* The legend teaches the badge the board is actually drawing, so the
-            count is gated on the same flag: a duel badge carries no number, and a
-            legend promising one would be teaching a mark that never appears. */}
         <span
-          className={`opp-cooldown-mark opp-cooldown-mark--legend${
-            showOppCooldownCounts ? ' opp-cooldown-mark--counted' : ''
+          className={`cooldown-pill cooldown-pill--legend${
+            mineOpen ? '' : ' cooldown-pill--theirs'
           }`}
           aria-hidden="true"
         >
-          <UiIcon name="hourglass" />
-          {showOppCooldownCounts && ' N'}
+          <UiIcon name="hourglass" /> N
         </span>{' '}
-        {voice.you ? `${oppName ? `${oppName}'s` : 'their'} cooldown` : 'opponent cooldown'} (faded
-        arrows = attacks they can&rsquo;t make)
+        {/* No possessive, and that is the split paying for itself: the tab
+            above says whose board this is, the pill takes their colour, and the
+            text equivalent below names them outright. A legend that repeated it
+            ran to two lines at every width the board supports, and the second
+            line is the tab strip's height (JQ-324). */}
+        cooldown · faded = can&rsquo;t attack
         {/* One entry, and only in a match that has one to explain. Phase 2 cut the
-            legend to two items and it is not growing back to four: a duel still
-            renders exactly the two above (JQ-151). */}
+            legend to two items and it is not growing back: a duel renders exactly
+            the one above (JQ-151). */}
         {addedEdges.length > 0 && (
           <>
             {' · '}
             <span className="graph-legend__added" aria-hidden="true" />{' '}
-            curved = an extra rule
+            curved = extra rule
           </>
         )}
       </p>
@@ -617,7 +787,6 @@ function PickerCenter({
   myDelays,
   myRecentMoves,
   myOpeningDelays,
-  oppDelays,
   onCommit,
   voice,
   myBeats,
@@ -633,7 +802,6 @@ function PickerCenter({
   myDelays: Record<string, number>;
   myRecentMoves: Move[];
   myOpeningDelays: DelayMap;
-  oppDelays: Record<string, number>;
   onCommit: (move: Move) => void;
   /** How to refer to the you-side: second person, or by name on a replay. */
   voice: Voice;
@@ -706,7 +874,6 @@ function PickerCenter({
     );
   }
 
-  const oppDelay = oppDelays[shown] ?? 0;
   // Only a tapped move can be committed, so hovering a different node teaches
   // without moving the commit target out from under the pointer.
   const commitTarget = !lockedIn && picked != null && preview === picked ? picked : null;
@@ -714,19 +881,91 @@ function PickerCenter({
   return (
     <div className="picker-center">
       <p className="picker-center__caption">{describeBeatsOf(shown, myBeats)}</p>
-      {/* "Opponent can't play X" is a playability claim, not a mark count —
-          so it has to ask isPlayable, which knows about the floor, rather
-          than merely reading oppDelay > 0. A fully-marked opponent's
-          least-marked moves are still playable, and saying otherwise here
-          hands the player a false all-clear (JQ-215). */}
-      {!isPlayable(shown, oppDelays) && (
-        <p className="picker-center__opp">{opponentCooldownPhrase(shown, oppDelay)}</p>
-      )}
+      {/* Nothing here about what the opponent can play. That claim used to sit
+          under your own caption; it lives on their board now, where it is the
+          subject rather than a second thing to read while deciding (JQ-324). */}
       {commitTarget && (
         <button className="picker-center__lock" onClick={() => onCommit(commitTarget)}>
           Lock in {MOVE_META[commitTarget].label}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The centre while their board is open.
+ *
+ * Reads their graph for everything it says about their move, and both graphs for
+ * the matchup — a Chimera owner's Lizard beats a Scissors that beats everyone
+ * else's, and a sentence that assumed one graph would be confidently wrong about
+ * exactly the pair a player most needs to ask about.
+ *
+ * It renders into the board's one live region, like `PickerCenter`, and carries
+ * no `role="status"` of its own (JQ-157). It offers no commit control of any
+ * kind: the only button here is the way back (JQ-324).
+ */
+function OpponentCenter({
+  name,
+  inspected,
+  picked,
+  oppDelays,
+  oppBeats,
+  myBeats,
+  voice,
+  onBack,
+}: {
+  name: string;
+  /** The move of theirs being asked about, if any. */
+  inspected: Move | null;
+  /** Your tentative pick, which turns the panel into a comparison. */
+  picked: Move | null;
+  oppDelays: Record<string, number>;
+  oppBeats: BeatsMap;
+  myBeats: BeatsMap;
+  voice: Voice;
+  onBack: () => void;
+}) {
+  const back = (
+    <button className="picker-center__back" onClick={onBack}>
+      {/* The arrow is decoration; the words are the name a screen reader
+          reads, so it stays out of them. */}
+      <span aria-hidden="true">←</span> Back to {voice.you ? `${voice.you}'s` : 'your'} moves
+    </button>
+  );
+
+  if (!inspected) {
+    return (
+      <div className="picker-center picker-center--theirs picker-center--idle">
+        <span className="picker-center__idle">Tap one of {name}&rsquo;s moves</span>
+        {back}
+      </div>
+    );
+  }
+
+  const delay = oppDelays[inspected] ?? 0;
+  // Their availability is a legality question, not a mark count: the floor
+  // leaves a fully-marked player their least-marked moves, and saying they
+  // cannot play one of those would be a false all-clear (JQ-215).
+  const down = !isPlayable(inspected, oppDelays);
+  const matchup = picked ? describeMatchup(picked, inspected, { mine: myBeats, theirs: oppBeats }) : null;
+
+  return (
+    <div className="picker-center picker-center--theirs">
+      <p className="picker-center__caption">{describeBeatsOf(inspected, oppBeats)}</p>
+      {down && (
+        <p className="picker-center__why">
+          {name} can&rsquo;t play it — {backInPhrase(delay)}
+        </p>
+      )}
+      {matchup && (
+        <p className="picker-center__matchup">
+          {matchup.line}
+          {matchup.winner === 'you' && ` — ${voice.you ? `${voice.you} wins` : 'you win'}`}
+          {matchup.winner === 'opp' && ` — ${name} wins`}
+        </p>
+      )}
+      {back}
     </div>
   );
 }

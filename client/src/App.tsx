@@ -795,8 +795,8 @@ export function Board({
       return [];
     }
   })();
-  // Numbers on their marks only where the numbers carry information: see the
-  // `showOppCooldownCounts` note in MovePicker.
+  // Whether this match has loadouts at all — which is what decides the surfaces
+  // that only exist to explain them (the sheet, the rail, the inspect button).
   const helpersInPlay = Boolean(mySeat?.loadout || oppSeat?.loadout);
   // Both loadouts, as the sheet says them (JQ-149). Null on both sides in
   // `duel`, which is what keeps every one of these surfaces off a duel board —
@@ -939,8 +939,11 @@ export function Board({
             myBeats={myRules.beats}
             oppBeats={oppRules.beats}
             myLedger={myLedger}
-            showOppCooldownCounts={helpersInPlay}
             oppCanFreeze={holdsFreeze(oppSeat?.loadout ?? null)}
+            // The two people the tabs name. Already in hand for the match-end
+            // card, so the strip gets avatars rather than initials.
+            you={you}
+            opponent={opponent}
             idleCaption={beforeRoundOne ? "Round 1 hasn't started" : undefined}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}

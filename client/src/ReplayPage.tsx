@@ -235,14 +235,16 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           myBeats={frame.a.beats}
           oppBeats={frame.b.beats}
           myLedger={frame.a.ledger}
-          showOppCooldownCounts={replay.hasLoadouts}
           oppCanFreeze={frame.b.canFreeze}
+          // `frame.a` is already the side being called for, so the strip opens
+          // on whoever the watcher is playing along as.
+          you={replay.a.identity}
+          opponent={replay.b.identity}
           onPlay={(move) => {
             playAlong.call(frame.round, move);
             playback.resume();
           }}
           voice={voice}
-          oppName={oppName}
           winningEdge={edge}
           centerSlot={
             // Nothing at all while the round is the watcher's: MovePicker reads
