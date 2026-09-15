@@ -91,6 +91,11 @@ const LEDGER = [
     why: 'A window opening on your turn. Time-bounded, so it has to be heard rather than found.',
   },
   {
+    file: 'components/AbilityRail.tsx',
+    anchor: 'ability-rail__say',
+    why: 'What became of a firing — sent, or taken away by the round. One region for the whole rail, permanent and empty, so the visible line inside the card stays a plain paragraph and the region is never mounted in the same tick as its text (JQ-157, JQ-325).',
+  },
+  {
     file: 'components/ShareReplayButton.tsx',
     anchor: 'share-replay__status',
     why: 'Copied / shared / failed. Answers a button press, which is the case a polite region is for.',

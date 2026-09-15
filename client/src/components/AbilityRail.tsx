@@ -68,6 +68,17 @@ export function AbilityRail({
           onStart={() => targeting.start(ability)}
         />
       ))}
+      {/* What became of a firing, spoken once for the whole rail.
+          Permanent and empty rather than mounted with its text: a region that
+          arrives already full is the case JQ-157 found screen readers least
+          reliable about, and this one carries the sentence a player most needs —
+          the charge they just spent, or the one the round took away from them.
+          Visually hidden, because the line inside the card is already saying it
+          in the place the eye is looking, and because an empty flex child with a
+          box would cost the rail a gap it has measured and does not have. */}
+      <p className="sr-only ability-rail__say" role="status">
+        {targeting.note?.text ?? ''}
+      </p>
     </section>
   );
 }
@@ -142,9 +153,7 @@ function AbilityCard({
               Rust this round" and says more, and two lines saying one thing is
               the rail's height spent twice. */}
           {note ? (
-            <p className="ability-card__note" role="status">
-              {note}
-            </p>
+            <p className="ability-card__note">{note}</p>
           ) : (
             blocked && <p className="ability-card__blocked">{blocked}</p>
           )}

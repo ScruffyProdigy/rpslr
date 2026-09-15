@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   playedRoundsFrom,
   rulesForSeats,
   type SeatLoadout,
 } from '@game/replayBoard';
 import { replayMatch, type MarkEvent } from '@game/game';
+import type { AbilityMap } from '@game/helpers/abilities';
 import {
   api,
   type Move,
@@ -26,7 +27,9 @@ import { PlayerAvatar } from './components/PlayerAvatar';
 import { RevealCard } from './components/RevealCard';
 import UiIcon from './components/UiIcon';
 import { getEnv, getLobbyLink, buildLobbyReturnLink, isDebugMode } from './env';
+import { heldAbilities } from './abilities';
 import { seatIdentity } from './lib/seatProfile';
+import { useAbilityTargeting } from './lib/useAbilityTargeting';
 import { loadoutCards, seatLoadoutView } from './loadouts';
 import { useRoundDeadline, type RoundDeadline } from './lib/useRoundDeadline';
 import { useFirstMatchRules } from './lib/useFirstMatchRules';
@@ -47,6 +50,17 @@ const debug = isDebugMode();
  */
 /** A seat that brought no helpers — the duel opening, and the `b` side we ignore. */
 const NO_LOADOUT: SeatLoadout = { loadout: null, loadoutRoll: null };
+/**
+ * Stand-ins with a stable identity, for the render before a match arrives.
+ *
+ * `?? {}` would hand the firing walk a fresh object every render and give the
+ * walk a fresh identity with it, which is the difference between an effect that
+ * runs when the step changes and one that runs forever (JQ-325).
+ */
+const NO_DELAYS: Record<string, number> = {};
+const NO_ABILITIES: AbilityMap = {};
+/** The walk needs somewhere to send a firing even on a board that cannot take one. */
+const CANNOT_FIRE = () => {};
 
 export function Wordmark() {
   return (
@@ -716,11 +730,47 @@ export function Board({
   // outlives it — the loadouts stay checkable for the whole match.
   const [checking, setChecking] = useState(false);
 
+  /*
+   * The two seats, read before the loading return because the firing walk is a
+   * hook and hooks cannot sit after one. Everything below reads these rather
+   * than finding them again.
+   */
+  const mySeat = state?.seats.find((s) => s.seatKey === mySeatKey) ?? null;
+  const oppSeat = state?.seats.find((s) => s.seatKey !== mySeatKey) ?? null;
+  const held = useMemo(
+    () => heldAbilities(mySeat?.loadout ?? null, state?.abilities ?? NO_ABILITIES),
+    [mySeat?.loadout, state?.abilities],
+  );
+  /**
+   * The firing walk (JQ-325).
+   *
+   * It is owned here rather than by the rail because the rail and the picker are
+   * siblings: the rail starts a firing and the board names its target, and the
+   * two have to be looking at the same walk.
+   *
+   * `firingUnavailable` is asked for it as well as for the rail, so the reason a
+   * walk is taken away is the same sentence the rail would have given for
+   * refusing to start one.
+   */
+  const targeting = useAbilityTargeting({
+    held,
+    ownMarks: mySeat?.delays ?? NO_DELAYS,
+    oppMarks: oppSeat?.delays ?? NO_DELAYS,
+    round: state?.match.currentRound ?? 0,
+    unavailable: state
+      ? firingUnavailable({
+          connected,
+          allSeated: state.seats.every((s) => s.player),
+          revealingNow: reveal != null,
+          match: state.match,
+        })
+      : 'Waiting for the board.',
+    onFire: onFire ?? CANNOT_FIRE,
+  });
+
   if (!state) return <p>Loading match…</p>;
 
   const { match, seats, results } = state;
-  const mySeat = seats.find((s) => s.seatKey === mySeatKey) ?? null;
-  const oppSeat = seats.find((s) => s.seatKey !== mySeatKey) ?? null;
   const you = seatIdentity(mySeat, 'You');
   const opponent = seatIdentity(oppSeat, 'Opponent');
   const finished = match.status === 'finished';
@@ -738,8 +788,8 @@ export function Board({
   // tell them the rules. Before the opponent arrives the how-to-play panels
   // say all of this and more, so the one-liner would only repeat them.
   const showRules = !finished && allSeated && match.currentRound <= 1;
-  const myDelays = mySeat?.delays ?? {};
-  const oppDelays = oppSeat?.delays ?? {};
+  const myDelays = mySeat?.delays ?? NO_DELAYS;
+  const oppDelays = oppSeat?.delays ?? NO_DELAYS;
   // The holder may replace their pick; the opponent's stays locked while the
   // round resolves, so the picker must not offer them a tap the server refuses.
   const repicking = mayRepick(state);
@@ -944,7 +994,24 @@ export function Board({
             // card, so the strip gets avatars rather than initials.
             you={you}
             opponent={opponent}
-            idleCaption={beforeRoundOne ? "Round 1 hasn't started" : undefined}
+            idleCaption={
+              beforeRoundOne
+                ? "Round 1 hasn't started"
+                : repicking
+                  ? 'Something changed — pick again, or keep your move'
+                  : undefined
+            }
+            // The walk, and the window. Between them they are the two ways the
+            // board stops being an ordinary pick surface (JQ-325).
+            targeting={targeting.targeting}
+            onNameTarget={targeting.name}
+            onCancelTargeting={targeting.cancel}
+            onConfirmTargeting={targeting.confirm}
+            // A re-pick is an action on your own board, so the window takes the
+            // board back — once, when it opens. JQ-324 left this to "their own
+            // explicit prompt"; the prompt is still below, and this is what puts
+            // the board under it.
+            demandOwnBoard={repicking ? match.currentRound : null}
             onPlay={onPlay}
             secondsLeft={roundDeadline.secondsLeft}
             winningEdge={winningEdge}
@@ -978,12 +1045,9 @@ export function Board({
           />
           {onFire && !finished && (
             <AbilityRail
-              loadout={mySeat?.loadout ?? null}
-              abilities={state.abilities}
-              myMarks={myDelays}
-              oppMarks={oppDelays}
+              held={held}
               unavailable={firingUnavailable({ connected, allSeated, revealingNow, match })}
-              onFire={onFire}
+              targeting={targeting}
             />
           )}
         </div>

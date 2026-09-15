@@ -18,6 +18,7 @@ import {
   legalTargets,
   targetSteps,
   type HeldAbility,
+  type Marks,
   type MarksBySide,
   type TargetStep,
 } from '../abilities';
@@ -127,20 +128,33 @@ function staleReason(
 
 export function useAbilityTargeting({
   held,
-  marks,
+  ownMarks,
+  oppMarks,
   round,
   unavailable,
   onFire,
 }: {
   /** This seat's cards, as `heldAbilities` builds them. */
   held: readonly HeldAbility[];
-  /** Both sides' marks entering this round — what every target rule reads. */
-  marks: MarksBySide;
+  /**
+   * Each side's marks entering this round — what every target rule reads.
+   *
+   * Two props rather than the `MarksBySide` pair the rules take, so the pair can
+   * be built here and stay stable: `Board` would have to spell it inline, and a
+   * fresh object every render would give the walk a fresh identity every render
+   * with it.
+   */
+  ownMarks: Marks;
+  oppMarks: Marks;
   round: number;
   /** `firingUnavailable`'s answer: why the round will not take a firing, or null. */
   unavailable: string | null;
   onFire: (choice: FiringChoice) => void;
 }): AbilityTargeting {
+  const marks: MarksBySide = useMemo(
+    () => ({ own: ownMarks, opponent: oppMarks }),
+    [ownMarks, oppMarks],
+  );
   const [walk, setWalk] = useState<Walk | null>(null);
   const [note, setNote] = useState<(TargetingNote & { round: number }) | null>(null);
 

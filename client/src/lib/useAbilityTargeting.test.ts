@@ -33,7 +33,8 @@ function setup(over: Setup = {}) {
     );
   const props = (o: Setup) => ({
     held: heldFor(o),
-    marks: o.marks ?? { own: CLEAR, opponent: { ...CLEAR, scissors: 2 } },
+    ownMarks: (o.marks ?? { own: CLEAR, opponent: { ...CLEAR, scissors: 2 } }).own,
+    oppMarks: (o.marks ?? { own: CLEAR, opponent: { ...CLEAR, scissors: 2 } }).opponent,
     round: o.round ?? 3,
     unavailable: o.unavailable ?? null,
     onFire,
