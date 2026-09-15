@@ -136,54 +136,53 @@ function joinClauses(parts: string[]): string {
 }
 
 /**
- * The beats graph as text.
+ * One player's board as text.
  *
  * The board draws the pentagon into an `aria-hidden` SVG, so this is the whole
  * graph for anyone who cannot see it: five lines carry all ten edges, and one
- * closing line names the attacks the opponent cannot make this round — the
- * faded arrows a sighted player reads straight off the board.
+ * closing line names the attacks the *viewed* player cannot make this round —
+ * the faded arrows a sighted player reads straight off the board.
+ *
+ * Whose board it is has to be unmistakable in the words, because the fade means
+ * "this player cannot attack with that" and one view's fades are the other's
+ * live arrows. It also means a node is never made to recite two cooldown sets
+ * (JQ-157, JQ-324).
  */
-export function describeBeatsGraph(
-  oppDelays: Record<string, number>,
-  /** The other player's name, when there is no "you" to be opposite. */
-  oppName?: string,
-  /** The two graphs, when a loadout has bent one of them. */
-  graphs: { mine?: BeatsMap; theirs?: BeatsMap } = {},
+export function describeBoardGraph(
+  delays: Record<string, number>,
+  /** The viewed player's graph, when a loadout has bent it. */
+  beats: BeatsMap = SHARED_BEATS,
+  /** Whose board this is: null for the you-side, a name for anyone else. */
+  name: string | null = null,
 ): {
   edges: string[];
-  /** The per-player edges, said out loud — empty in a duel. */
+  /** The viewed player's extra edges, said out loud — empty in a duel. */
   added: string[];
-  opponent: string;
+  /** What they can and cannot play this round, which is what the fades draw. */
+  availability: string;
 } {
   // The ten shared edges, always, and always in the same words: they are what
   // Phase 2 taught, and a conditional graph must not make the shared part read
   // differently depending on who is holding what.
   const edges = ALL_MOVES.map((m) => describeBeatsOf(m));
-  const them = oppName?.trim() || 'The opponent';
+  const { subject, possessive } = speakerOf(name);
   // An extra edge is named as an extra rather than folded into the five lines
-  // above, and both sides are named — the opponent has to be able to hear the
-  // rule they are playing against, not just the one they hold (JQ-151).
-  const added = [
-    ...addedEdgesOf(graphs.mine ?? SHARED_BEATS).map(
-      ({ from, to }) =>
-        `Your ${MOVE_META[from].label} also beats ${MOVE_META[to].label} this match`,
-    ),
-    ...addedEdgesOf(graphs.theirs ?? SHARED_BEATS).map(
-      ({ from, to }) =>
-        `${them === 'The opponent' ? 'Their' : `${them}'s`} ${MOVE_META[from].label} also beats ${
-          MOVE_META[to].label
-        } this match`,
-    ),
-  ];
+  // above. One side's, because one board is open — the other player's extra
+  // edge is spoken on the other board, so a rule you are playing against is
+  // still reachable rather than unrendered (JQ-151, JQ-324).
+  const added = addedEdgesOf(beats).map(
+    ({ from, to }) =>
+      `${possessive} ${MOVE_META[from].label} also beats ${MOVE_META[to].label} this match`,
+  );
   // Not "carries marks" — "cannot be played". The floor means a fully-marked
-  // opponent still has their least-marked moves, and saying otherwise hands
-  // the player a false all-clear (JQ-215).
-  const off = ALL_MOVES.filter((m) => !isPlayable(m, oppDelays)).map((m) => MOVE_META[m].label);
+  // player still has their least-marked moves, and saying otherwise hands the
+  // reader a false all-clear (JQ-215).
+  const off = ALL_MOVES.filter((m) => !isPlayable(m, delays)).map((m) => MOVE_META[m].label);
   if (off.length === 0) {
     return {
       edges,
       added,
-      opponent: `${them} can play every move this round, so every arrow is live.`,
+      availability: `${subject} can play every move this round, so every arrow is live.`,
     };
   }
   const list =
@@ -191,8 +190,17 @@ export function describeBeatsGraph(
   return {
     edges,
     added,
-    opponent: `${them} can't play ${list} this round, so those attacks are drawn faded.`,
+    availability: `${subject} can't play ${list} this round, so those attacks are drawn faded.`,
   };
+}
+
+/** How to name the side a board belongs to, as a subject and a possessive. */
+function speakerOf(name: string | null): { subject: string; possessive: string } {
+  if (name === null) return { subject: 'You', possessive: 'Your' };
+  const trimmed = name.trim();
+  // A seat the Lobby has told us nothing about has no name to use.
+  if (!trimmed) return { subject: 'The opponent', possessive: 'Their' };
+  return { subject: trimmed, possessive: `${trimmed}'s` };
 }
 
 /**
@@ -405,11 +413,6 @@ export function backInPhrase(turns: number, oppCanFreeze = false): string {
 /** Whether anything in this loadout can stop marks coming off. */
 export function holdsFreeze(loadout: readonly string[] | null): boolean {
   return (loadout ?? []).includes('freeze');
-}
-
-/** Spoken form of an opponent cooldown, for the preview caption. */
-export function opponentCooldownPhrase(move: Move, turns: number): string {
-  return `Opponent can't play ${MOVE_META[move].label} for ${turns} turn${turns === 1 ? '' : 's'}`;
 }
 
 /**

@@ -235,7 +235,7 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           myBeats={frame.a.beats}
           oppBeats={frame.b.beats}
           myLedger={frame.a.ledger}
-          showOppCooldownCounts={replay.hasLoadouts}
+
           oppCanFreeze={frame.b.canFreeze}
           onPlay={(move) => {
             playAlong.call(frame.round, move);

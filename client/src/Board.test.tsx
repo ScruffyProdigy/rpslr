@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Board } from './App';
 import type { Entitlement } from '@game/types';
@@ -183,11 +184,12 @@ describe('<Board> cooldown pill (JQ-103)', () => {
     ).toBeInTheDocument();
   });
 
-  // Phase 2.3 moved the opponent's state off your button's border and onto the
-  // node as a marker; it still must not affect whether you can play the move.
-  it('marks an opponent cooldown on the node without disabling your button', () => {
+  // Their state is not on your board at all since JQ-324, and it was never
+  // allowed to decide whether you could play a move. Both halves, here.
+  it('says nothing about their cooldown on your own button, and leaves it playable', () => {
     renderBoard(state({ oppDelays: { rock: 3 } }));
-    expect(screen.getByRole('button', { name: 'Rock, opponent cooldown, 3 turns' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Rock' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /opponent cooldown/ })).toBeNull();
   });
 })
 
@@ -782,47 +784,27 @@ describe('<Board> loadouts (JQ-149)', () => {
  * legible before the first pick, and half of that promise is drawn by this badge
  * rather than by the sheet.
  */
-describe('<Board> opponent cooldown counts (JQ-149 / JQ-151)', () => {
-  const counted = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll('.opp-cooldown-mark--counted'));
+describe('<Board> their cooldowns, on their own board (JQ-149 / JQ-151, rehomed by JQ-324)', () => {
+  const pills = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('.move-btn .cooldown-pill'));
 
-  it('turns the counts on once either seat has brought a loadout', () => {
-    const s = {
-      ...state({ oppDelays: { robot: 2, paper: 1 } }),
-      seats: state().seats.map(
-        (seat): Seat => ({
-          ...seat,
-          loadout: ['ferrus', 'echo-chamber'] as unknown as Seat['loadout'],
-          delays: seat.seatKey === MY_SEAT ? {} : { robot: 2, paper: 1 },
-        }),
-      ),
-    };
-    const { container } = render(
-      <Board
-        myPlayerId={MY_PLAYER}
-        mySeatKey={MY_SEAT}
-        state={s}
-        connected
-        error={null}
-        myChosenMove={null}
-        onPlay={() => {}}
-      />,
-    );
-    // Both marks, and the legend badge that teaches them.
-    expect(counted(container).map((el) => el.textContent?.trim())).toEqual(['1', '2', 'N']);
+  it('carries their marks and their counts once their board is open', async () => {
+    const { container } = renderBoard(state({ oppDelays: { robot: 2, paper: 1 } }));
+    await userEvent.click(screen.getAllByRole('tab')[1]);
+    expect(pills(container).map((el) => el.textContent?.trim())).toEqual(['1', '2']);
   });
 
-  it('leaves a duel board exactly as it was — no counts, and none promised', () => {
+  it('keeps them off your own board entirely', () => {
     const { container } = renderBoard(state({ oppDelays: { robot: 2 } }));
-    expect(counted(container)).toEqual([]);
-    // The legend must not teach a number the board never draws.
-    expect(container.querySelector('.opp-cooldown-mark--legend')?.textContent?.trim()).toBe('');
+    expect(pills(container)).toEqual([]);
+    expect(container.querySelector('.opp-cooldown-mark')).toBeNull();
   });
 
-  it('still says the depth in words on the move itself, which is what is announced', () => {
+  it('says the depth in words on their move, which is what is announced', async () => {
     renderBoard(state({ oppDelays: { robot: 2 } }));
+    await userEvent.click(screen.getAllByRole('tab')[1]);
     expect(
-      screen.getByRole('button', { name: /Robot, opponent cooldown, 2 turns/ }),
+      screen.getByRole('button', { name: /Robot, .*can't play it, on cooldown, 2 turns/ }),
     ).toBeInTheDocument();
   });
 });

@@ -295,14 +295,14 @@ describe("the board's graphics clear 3:1 (JQ-193)", () => {
     expect(Number(opening)).toBe(Number(declaration('.beat-arrow', 'stroke-opacity')));
   });
 
-  it('leaves a dead opponent edge faint, and says why in the stylesheet', () => {
+  it('leaves a dead edge faint, and says why in the stylesheet', () => {
     // The recorded exception. 1.89:1, held on purpose: the faintness *is* the
     // information — this edge is the one not in play — so 1.4.11's essential-
     // presentation carve-out applies. What the test holds is the thing that
     // would actually break it: the non-colour cue that carries the same fact.
-    expect(ratio(stroke('.beat-arrow--opp-off'), CARD)).toBeLessThan(AA_GRAPHIC);
-    expect(declaration('.beat-arrow--opp-off', 'stroke-dasharray')).toBe('5 5');
-    const rule = /\.beat-arrow--opp-off[\s\S]{0,400}?\{/.exec(css)?.index ?? 0;
+    expect(ratio(stroke('.beat-arrow--off'), CARD)).toBeLessThan(AA_GRAPHIC);
+    expect(declaration('.beat-arrow--off', 'stroke-dasharray')).toBe('5 5');
+    const rule = /\.beat-arrow--off[\s\S]{0,400}?\{/.exec(css)?.index ?? 0;
     expect(css.slice(Math.max(0, rule - 900), rule)).toMatch(/essential/);
   });
 

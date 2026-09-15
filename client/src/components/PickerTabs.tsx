@@ -16,7 +16,7 @@ const ORDER: PickerView[] = ['mine', 'theirs'];
  * has no name to use, so it gets the pronoun rather than an initial of the word
  * "Opponent" (JQ-324).
  */
-function tabLabel(view: PickerView, you: Identity, opponent: Identity, voice: Voice): string {
+function tabLabel(view: PickerView, opponent: Identity, voice: Voice): string {
   if (view === 'mine') return voice.you ? `${voice.you}'s moves` : 'Your moves';
   return opponent.placeholder ? 'Their moves' : `${opponent.name}'s moves`;
 }
@@ -96,7 +96,7 @@ export function PickerTabs({
               role={v === 'mine' ? 'you' : 'opp'}
               placeholder={identity.placeholder}
             />
-            <span className="picker-tab__label">{tabLabel(v, you, opponent, voice)}</span>
+            <span className="picker-tab__label">{tabLabel(v, opponent, voice)}</span>
           </button>
         );
       })}
