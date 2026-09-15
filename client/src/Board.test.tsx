@@ -456,7 +456,7 @@ describe('<Board> pre-match (JQ 4.1)', () => {
   it('fills the wait with how-to-play instead of a waiting line', () => {
     const { container } = renderBoard(state({ bothSeated: false }));
     expect(screen.queryByText(/Waiting for all seats/)).not.toBeInTheDocument();
-    expect(container.querySelectorAll('.htp-panel')).toHaveLength(3);
+    expect(container.querySelectorAll('.htp-panel')).toHaveLength(4);
     expect(screen.getByRole('heading', { name: 'What beats what' })).toBeInTheDocument();
   });
 

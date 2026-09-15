@@ -5,7 +5,7 @@ import type { DelayMap } from '@game/game';
 import { MovePicker } from './MovePicker';
 import type { Move } from '../api';
 import { CIRCLE_ORDER } from '../lib/pentagon';
-import { SHARED_BEATS, threatsTo, type BeatsMap } from '../moves';
+import { SHARED_BEATS, threatsTo, type BeatsMap, type OutcomeReader } from '../moves';
 import { PLAYER_VOICE, spectatorVoice, type Voice } from '../lib/voice';
 import type { Identity } from '../lib/seatProfile';
 import type { MarkEvent } from '@game/game';
@@ -30,6 +30,8 @@ type Over = {
   oppBeats?: BeatsMap;
   myLedger?: readonly MarkEvent[];
   oppCanFreeze?: boolean;
+  readOutcome?: OutcomeReader;
+  drawCardInPlay?: boolean;
   voice?: Voice;
   oppName?: string;
   you?: Identity;
@@ -55,6 +57,8 @@ function pickerEl(over: Over & { onPlay: (m: Move) => void }) {
       oppBeats={over.oppBeats ?? SHARED_BEATS}
       myLedger={over.myLedger ?? []}
       oppCanFreeze={over.oppCanFreeze ?? false}
+      readOutcome={over.readOutcome}
+      drawCardInPlay={over.drawCardInPlay ?? false}
       voice={over.voice ?? PLAYER_VOICE}
       oppName={over.oppName ?? 'Robin'}
       you={over.you}
@@ -70,6 +74,11 @@ function renderPicker(over: Over = {}) {
   /** Re-render with a few props changed and everything else held still. */
   const rerenderWith = (next: Over = {}) => utils.rerender(pickerEl({ ...props, ...next }));
   return { ...utils, onPlay, rerenderWith };
+}
+
+/** Mark one-time notes as already dismissed, so a later one in the queue shows. */
+function seen(...notes: string[]) {
+  for (const note of notes) window.localStorage.setItem(`rpslr.seen.${note}`, '1');
 }
 
 /** The tabs, in the order the strip draws them: yours, then theirs. */
@@ -376,6 +385,9 @@ describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
   });
 
   it('explains your first cooldown using the move you just played', () => {
+    // The strategy tip sits between the tap hint and this one, and only one note
+    // shows at a time (JQ-326).
+    seen('strategyTip');
     renderPicker({ round: 3, myDelays: { rock: 2 }, myRecentMoves: ['rock'] });
     expect(
       screen.getByText("You played Rock last round — it's back in 2 turns."),
@@ -387,7 +399,7 @@ describe('<MovePicker> one-time notes (JQ 2.4/2.6)', () => {
     // The tap hint owns round 1; the cooldown note takes over once it is gone.
     expect(screen.queryByText(/start on cooldown/)).not.toBeInTheDocument();
 
-    window.localStorage.setItem('rpslr.seen.tapHint', '1');
+    seen('tapHint', 'strategyTip');
     renderPicker({ round: 1, myDelays: { lizard: 1, robot: 2 } });
     expect(screen.getByText(/Lizard & Robot start on cooldown/)).toBeInTheDocument();
   });
@@ -1414,5 +1426,252 @@ describe('<MovePicker> their board says nothing about yours (JQ-324)', () => {
       [...container.querySelectorAll('.move-btn--target')].map((b) => b.textContent),
     ).toEqual(['Rock', 'Robot']);
     expect(container.querySelector('.move-btn--selected')).toBeNull();
+  });
+});
+
+describe('<MovePicker> the strategy tip (JQ-326)', () => {
+  /** Everything before the strategy tip in the queue, already dismissed. */
+  const AFTER_TAP_HINT = () => seen('tapHint');
+
+  it('points at the other tab, in words the tab itself carries', async () => {
+    AFTER_TAP_HINT();
+    renderPicker({ round: 3, oppName: 'Robin' });
+    expect(screen.getByText(/to see what they can play/)).toHaveTextContent(
+      'Check their moves to see what they can play, then beat their pick.',
+    );
+    // "their moves" is the tab, whatever name is on it — which is the point of
+    // not spelling the name out. A tab labelled "Their moves" matches outright.
+    expect(tabs()[1]).toHaveTextContent('moves');
+  });
+
+  it('says the same thing however long the opponent’s name is', () => {
+    // The note slot is two lines, and the sentence is the same length at every
+    // seat: a name interpolated here pushed it onto a third line at 320px, which
+    // is a page that scrolls mid-round. See the browser layout suite.
+    AFTER_TAP_HINT();
+    const { unmount } = renderPicker({ round: 3, oppName: '' });
+    const short = screen.getByText(/to see what they can play/).textContent;
+    unmount();
+
+    renderPicker({ round: 3, oppName: 'Bartholomew Fotheringay' });
+    expect(screen.getByText(/to see what they can play/).textContent).toBe(short);
+  });
+
+  it('says what they *can* play rather than what they will', () => {
+    // The whole lesson is the difference between an option and a choice, so the
+    // copy must not promise a read of their pick.
+    AFTER_TAP_HINT();
+    renderPicker({ round: 3 });
+    const tip = screen.getByText(/to see what they can play/);
+    expect(tip).toHaveTextContent(/can play/);
+    expect(tip).not.toHaveTextContent(/what they will play|their move is|they have chosen/i);
+  });
+
+  it('waits its turn behind the tap hint, and never stacks with it', () => {
+    const { container } = renderPicker({ round: 1 });
+    expect(screen.getByText(/Tap to preview/)).toBeInTheDocument();
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.picker-note')).toHaveLength(1);
+  });
+
+  it('retires itself once you open their board, and stays gone', async () => {
+    AFTER_TAP_HINT();
+    const { unmount } = renderPicker({ round: 3 });
+    expect(screen.getByText(/to see what they can play/)).toBeInTheDocument();
+
+    await showTheirs();
+    await showMine();
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+
+    unmount();
+    renderPicker({ round: 4 });
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+  });
+
+  it('remembers an explicit dismissal across a reload', async () => {
+    const user = userEvent.setup();
+    AFTER_TAP_HINT();
+    const { unmount } = renderPicker({ round: 3 });
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+
+    unmount();
+    renderPicker({ round: 3 });
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+  });
+
+  it('does not pause, block or gate the round it appears in', async () => {
+    // A tip is not a tutorial: the board underneath it still takes a pick and
+    // still commits one, with the tip left on screen throughout.
+    AFTER_TAP_HINT();
+    const { onPlay } = renderPicker({ round: 3 });
+    const rock = screen.getByRole('button', { name: /^Rock/ });
+    await userEvent.click(rock);
+    expect(screen.getByText(/to see what they can play/)).toBeInTheDocument();
+    await userEvent.click(rock);
+    expect(onPlay).toHaveBeenCalledWith('rock');
+  });
+
+  it('hands the slot back after the opening rounds', async () => {
+    // Retired by doing what it asks, so an unfollowed tip needs an end of its
+    // own — otherwise it holds the one note slot for the match and the cooldown
+    // explainer queued behind it never appears.
+    AFTER_TAP_HINT();
+    const { unmount } = renderPicker({ round: 3, myDelays: { rock: 2 }, myRecentMoves: ['rock'] });
+    expect(screen.getByText(/to see what they can play/)).toBeInTheDocument();
+    unmount();
+
+    renderPicker({ round: 4, myDelays: { rock: 2 }, myRecentMoves: ['rock'] });
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You played Rock last round — it's back in 2 turns."),
+    ).toBeInTheDocument();
+  });
+
+  it('stays off their board, where its instruction has already been followed', async () => {
+    AFTER_TAP_HINT();
+    renderPicker({ round: 3 });
+    await showTheirs();
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+  });
+
+  it('stays off a replay, where nobody is choosing anything', () => {
+    AFTER_TAP_HINT();
+    renderPicker({ round: 3, voice: spectatorVoice('Ada') });
+    expect(screen.queryByText(/to see what they can play/)).not.toBeInTheDocument();
+  });
+});
+
+describe('<MovePicker> the own-move matchup summary (JQ-326)', () => {
+  const OPEN = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+
+  /** Preview one of your own moves and read the centre. */
+  async function previewing(move: Move, over: Over = {}) {
+    const { container } = renderPicker({ round: 3, oppDelays: OPEN, ...over });
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(`^${move}`, 'i') }));
+    return center(container);
+  }
+
+  it('says which question the three lines answer', async () => {
+    // The caption above is the rule; this is the round. Unlabelled, "Rock
+    // crushes Scissors & Lizard" over "Beats Lizard" reads as a contradiction.
+    const panel = await previewing('rock', { oppDelays: { ...OPEN, scissors: 1 } });
+    expect(within(panel).getByText('Rock crushes Scissors & Lizard')).toBeInTheDocument();
+    expect(within(panel).getByText('Vs what they can play:')).toBeInTheDocument();
+    // And the list carries the label, so it is not read as three loose phrases.
+    expect(within(panel).getByRole('list')).toHaveAccessibleName('Vs what they can play:');
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Beats Lizard',
+      'Loses to Paper & Robot',
+      'Draws Rock',
+    ]);
+  });
+
+  it('states what the move beats, loses to and draws with', async () => {
+    const panel = await previewing('rock');
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Beats Scissors & Lizard',
+      'Loses to Paper & Robot',
+      'Draws Rock',
+    ]);
+  });
+
+  it('narrows to what they can actually play this round', async () => {
+    // Paper and Robot are the only live threats to Rock. With both down, the
+    // summary has no "loses to" clause — rather than a clause saying "nothing".
+    const panel = await previewing('rock', { oppDelays: { ...OPEN, paper: 2, robot: 2 } });
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Beats Scissors & Lizard',
+      'Draws Rock',
+    ]);
+  });
+
+  it('reads an asymmetric pair through both loadouts', async () => {
+    // Their Chimera Lizard takes your Scissors. Your own graph says the reverse,
+    // and a summary drawn from it would tell you that you beat the one move you
+    // do not.
+    const chimera = { ...SHARED_BEATS, lizard: ['robot', 'paper', 'scissors'] as Move[] };
+    const panel = await previewing('scissors', { oppBeats: chimera });
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Beats Paper',
+      'Loses to Rock, Lizard & Robot',
+      'Draws Scissors',
+    ]);
+  });
+
+  it('reads the result through your own cards', async () => {
+    // Good Old Rock. The opponent still wins the round with Paper; you read it
+    // as a draw, and the summary is yours.
+    const goodOldRock: OutcomeReader = (raw, { own }) =>
+      raw === 'loss' && own === 'rock' ? 'draw' : raw;
+    const panel = await previewing('rock', { readOutcome: goodOldRock });
+    expect(within(panel).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Beats Scissors & Lizard',
+      'Draws Rock, Paper & Robot',
+    ]);
+  });
+
+  it('qualifies itself where a card can still call the round a draw', async () => {
+    const panel = await previewing('rock', { drawCardInPlay: true });
+    expect(
+      within(panel).getByText('A card could still draw the round.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about a card nobody is holding', async () => {
+    const panel = await previewing('rock');
+    expect(within(panel).queryByText(/could still draw the round/)).not.toBeInTheDocument();
+  });
+
+  it('names no unrevealed move and no firing', async () => {
+    // The summary is built from their *availability*, which is public. Nothing
+    // here may hint at what they have chosen or what they have fired.
+    const panel = await previewing('rock', { drawCardInPlay: true });
+    expect(panel.textContent).not.toMatch(/has (played|chosen|fired)|their (move|pick) is/i);
+  });
+
+  it('recommends nothing, ranks nothing and counts no odds', async () => {
+    const panel = await previewing('rock', { oppDelays: { ...OPEN, paper: 2, robot: 2 } });
+    expect(panel.textContent).not.toMatch(/safe|best|recommend|% chance|\bodds\b/i);
+  });
+
+  it('stays out of the idle centre', () => {
+    const { container } = renderPicker({ round: 3, oppDelays: OPEN });
+    expect(within(center(container)).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('stays out of the panel for a move you cannot play', async () => {
+    // That panel answers "why is this down?", and the matchup for a move that
+    // cannot be thrown is not the question being asked.
+    const panel = await previewing('robot', {
+      myDelays: { robot: 2 },
+      myRecentMoves: ['robot'],
+    });
+    expect(within(panel).getByText(/back in 2 turns/)).toBeInTheDocument();
+    expect(within(panel).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('leaves the pinned caption alone once the round is locked', () => {
+    const { container } = renderPicker({
+      round: 3,
+      oppDelays: OPEN,
+      lockedIn: true,
+      disabled: true,
+      myChosenMove: 'rock',
+    });
+    expect(within(center(container)).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('does not bring the opponent overlay back onto your own board', async () => {
+    // JQ-324 moved their availability off your board. One sentence about the
+    // move you are looking at is not that: their nodes stay on their own tab.
+    const { container } = renderPicker({
+      round: 3,
+      oppDelays: { ...OPEN, paper: 2 },
+      oppName: 'Robin',
+    });
+    await userEvent.click(screen.getByRole('button', { name: /^Rock/ }));
+    expect(container.querySelector('.cooldown-pill--theirs')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Paper/ })).not.toHaveAttribute('aria-disabled');
   });
 });

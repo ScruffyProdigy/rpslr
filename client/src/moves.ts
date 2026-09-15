@@ -1,4 +1,11 @@
-import { BEATS, MOVES, availableMoves, type DelayMap, type MarkEvent } from '@game/game';
+import {
+  BEATS,
+  MOVES,
+  availableMoves,
+  type DelayMap,
+  type MarkEvent,
+  type PlayerOutcome,
+} from '@game/game';
 import { getHelper } from '@game/helpers/roster';
 import type { Move } from './api';
 
@@ -323,6 +330,127 @@ export function liveMatchupEdges(
     // A mirror decides nothing, so it draws nothing.
     .filter((edge): edge is WinningEdge => edge !== null)
     .map(({ from, to, role }) => ({ from, to, role }));
+}
+
+/**
+ * How your side reads a raw result — `PlayerRules.transformOutcome`, narrowed to
+ * the two fields a picker can supply.
+ *
+ * It exists because a round's winner and a player's result are not the same
+ * question. Good Old Rock spares its owner a loss without taking the opponent's
+ * win away, and Sharp Practice turns its owner's Scissors mirror into a win, so
+ * a summary that stopped at the pentagon would be confidently wrong about
+ * exactly the moves those cards were brought for. Both are passives on a public
+ * loadout, so telling you is not telling you anything you could not read off the
+ * table (JQ-326).
+ *
+ * `roundIndex` and `lossesSoFar` are the caller's to bind: they belong to the
+ * match, not to the pair being asked about.
+ */
+export type OutcomeReader = (
+  raw: PlayerOutcome,
+  pair: { own: Move; opponent: Move },
+) => PlayerOutcome;
+
+/** A duel's reading: the round's result, unbent. */
+export const RAW_OUTCOME: OutcomeReader = (raw) => raw;
+
+/** Your move against each of theirs, sorted by how the pairing would go for you. */
+export interface MatchupSummary {
+  win: Move[];
+  loss: Move[];
+  draw: Move[];
+}
+
+/**
+ * One of your moves against every move the opponent can actually play.
+ *
+ * The compact form of the read a familiar player makes off the pentagon, and the
+ * whole of what JQ-326 puts under your own preview: what this move beats, loses
+ * to and draws with *given what is live on their side this round*, so the answer
+ * narrows as their cooldowns do.
+ *
+ * Three things it deliberately does not do. It does not ask the shared graph —
+ * `winningEdgeOf` resolves each pair through both loadouts, with the engine's own
+ * precedence, so a Chimera Lizard lands on the side that would actually take the
+ * round. It does not read marks to decide what they can play — `isPlayable` asks
+ * `availableMoves`, so the floor that leaves a fully-marked player their
+ * least-marked moves is honoured rather than re-derived (JQ-215). And it counts
+ * nothing and ranks nothing: three lists, in the caller's hands, because a move
+ * that beats four of five is not thereby the right move and this slice does not
+ * claim otherwise.
+ */
+export function summarizeMatchups(
+  mine: Move,
+  oppDelays: Record<string, number>,
+  opts: {
+    myBeats?: BeatsMap;
+    oppBeats?: BeatsMap;
+    /** How your side reads a result. Identity in a duel. */
+    readOutcome?: OutcomeReader;
+  } = {},
+): MatchupSummary {
+  const myBeats = opts.myBeats ?? SHARED_BEATS;
+  const oppBeats = opts.oppBeats ?? SHARED_BEATS;
+  const read = opts.readOutcome ?? RAW_OUTCOME;
+  const summary: MatchupSummary = { win: [], loss: [], draw: [] };
+  const bucket: Record<PlayerOutcome, Move[]> = {
+    win: summary.win,
+    loss: summary.loss,
+    draw: summary.draw,
+  };
+  for (const theirs of ALL_MOVES) {
+    if (!isPlayable(theirs, oppDelays)) continue;
+    const edge = winningEdgeOf(mine, theirs, { mine: myBeats, theirs: oppBeats });
+    // No edge is a mirror, which the round draws.
+    const raw: PlayerOutcome = edge === null ? 'draw' : edge.role === 'you' ? 'win' : 'loss';
+    bucket[read(raw, { own: mine, opponent: theirs })].push(theirs);
+  }
+  return summary;
+}
+
+/**
+ * The summary as clauses, e.g. `['Beats Scissors & Lizard', 'Loses to Paper']`.
+ *
+ * A list rather than a sentence, because the caller draws it as one: three short
+ * lines scan in the centre of a pentagon in a way that one wrapped line with
+ * separators in it does not, and a list is also what a screen reader wants — it
+ * says how many facts are coming before reading them.
+ *
+ * An empty bucket is left out rather than spelled as a negative: "loses to
+ * nothing" is one more line to read past, and its absence says the same thing.
+ * It is *not* spelled as a verdict either — no "safe", no badge, no "best" —
+ * because nothing here knows what they will choose and a label would claim it
+ * did (JQ-326).
+ *
+ * Empty when every bucket is. `summarizeMatchups` cannot produce that —
+ * `availableMoves` has a floor and `asDelayMap` defaults a missing key to zero,
+ * so they always have something to play — but the type allows it, and a caller
+ * rendering a summary it did not build should not have to discover that.
+ */
+export function matchupClauses(summary: MatchupSummary): string[] {
+  const names = (moves: Move[]) => joinClauses(moves.map((m) => MOVE_META[m].label));
+  return [
+    summary.win.length > 0 ? `Beats ${names(summary.win)}` : '',
+    summary.loss.length > 0 ? `Loses to ${names(summary.loss)}` : '',
+    summary.draw.length > 0 ? `Draws ${names(summary.draw)}` : '',
+  ].filter(Boolean);
+}
+
+/**
+ * Whether anything in this loadout can settle a round before it is played.
+ *
+ * Sacrifice only: it is fired *before* either seat picks and `resolveRound`
+ * short-circuits the whole result on it, so while one is held and unspent every
+ * pairing above carries a draw it cannot see. The firing is secret, the card is
+ * not — loadouts are public — so the honest move is to say a draw is still
+ * possible without saying whether it is happening (JQ-326).
+ *
+ * Shaped like `holdsFreeze`, and for the same reason: what a loadout makes
+ * possible is a public fact the board is allowed to qualify itself with.
+ */
+export function holdsSacrifice(loadout: readonly string[] | null): boolean {
+  return (loadout ?? []).includes('sacrifice');
 }
 
 /**

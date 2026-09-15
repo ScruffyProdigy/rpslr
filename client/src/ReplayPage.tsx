@@ -236,6 +236,11 @@ export function ReplayPage({ matchRef }: { matchRef: string }) {
           oppBeats={frame.b.beats}
           myLedger={frame.a.ledger}
           oppCanFreeze={frame.b.canFreeze}
+          // `frame.a` again: the side being called for is the side whose cards
+          // decide how a result reads, and `flipReplay` has already put the
+          // right seat there.
+          readOutcome={frame.a.readOutcome}
+          drawCardInPlay={replay.drawCardInPlay}
           // `frame.a` is already the side being called for, so the strip opens
           // on whoever the watcher is playing along as.
           you={replay.a.identity}

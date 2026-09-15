@@ -1,12 +1,12 @@
 /**
- * One-time UI notes (the tap hint, the cooldown explainer) are remembered per
- * browser. Storage can throw — Safari private mode, blocked third-party
+ * One-time UI notes (the tap hint, the strategy tip, the cooldown explainer) are
+ * remembered per browser. Storage can throw — Safari private mode, blocked third-party
  * storage in an iframe — so every access is guarded and failure just means the
  * note shows again.
  */
 const PREFIX = 'rpslr.seen.';
 
-export type OneTimeNote = 'tapHint' | 'cooldownExplainer' | 'howToPlay';
+export type OneTimeNote = 'tapHint' | 'strategyTip' | 'cooldownExplainer' | 'howToPlay';
 
 export function hasSeen(note: OneTimeNote): boolean {
   try {

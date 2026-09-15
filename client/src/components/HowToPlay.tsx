@@ -31,8 +31,26 @@ export function HowToPlay({ bestOf }: { bestOf: number }) {
           Lizard and Robot start the match on cooldown.
         </p>
         <p className="htp-panel__body htp-panel__body--aside">
-          The board shows the opponent's cooldowns too: an attack they can't make this round is
-          drawn as a faded arrow.
+          The opponent has cooldowns too. Open their tab above the board and an attack they can't
+          make this round is drawn as a faded arrow.
+        </p>
+      </section>
+
+      {/* Where the strategy tip goes once it has been dismissed. The tip is a
+          one-time bar by design — it must not repeat every round — so the thing
+          it teaches has to stay reachable somewhere, and this is the surface the
+          game already has for "how does this work?" (JQ-326). */}
+      <section className="htp-panel">
+        <h3 className="htp-panel__title">Reading your opponent</h3>
+        <p className="htp-panel__body">
+          Their tab shows every move they <em>can</em> play this round — not the one they've
+          chosen, which stays hidden until the reveal. Pick a move that beats as much of what
+          they've got as you can.
+        </p>
+        <p className="htp-panel__body htp-panel__body--aside">
+          Tap one of your own moves and the centre says what it beats, loses to and draws with
+          against their live options. Their cooldowns narrow that list each round, and what they've
+          played already is a clue to what's coming.
         </p>
       </section>
 
