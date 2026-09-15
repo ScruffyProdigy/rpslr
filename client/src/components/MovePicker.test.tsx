@@ -1614,13 +1614,13 @@ describe('<MovePicker> the own-move matchup summary (JQ-326)', () => {
   it('qualifies itself where a card can still call the round a draw', async () => {
     const panel = await previewing('rock', { drawCardInPlay: true });
     expect(
-      within(panel).getByText('A card could still draw the round.'),
+      within(panel).getByText('A card could still draw it.'),
     ).toBeInTheDocument();
   });
 
   it('says nothing about a card nobody is holding', async () => {
     const panel = await previewing('rock');
-    expect(within(panel).queryByText(/could still draw the round/)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/could still draw it/)).not.toBeInTheDocument();
   });
 
   it('names no unrevealed move and no firing', async () => {

@@ -1219,8 +1219,16 @@ button.ghost {
 /* Your move against what they can play. Three changes from the centred box,
    every one of them forced by a measurement rather than chosen (JQ-326).
 
-   The width is the opponent panel's, because this carries a second block for the
-   same reason that one does.
+   The width is wider than any other centre panel, and that is a fit constraint
+   rather than a taste: at 320px the narrow box breaks the rules caption onto a
+   second line, and the tallest version of this panel then clears the board's
+   bottom edge by 4.8px on one machine and overruns it by 19px on another with
+   different font metrics. A layout that turns on whether one string wraps is not
+   a layout. This width keeps every line here to one line at every supported
+   width, which is what makes the fit hold rather than happen to pass.
+   The proportion is what 320px needs and the cap is what keeps it from being
+   spent anywhere it is not needed: past ~264px of board the panel stops growing
+   and hands the room back to the pentagon.
 
    It hangs from a line instead of straddling the middle, because the centred
    panel already clears the top node's tap target by 0.8px at 320px — so *any*
@@ -1238,7 +1246,7 @@ button.ghost {
    All of it only while a summary is showing: an idle, blocked or forced centre
    keeps the narrow, centred box the pentagon was laid out around. */
 .picker-center--summary {
-  width: min(46cqw, 172px);
+  width: min(72cqw, 190px);
   top: 35%;
   transform: translate(-50%, 0);
   gap: 5px;

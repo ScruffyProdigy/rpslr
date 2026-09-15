@@ -997,7 +997,7 @@ function PickerCenter({
           makes it true. A caveat printed at a duel would be noise about a card
           nobody is holding (JQ-326). */}
       {summary && drawCardInPlay && (
-        <p className="picker-center__caveat">A card could still draw the round.</p>
+        <p className="picker-center__caveat">A card could still draw it.</p>
       )}
       {commitTarget && (
         <button className="picker-center__lock" onClick={() => onCommit(commitTarget)}>
