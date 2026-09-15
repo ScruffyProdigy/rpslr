@@ -33,7 +33,14 @@ import { useFirstMatchRules } from './lib/useFirstMatchRules';
 import { useRoundReveal } from './lib/useRoundReveal';
 import { useLoadoutReveal } from './lib/useLoadoutReveal';
 import { buildReplayUrl, buildStoryImageUrl, replayRef } from './lib/replayLink';
-import { holdsFreeze, opponentMoveFromResult, winningEdgeOf, winsNeeded } from './moves';
+import {
+  holdsFreeze,
+  holdsSacrifice,
+  opponentMoveFromResult,
+  winningEdgeOf,
+  winsNeeded,
+  type OutcomeReader,
+} from './moves';
 import { connectMatchSocket, type MatchSocket } from './ws';
 
 const env = getEnv();
@@ -795,6 +802,28 @@ export function Board({
       return [];
     }
   })();
+  // How *you* read a result, for the picker's matchup summary.
+  //
+  // `transformOutcome` and not the round's winner, because they are different
+  // questions: Good Old Rock spares its owner a loss the opponent still wins, so
+  // a summary drawn from the pentagon alone would tell a Rock holder they lose
+  // pairs they in fact draw. Asking the same function the engine scores with is
+  // what keeps the two from disagreeing, rather than a second table here that
+  // has to be remembered every time a card is added (JQ-326).
+  //
+  // The round context the reader cannot know: which round this is, and the
+  // losses already taken. Neither is read by any card today — they are there for
+  // `adjustAfterRound`'s sake — and both are cheap and true, which is a better
+  // bet than a zero that becomes wrong the first time a card looks.
+  const myLossesSoFar = results.filter(
+    (r) => r.outcome !== 'draw' && r.outcome !== mySeatKey,
+  ).length;
+  const readMyOutcome: OutcomeReader = (raw, pair) =>
+    myRules.transformOutcome(raw, {
+      ...pair,
+      roundIndex: Math.max(0, match.currentRound - 1),
+      lossesSoFar: myLossesSoFar,
+    });
   // Whether this match has loadouts at all — which is what decides the surfaces
   // that only exist to explain them (the sheet, the rail, the inspect button).
   const helpersInPlay = Boolean(mySeat?.loadout || oppSeat?.loadout);
@@ -940,6 +969,12 @@ export function Board({
             oppBeats={oppRules.beats}
             myLedger={myLedger}
             oppCanFreeze={holdsFreeze(oppSeat?.loadout ?? null)}
+            readOutcome={readMyOutcome}
+            // Either side's: a Sacrifice fired by either player draws the round
+            // for both, so the summary is qualified whoever is holding the card.
+            drawCardInPlay={
+              holdsSacrifice(mySeat?.loadout ?? null) || holdsSacrifice(oppSeat?.loadout ?? null)
+            }
             // The two people the tabs name. Already in hand for the match-end
             // card, so the strip gets avatars rather than initials.
             you={you}

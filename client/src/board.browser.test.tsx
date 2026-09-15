@@ -25,7 +25,7 @@ import { render, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MovePicker } from './components/MovePicker';
 import { RevealCard } from './components/RevealCard';
-import type { RoundResult } from './api';
+import type { Move, RoundResult } from './api';
 import './styles.css';
 
 /** The widths the board claims to support, narrowest first. */
@@ -52,10 +52,18 @@ function Board({
   opponentLockedIn = false,
   centerSlot,
   theirDelays = NO_DELAYS,
+  myDelays = NO_DELAYS,
+  recent = [],
+  drawCardInPlay = false,
 }: {
   opponentLockedIn?: boolean;
   centerSlot?: React.ReactNode;
   theirDelays?: Record<string, number>;
+  /** Your own marks, for the note that explains one of them. */
+  myDelays?: Record<string, number>;
+  recent?: Move[];
+  /** Adds the draw caveat, which is the tallest the summary panel gets. */
+  drawCardInPlay?: boolean;
 }) {
   return (
     <div className="app">
@@ -66,7 +74,7 @@ function Board({
           )}
         </div>
         <MovePicker
-          myDelays={NO_DELAYS}
+          myDelays={myDelays}
           oppDelays={theirDelays}
           you={YOU}
           opponent={OPP}
@@ -75,7 +83,8 @@ function Board({
           opponentLockedIn={opponentLockedIn}
           disabled={false}
           round={1}
-          myRecentMoves={[]}
+          myRecentMoves={recent}
+          drawCardInPlay={drawCardInPlay}
           myOpeningDelays={NO_DELAYS}
           oppName={OPP.name}
           onPlay={() => {}}
@@ -272,5 +281,130 @@ describe('switching boards holds the layout', () => {
       // Wide enough to hit without aiming: half the strip, less its gap.
       expect(box.width, tab.textContent ?? '').toBeGreaterThanOrEqual(100);
     }
+  });
+});
+
+/**
+ * The strategy tip and the matchup summary, as rendered (JQ-326).
+ *
+ * Neither can be checked from the stylesheet. The tip's cost is a line count,
+ * and the page it sits on had 0.9px of slack before this ticket. The summary's
+ * cost is two boxes: the preview panel was already 0.8px clear of the top node's
+ * tap target at 320px, so the panel that carries a summary is anchored below
+ * that node rather than centred, and only a browser can say whether that worked.
+ */
+describe('the beginner guidance fits the board it teaches', () => {
+  /** Mark one-time notes as dismissed, so the next one in the queue renders. */
+  function seen(...notes: string[]) {
+    for (const note of notes) window.localStorage.setItem(`rpslr.seen.${note}`, '1');
+  }
+
+  /** The move buttons the centre panel is painted over. */
+  function covered(): string[] {
+    const box = document.querySelector<HTMLElement>('.picker-center')!.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>('.move-btn')]
+      .filter((b) => {
+        const r = b.getBoundingClientRect();
+        return box.left < r.right && box.right > r.left && box.top < r.bottom && box.bottom > r.top;
+      })
+      // The name span, not the button's text: a marked move's button also
+      // carries its cooldown count, and "Robot 2" would not match "Robot".
+      .map((b) => b.querySelector('.move-btn__name')?.textContent?.trim() ?? '');
+  }
+
+  /** Preview the top node — the one the board has always kept readable. */
+  async function previewRock() {
+    document.querySelector<HTMLElement>('.move-btn')!.click();
+    await frame();
+    // Really the summary panel, not the idle one this would otherwise pass on.
+    expect(document.querySelector('.picker-center__summary')).not.toBeNull();
+  }
+
+  afterEach(() => window.localStorage.clear());
+
+  it.each(WIDTHS)(
+    'costs the note slot no more than the note it queues behind at %ipx',
+    async (width) => {
+      // `boardFit.test.ts` budgets the note slot at the cooldown explainer's two
+      // lines, measured in this browser. The tip shares the slot, so the budget
+      // covers it exactly as long as it is no taller — an invariant that survives
+      // a change to the type scale, which a hard-coded 49px would not.
+      seen('tapHint', 'strategyTip');
+      await at(width, <Board myDelays={{ rock: 2 }} recent={['rock']} />);
+      const explainer = document.querySelector<HTMLElement>('.picker-note')!;
+      expect(explainer.textContent).toMatch(/back in 2 turns/);
+      const budget = explainer.getBoundingClientRect().height;
+      cleanup();
+
+      window.localStorage.clear();
+      seen('tapHint');
+      await at(width, <Board />);
+      const tip = document.querySelector<HTMLElement>('.picker-note')!;
+      expect(tip.textContent).toMatch(/to see what they can play/);
+      expect(tip.getBoundingClientRect().height).toBeLessThanOrEqual(budget);
+    },
+  );
+
+  it.each(WIDTHS)('leaves the move it is describing readable at %ipx', async (width) => {
+    // The panel grows downwards from under the top node precisely so that the
+    // move being previewed — which is also the move that has grown under the
+    // preview scale — is not the one the explanation hides.
+    await at(width, <Board />);
+    await previewRock();
+    expect(covered()).not.toContain('Rock');
+  });
+
+  it.each(WIDTHS)('covers no move the board did not already cover at %ipx', async (width) => {
+    // The four lower nodes are under every panel the centre has ever drawn, the
+    // one-line "why is this down?" included. Matching that is the bar: a summary
+    // is not licence to take more of the board than the board already gives.
+    await at(width, <Board myDelays={{ ...NO_DELAYS, robot: 2 }} recent={['robot']} />);
+    [...document.querySelectorAll<HTMLElement>('.move-btn')]
+      .find((b) => /Robot/.test(b.textContent ?? ''))!
+      .click();
+    await frame();
+    const already = new Set(covered());
+    cleanup();
+
+    await at(width, <Board />);
+    await previewRock();
+    for (const name of covered()) expect([...already]).toContain(name);
+  });
+
+  it.each(WIDTHS)('stays inside the board with every clause showing at %ipx', async (width) => {
+    // The tallest the panel gets: all three clauses filled and the draw caveat
+    // under them. 320px is where it hangs lowest, and past the board's bottom
+    // edge is the legend, so overrunning it is a real defect rather than an
+    // untidy number.
+    //
+    // The margin is a line of text rather than a pixel count, and that is the
+    // whole point of it. This started as a bare `<= board.bottom`, which passed
+    // here by 4.8px and failed on CI by 19px: the app's fonts are not installed
+    // there, the fallback is wider, and the rules caption wraps one line more.
+    // Neither font stack is the real one — phones have their own — so what has
+    // to hold is that the panel survives a wrap it did not plan for, whoever is
+    // rendering it. Sizing the slack in line-heights says that directly, and
+    // keeps saying it if the type scale moves.
+    await at(width, <Board drawCardInPlay />);
+    await previewRock();
+    const panel = document.querySelector<HTMLElement>('.picker-center')!;
+    expect(panel.querySelectorAll('.picker-center__summary li')).toHaveLength(3);
+    expect(panel.textContent).toMatch(/could still draw it/);
+
+    const caption = panel.querySelector<HTMLElement>('.picker-center__caption')!;
+    const lineHeight = parseFloat(getComputedStyle(caption).lineHeight);
+    expect(lineHeight).toBeGreaterThan(0);
+
+    const board = document.querySelector<HTMLElement>('.move-board')!.getBoundingClientRect();
+    const box = panel.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(board.top);
+    expect(board.bottom - box.bottom).toBeGreaterThanOrEqual(lineHeight);
+  });
+
+  it.each(WIDTHS)('does not overflow with the summary open at %ipx', async (width) => {
+    await at(width, <Board />);
+    await previewRock();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    expect(escaping(document.querySelector<HTMLElement>('.board')!)).toEqual([]);
   });
 });

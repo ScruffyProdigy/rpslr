@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DelayMap, MarkEvent } from '@game/game';
 import type { Move } from '../api';
 import {
@@ -23,10 +23,13 @@ import {
   describeBoardGraph,
   describeBeatsOf,
   describeMatchup,
+  matchupClauses,
   liveMatchupEdges,
   isForcedPick,
   isPlayable,
+  summarizeMatchups,
   type BeatsMap,
+  type OutcomeReader,
   type WinningEdge,
 } from '../moves';
 import MoveIcon from './MoveIcon';
@@ -36,6 +39,9 @@ import type { Identity } from '../lib/seatProfile';
 
 /** The board, for the tabs to point `aria-controls` at. */
 const PANEL_ID = 'move-board-panel';
+
+/** The matchup summary's heading, for the list to name itself with. */
+const SUMMARY_LABEL_ID = 'picker-matchup-against';
 
 /**
  * Whose arrow a matchup edge is, so it takes that player's colour.
@@ -52,14 +58,20 @@ function matchupRole(
   return edges.find((e) => e.from === from && e.to === to)?.role ?? 'you';
 }
 
-/** Remembers a one-time note's dismissal across reloads. */
+/**
+ * Remembers a one-time note's dismissal across reloads.
+ *
+ * Memoised, because `switchTo` closes over one of these and sits in the Escape
+ * handler's dependencies: a fresh object every render would tear that listener
+ * down and rebuild it on every tick of the round clock.
+ */
 function useOneTimeNote(note: OneTimeNote): { show: boolean; dismiss: () => void } {
   const [seen, setSeen] = useState(() => hasSeen(note));
   const dismiss = useCallback(() => {
     markSeen(note);
     setSeen(true);
   }, [note]);
-  return { show: !seen, dismiss };
+  return useMemo(() => ({ show: !seen, dismiss }), [seen, dismiss]);
 }
 
 /**
@@ -90,6 +102,8 @@ export function MovePicker({
   oppBeats = SHARED_BEATS,
   myLedger = [],
   oppCanFreeze = false,
+  readOutcome,
+  drawCardInPlay = false,
   you,
   opponent,
 }: {
@@ -144,6 +158,20 @@ export function MovePicker({
   /** Whether the opponent can stop your marks coming off, so nothing promises turns. */
   oppCanFreeze?: boolean;
   /**
+   * How your side reads a result, for the matchup summary under your own preview.
+   *
+   * Your rules and not the round's: Good Old Rock spares its owner a loss the
+   * opponent still takes, so "what does this lose to?" has two right answers and
+   * this is the one the asker holds. Omitted is a duel's reading (JQ-326).
+   */
+  readOutcome?: OutcomeReader;
+  /**
+   * Whether a card either side holds can settle a round as a draw before it is
+   * played — Sacrifice. The firing is secret, so the summary qualifies itself
+   * rather than either ignoring the card or guessing at it (JQ-326).
+   */
+  drawCardInPlay?: boolean;
+  /**
    * The two people the tabs name, for the avatar and the name on each.
    *
    * Optional, and defaulted from `voice` and `oppName` below, because the board
@@ -178,6 +206,7 @@ export function MovePicker({
   const commitArmed = useRef(false);
 
   const tapHint = useOneTimeNote('tapHint');
+  const strategyTip = useOneTimeNote('strategyTip');
   const cooldownNote = useOneTimeNote('cooldownExplainer');
 
 
@@ -212,12 +241,20 @@ export function MovePicker({
    * Never a commit path, and never a clear: `picked` survives so the choice you
    * had carries across, and only the tap sequence and the transient hover reset.
    */
-  const switchTo = useCallback((next: PickerView) => {
-    setView(next);
-    setInspected(null);
-    setHovered(null);
-    commitArmed.current = false;
-  }, []);
+  const switchTo = useCallback(
+    (next: PickerView) => {
+      // Opening their board is the thing the strategy tip asks for, so doing it
+      // retires the tip — the same argument that lets a first lock-in retire the
+      // tap hint. A tip that kept asking after you had already done it is the
+      // "repeat every round" this ticket rules out (JQ-326).
+      if (next === 'theirs') strategyTip.dismiss();
+      setView(next);
+      setInspected(null);
+      setHovered(null);
+      commitArmed.current = false;
+    },
+    [strategyTip],
+  );
 
   // The preview's caption and Lock-in button sit on top of the graph, so there
   // has to be a way to put them away and read what is underneath. Tapping the
@@ -360,9 +397,26 @@ export function MovePicker({
   // Both notes teach your own board — one says how to commit, the other says why
   // one of your moves is down — so neither belongs under theirs.
   const showTapHint = mineOpen && tapHint.show && !lockedIn && round <= 2;
+  // One note at a time — two stacked bars push the board off a phone screen —
+  // and in this order, because each one is the prerequisite of the next. You
+  // cannot act on a read of their board until you can commit a move at all, and
+  // "why is this one down?" is a question the cooldown pills raise on their own,
+  // whenever they first appear (JQ-326).
+  //
+  // Capped like the tap hint, and for a reason the tap hint does not have: this
+  // one is retired by *doing* the thing it asks, so a player who never opens the
+  // other tab would otherwise hold the single note slot for the whole match and
+  // the cooldown explainer behind it would never get a turn. It is opening
+  // advice; after the opening it lives in How to play.
+  const showStrategyTip = mineOpen && !showTapHint && strategyTip.show && !lockedIn && round <= 3;
   // One note at a time — two stacked bars push the board off a phone screen.
   const showCooldownNote =
-    mineOpen && !showTapHint && cooldownNote.show && !lockedIn && myMarked.length > 0;
+    mineOpen &&
+    !showTapHint &&
+    !showStrategyTip &&
+    cooldownNote.show &&
+    !lockedIn &&
+    myMarked.length > 0;
 
 
   return (
@@ -684,11 +738,15 @@ export function MovePicker({
               opponentLockedIn={opponentLockedIn}
               myChosenMove={myChosenMove}
               myDelays={myDelays}
+              oppDelays={oppDelays}
               myRecentMoves={myRecentMoves}
               myOpeningDelays={myOpeningDelays}
               onCommit={commit}
               voice={voice}
               myBeats={myBeats}
+              oppBeats={oppBeats}
+              readOutcome={readOutcome}
+              drawCardInPlay={drawCardInPlay}
               myLedger={myLedger}
               oppCanFreeze={oppCanFreeze}
             />
@@ -756,6 +814,21 @@ export function MovePicker({
         </OneTimeNoteBar>
       )}
 
+      {/* The one strategy the game asks a new player to hold: their cooldowns
+          are public, their pick is not, so look at what they *can* do before
+          guessing what they will. It points at the tab rather than explaining
+          the read, because the read is on the other side of it — and it says
+          "can play" rather than "will play" deliberately, since the distinction
+          between an option and a choice is the whole lesson (JQ-326).
+
+          Not on a replay: `voice.you` means a watcher, who is calling someone
+          else's round and has already seen how it went. */}
+      {showStrategyTip && !disabled && !voice.you && (
+        <OneTimeNoteBar onDismiss={strategyTip.dismiss}>
+          Check <strong>their moves</strong> to see what they can play, then beat their pick.
+        </OneTimeNoteBar>
+      )}
+
       {showCooldownNote && !voice.you && (
         <OneTimeNoteBar onDismiss={cooldownNote.dismiss}>
           {myLastMove && (myDelays[myLastMove] ?? 0) > 0
@@ -785,11 +858,15 @@ function PickerCenter({
   opponentLockedIn,
   myChosenMove,
   myDelays,
+  oppDelays,
   myRecentMoves,
   myOpeningDelays,
   onCommit,
   voice,
   myBeats,
+  oppBeats,
+  readOutcome,
+  drawCardInPlay,
   myLedger,
   oppCanFreeze,
 }: {
@@ -800,6 +877,8 @@ function PickerCenter({
   opponentLockedIn: boolean;
   myChosenMove: Move | null;
   myDelays: Record<string, number>;
+  /** Theirs, for the one claim here that is about both boards: the matchup summary. */
+  oppDelays: Record<string, number>;
   myRecentMoves: Move[];
   myOpeningDelays: DelayMap;
   onCommit: (move: Move) => void;
@@ -807,6 +886,10 @@ function PickerCenter({
   voice: Voice;
   /** Your graph — every caption here is about a move of yours. */
   myBeats: BeatsMap;
+  /** Theirs, so an asymmetric pair lands on the side that would take the round. */
+  oppBeats: BeatsMap;
+  readOutcome?: OutcomeReader;
+  drawCardInPlay: boolean;
   myLedger: readonly MarkEvent[];
   oppCanFreeze: boolean;
 }) {
@@ -878,12 +961,44 @@ function PickerCenter({
   // without moving the commit target out from under the pointer.
   const commitTarget = !lockedIn && picked != null && preview === picked ? picked : null;
 
+  // This move against everything they can actually play. JQ-324 moved the
+  // opponent's availability off your own board on purpose, and this is not that
+  // coming back: the overlay drew *their* state over yours, five nodes' worth,
+  // while this is one sentence about the move you are already looking at. It is
+  // here rather than a tab away because the round is decided by the pair, and
+  // making a player hold their board in their head while reading the other one
+  // is the memory load the split was supposed to remove (JQ-326).
+  const clauses = matchupClauses(
+    summarizeMatchups(shown, oppDelays, { myBeats, oppBeats, readOutcome }),
+  );
+  const summary = clauses.length > 0;
+
   return (
-    <div className="picker-center">
+    <div className={`picker-center${summary ? ' picker-center--summary' : ''}`}>
       <p className="picker-center__caption">{describeBeatsOf(shown, myBeats)}</p>
-      {/* Nothing here about what the opponent can play. That claim used to sit
-          under your own caption; it lives on their board now, where it is the
-          subject rather than a second thing to read while deciding (JQ-324). */}
+      {summary && (
+        <>
+          {/* The caption above states the rule; this states the round. Without
+              a line saying which is which, "Rock crushes Scissors & Lizard"
+              sitting over "Beats Lizard" reads as a contradiction rather than as
+              the lesson — their Scissors is down, and your own board no longer
+              draws their cooldowns anywhere else (JQ-324, JQ-326). */}
+          <p className="picker-center__against" id={SUMMARY_LABEL_ID}>
+            Vs what they can play:
+          </p>
+          <ul className="picker-center__summary" aria-labelledby={SUMMARY_LABEL_ID}>
+            {clauses.map((clause) => (
+              <li key={clause}>{clause}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {/* Said once, under the summary it qualifies, and only where a loadout
+          makes it true. A caveat printed at a duel would be noise about a card
+          nobody is holding (JQ-326). */}
+      {summary && drawCardInPlay && (
+        <p className="picker-center__caveat">A card could still draw it.</p>
+      )}
       {commitTarget && (
         <button className="picker-center__lock" onClick={() => onCommit(commitTarget)}>
           Lock in {MOVE_META[commitTarget].label}

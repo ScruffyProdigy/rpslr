@@ -1,6 +1,13 @@
 import type { MatchEndReason, MatchState, Move, RoundResult, Seat } from './api';
 import { seatIdentity, type Identity } from './lib/seatProfile';
-import { ALL_MOVES, holdsFreeze, threatsTo, type BeatsMap } from './moves';
+import {
+  ALL_MOVES,
+  holdsFreeze,
+  holdsSacrifice,
+  threatsTo,
+  type BeatsMap,
+  type OutcomeReader,
+} from './moves';
 import {
   boardsThroughMatch,
   playedRoundsFrom,
@@ -71,6 +78,14 @@ export interface ReplaySide {
   ledger: readonly MarkEvent[];
   /** Whether this side can stop the *other* side's marks coming off. */
   canFreeze: boolean;
+  /**
+   * How this side reads a result — Good Old Rock, Sharp Practice. Constant for
+   * the match, and carried per side and per frame anyway, because that is what
+   * makes `flipReplay` right by construction: it swaps `frame.a` and `frame.b`
+   * wholesale, so a watcher who stands in the other seat reads outcomes through
+   * that seat's cards without anything here being told about the flip (JQ-326).
+   */
+  readOutcome: OutcomeReader;
 }
 
 export interface ReplayFrame {
@@ -105,6 +120,11 @@ export interface Replay {
    * start locked — rather than asserting the duel numbers at a helpers match.
    */
   hasLoadouts: boolean;
+  /**
+   * Whether either loadout can settle a round as a draw before it is played, so
+   * a called-for matchup summary can qualify itself the way a live one does.
+   */
+  drawCardInPlay: boolean;
 }
 
 /** Seats in board order, so the same player is blue on every load. */
@@ -158,6 +178,17 @@ export function buildReplay(state: MatchState): Replay {
   const ledgerBefore = (side: 'a' | 'b', index: number) =>
     events.filter((e) => e.side === side && e.round < index);
   const canFreeze = { a: holdsFreeze(a.loadout), b: holdsFreeze(b.loadout) };
+  // One side's reading of a result, bound to where the match stood. The engine's
+  // own `transformOutcome`, so a watcher calling a round for a Good Old Rock
+  // holder is told what that seat would have read rather than what the pentagon
+  // says (JQ-326).
+  const readerFor = (
+    rules: typeof rulesA,
+    roundIndex: number,
+    lossesSoFar: number,
+  ): OutcomeReader => {
+    return (raw, pair) => rules.transformOutcome(raw, { ...pair, roundIndex, lossesSoFar });
+  };
 
   // The rounds the boards were built from, in the same order, so a round the
   // reconstruction discarded for want of a pick is discarded from the strip too
@@ -205,6 +236,9 @@ export function buildReplay(state: MatchState): Replay {
         beats: rulesA.beats,
         ledger: ledgerBefore('a', index),
         canFreeze: canFreeze.a,
+        // A's losses entering this round are B's wins entering it: a draw scores
+        // for neither, so the two are the same number.
+        readOutcome: readerFor(rulesA, index, beforeB),
       },
       b: {
         seatKey: seatB.seatKey,
@@ -221,6 +255,7 @@ export function buildReplay(state: MatchState): Replay {
         beats: rulesB.beats,
         ledger: ledgerBefore('b', index),
         canFreeze: canFreeze.b,
+        readOutcome: readerFor(rulesB, index, beforeA),
       },
     };
 
@@ -238,6 +273,9 @@ export function buildReplay(state: MatchState): Replay {
     endReason: state.match.endReason,
     finalScore: { a: scoreA, b: scoreB },
     hasLoadouts: Boolean(a.loadout || b.loadout),
+    // Symmetric — a Sacrifice fired by either seat draws the round for both — so
+    // this one is not per side and `flipReplay` has nothing to swap.
+    drawCardInPlay: holdsSacrifice(a.loadout) || holdsSacrifice(b.loadout),
   };
 }
 

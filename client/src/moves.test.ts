@@ -8,6 +8,7 @@ import {
   backInPhrase,
   cooldownReason,
   holdsFreeze,
+  holdsSacrifice,
   describeBeat,
   describeOutcome,
   describeBeatsOf,
@@ -23,6 +24,9 @@ import {
   winsNeeded,
   isPlayable,
   isForcedPick,
+  summarizeMatchups,
+  matchupClauses,
+  type OutcomeReader,
 } from './moves';
 import type { Move } from './api';
 
@@ -647,5 +651,114 @@ describe('liveMatchupEdges — your pick against what they can actually play (JQ
     expect(liveMatchupEdges('rock', { rock: 0, paper: 2, scissors: 2, lizard: 2, robot: 2 })).toEqual(
       [],
     );
+  });
+});
+
+describe('summarizeMatchups — your move against what they can play (JQ-326)', () => {
+  const OPEN = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+
+  it('sorts every live move of theirs into beats, loses to, and draws', () => {
+    expect(summarizeMatchups('rock', OPEN)).toEqual({
+      win: ['scissors', 'lizard'],
+      loss: ['paper', 'robot'],
+      draw: ['rock'],
+    });
+  });
+
+  it('ignores a move they cannot play this round', () => {
+    // Paper is their only live threat to Rock; with it down, Rock cannot lose —
+    // and the summary says so by having nothing to put under "loses to".
+    const summary = summarizeMatchups('rock', { ...OPEN, paper: 2, robot: 2 });
+    expect(summary.loss).toEqual([]);
+    expect(summary.win).toEqual(['scissors', 'lizard']);
+  });
+
+  it('asks the availability floor rather than the mark count (JQ-215)', () => {
+    // Every move of theirs is marked, so `availableMoves` leaves them the
+    // least-marked ones. A summary that read `marks > 0` would find no legal
+    // move at all and claim this pick met nothing.
+    const summary = summarizeMatchups('rock', {
+      rock: 3,
+      paper: 1,
+      scissors: 1,
+      lizard: 3,
+      robot: 3,
+    });
+    expect(summary.loss).toEqual(['paper']);
+    expect(summary.win).toEqual(['scissors']);
+    expect(summary.draw).toEqual([]);
+  });
+
+  it('resolves an asymmetric pair the way the round would', () => {
+    // Their Chimera Lizard takes your Scissors, even though your own graph says
+    // Scissors decapitates Lizard. One answer, and it is the engine's.
+    const summary = summarizeMatchups('scissors', OPEN, {
+      myBeats: SHARED_BEATS,
+      oppBeats: CHIMERA_BEATS,
+    });
+    expect(summary.loss).toContain('lizard');
+    expect(summary.win).not.toContain('lizard');
+  });
+
+  it('reads the result through your own cards, not the round’s winner', () => {
+    // Good Old Rock: your Rock never loses. The pentagon still says Paper covers
+    // it — the opponent keeps the win — but your side of the round is a draw,
+    // and telling a Rock holder otherwise is wrong about the card they brought.
+    const goodOldRock: OutcomeReader = (raw, { own }) =>
+      raw === 'loss' && own === 'rock' ? 'draw' : raw;
+    const summary = summarizeMatchups('rock', OPEN, { readOutcome: goodOldRock });
+    expect(summary.loss).toEqual([]);
+    expect(summary.draw).toEqual(['rock', 'paper', 'robot']);
+  });
+
+  it('never comes back empty, because they always have something to play', () => {
+    // `availableMoves` has a floor and `asDelayMap` defaults a missing key to 0,
+    // so there is no delay map that leaves them nothing — not even an empty one,
+    // which is what a board reads before the first state arrives. Every move of
+    // yours therefore always has a summary, and the centre never has to render a
+    // blank where a sentence should be.
+    for (const mine of ALL_MOVES) {
+      const summary = summarizeMatchups(mine, {});
+      expect(summary.win.length + summary.loss.length + summary.draw.length).toBe(5);
+    }
+  });
+});
+
+describe('matchupClauses (JQ-326)', () => {
+  const OPEN = { rock: 0, paper: 0, scissors: 0, lizard: 0, robot: 0 };
+
+  it('names each bucket in turn, one clause each', () => {
+    expect(matchupClauses(summarizeMatchups('rock', OPEN))).toEqual([
+      'Beats Scissors & Lizard',
+      'Loses to Paper & Robot',
+      'Draws Rock',
+    ]);
+  });
+
+  it('leaves an empty bucket out rather than spelling it as a negative', () => {
+    const clauses = matchupClauses(summarizeMatchups('rock', { ...OPEN, paper: 2, robot: 2, rock: 2 }));
+    expect(clauses).toEqual(['Beats Scissors & Lizard']);
+  });
+
+  it('never calls a move safe, best, or recommended', () => {
+    // The one thing this slice must not do: a move that meets no live threat is
+    // stated as what it beats, and the reader draws their own conclusion.
+    const clauses = matchupClauses(summarizeMatchups('rock', { ...OPEN, paper: 2, robot: 2 }));
+    expect(clauses.join(' ')).not.toMatch(/safe|best|recommend|pick this|% /i);
+  });
+
+  it('is empty when there is nothing to say', () => {
+    expect(matchupClauses({ win: [], loss: [], draw: [] })).toEqual([]);
+  });
+});
+
+describe('holdsSacrifice (JQ-326)', () => {
+  it('finds the card that can settle a round before it is played', () => {
+    expect(holdsSacrifice(['sacrifice', 'chimera'])).toBe(true);
+  });
+
+  it('is false for a loadout without it, and for a duel', () => {
+    expect(holdsSacrifice(['chimera', 'freeze'])).toBe(false);
+    expect(holdsSacrifice(null)).toBe(false);
   });
 });
